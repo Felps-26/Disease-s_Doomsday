@@ -1,0 +1,60 @@
+#include "../../include/asset_manager.h"
+#include <stdio.h>
+
+GameAssets g_assets = {0};
+
+void LoadGameAssets(void)
+{
+    InitAudioDevice();
+
+    // Carrega Fonte
+    g_assets.font = LoadFontEx("Assets/font.ttf", 96, 0, 0);
+    if (g_assets.font.texture.id == 0)
+    {
+        g_assets.font = GetFontDefault();
+    }
+    else
+    {
+        SetTextureFilter(g_assets.font.texture, TEXTURE_FILTER_BILINEAR);
+    }
+
+    // Carrega Música
+    g_assets.musicMain = LoadMusicStream("Assets/Musica/DeepVoid.mp3");
+    
+    // SFX
+    g_assets.sfxAttack = LoadSound("Assets/Musica/Ataque_Pulse.mp3");
+    g_assets.sfxHurt = LoadSound("Assets/Musica/Dano_Heroi.mp3");
+    // mantendo pickup/death apontando pros mesmos (mesmo q falhem ou se existirem dps)
+    g_assets.sfxPickup = LoadSound("Assets/SFX/pickup.wav");
+    g_assets.sfxDeath = LoadSound("Assets/SFX/death.wav");
+    
+    // Novos efeitos de inimigos
+    g_assets.sfxEnemyHurt = LoadSound("Assets/Musica/Dano_enemy.mp3");
+    g_assets.sfxEnemyShoot = LoadSound("Assets/Musica/Projétil_enemy.mp3");
+    
+    // Shader
+    g_assets.biologicalShader = LoadShader(0, "Assets/Shaders/biological.fs");
+    if (g_assets.biologicalShader.id != 0) {
+        g_assets.shaderLoaded = true;
+    }
+}
+
+void UnloadGameAssets(void)
+{
+    if (g_assets.font.texture.id != GetFontDefault().texture.id && g_assets.font.texture.id != 0)
+    {
+        UnloadFont(g_assets.font);
+    }
+
+    if (g_assets.musicMain.stream.buffer != NULL) UnloadMusicStream(g_assets.musicMain);
+    if (g_assets.sfxAttack.stream.buffer != NULL) UnloadSound(g_assets.sfxAttack);
+    if (g_assets.sfxHurt.stream.buffer != NULL) UnloadSound(g_assets.sfxHurt);
+    if (g_assets.sfxPickup.stream.buffer != NULL) UnloadSound(g_assets.sfxPickup);
+    if (g_assets.sfxDeath.stream.buffer != NULL) UnloadSound(g_assets.sfxDeath);
+    if (g_assets.sfxEnemyHurt.stream.buffer != NULL) UnloadSound(g_assets.sfxEnemyHurt);
+    if (g_assets.sfxEnemyShoot.stream.buffer != NULL) UnloadSound(g_assets.sfxEnemyShoot);
+
+    if (g_assets.shaderLoaded) UnloadShader(g_assets.biologicalShader);
+
+    CloseAudioDevice();
+}
