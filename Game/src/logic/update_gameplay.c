@@ -503,6 +503,7 @@ void UpdateTutorial(GameState *game, float delta)
             SpawnParticle(game, game->player.position, (Vector2){0, -20}, PURPLE, 4.0f, 0.5f);
     }
     if (game->slashAnimTimer > 0.0f) game->slashAnimTimer -= delta;
+    if (game->hurtFlashTimer > 0.0f) game->hurtFlashTimer -= delta;
     UpdateDamageTexts(game, delta);
 
     // ========================================================================
@@ -642,8 +643,8 @@ void UpdateTutorial(GameState *game, float delta)
             }
         }
 
-        // Ataque com ESPAÇO ou clique (Q está reservado para diálogo)
-        if (IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        // Ataque com ESPAÇO ou clique segurado (Q está reservado para diálogo)
+        if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
         {
             extern Vector2 g_virtualMouse;
             Vector2 worldMouse = GetScreenToWorld2D(g_virtualMouse, game->camera);
@@ -838,6 +839,9 @@ void UpdateGameplay(GameState *game, float delta)
         game->slashAnimTimer -= delta;
     }
 
+    // Decaimento do flash de dano
+    if (game->hurtFlashTimer > 0.0f) game->hurtFlashTimer -= delta;
+
     // ------------------------------------------------------------------------
     // 1. ATUALIZA TIMERS E STATS DO JOGADOR
     // ------------------------------------------------------------------------
@@ -939,7 +943,10 @@ void UpdateGameplay(GameState *game, float delta)
         SpawnParticleExplosion(game, game->player.position, GREEN, 20, 50.0f, 150.0f, 4.0f, 0.8f);
     }
 
-    if (IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+    // Segurar (Down) em vez de pressionar (Pressed): permite fogo contínuo nas
+    // armas automáticas (fuzil/lâmina); o attackCooldown de cada arma controla a
+    // cadência, então segurar não dispara mais rápido que o permitido.
+    if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
     {
         extern Vector2 g_virtualMouse;
         Vector2 worldMouse = GetScreenToWorld2D(g_virtualMouse, game->camera);
@@ -1081,7 +1088,18 @@ void UpdateGameplay(GameState *game, float delta)
                 
                 SpawnProjectile(game, enemy->position, game->player.position, ptype, dmg);
                 PlaySound(g_assets.sfxEnemyShoot);
-                
+
+                // Dengue (type 1): leque de 3 projéteis (a "picada espalhada" que o
+                // nome PROJ_BULLET_SPREAD sempre prometeu mas nunca entregava).
+                // Os i-frames do jogador limitam o dano total — o leque serve para
+                // ser mais difícil de esquivar, não para multiplicar o dano.
+                if (enemy->type == 1) {
+                    Vector2 sprL = { game->player.position.x - 70, game->player.position.y };
+                    Vector2 sprR = { game->player.position.x + 70, game->player.position.y };
+                    SpawnProjectile(game, enemy->position, sprL, ptype, dmg);
+                    SpawnProjectile(game, enemy->position, sprR, ptype, dmg);
+                }
+
                 // KPC e Boss disparam múltiplos projéteis
                 if (enemy->tier == TIER_3_BOSS) {
                     Vector2 off1 = { game->player.position.x + 100, game->player.position.y };
@@ -1343,7 +1361,8 @@ void UpdateGameplay(GameState *game, float delta)
         // Grande efeito visual festivo de Level Up (Verde e Gold)
         SpawnParticleExplosion(game, game->player.position, LIME, 30, 80.0f, 220.0f, 5.0f, 1.0f);
         SpawnParticleExplosion(game, game->player.position, GOLD, 20, 100.0f, 250.0f, 4.0f, 1.2f);
-        
+        PlaySound(g_assets.sfxPickup); // som festivo de level up
+
         game->screenShake = 0.5f;
     }
 

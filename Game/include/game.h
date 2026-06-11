@@ -194,6 +194,10 @@ typedef struct GameState
     // Acumulador fracionário do dano de veneno no jogador (HP é int)
     float poisonTickAccum;
 
+    // Flash vermelho na tela ao receber dano (feedback visual). Transitório,
+    // não é salvo/carregado.
+    float hurtFlashTimer;
+
     // Metadados dos slots carregados na tela de seleção
     SaveSlotMeta slotsMeta[3];
     

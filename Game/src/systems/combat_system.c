@@ -36,6 +36,7 @@ void HandlePlayerEnemyCollision(GameState *game, Enemy *enemy)
         game->player.hp -= dmgBase;
         game->player.damageCooldown = 0.5f; // 0.5s de invencibilidade
         game->screenShake = 0.4f;
+        game->hurtFlashTimer = 0.35f; // flash vermelho de dano
         game->player.squashX = 1.4f;
         game->player.squashY = 0.6f;
 
@@ -79,6 +80,7 @@ void HandleProjectileCollision(GameState *game, Projectile *proj)
         game->player.squashX = 1.3f;
         game->player.squashY = 0.7f;
         game->player.damageCooldown = 0.35f; // I-frames após projétil
+        game->hurtFlashTimer = 0.35f; // flash vermelho de dano
         
         if (proj->type == PROJ_ACID_ARC) {
             game->player.poisonTimer = 3.0f;

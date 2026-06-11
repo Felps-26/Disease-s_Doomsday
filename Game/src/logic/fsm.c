@@ -109,7 +109,7 @@ void UpdateStateMachine(GameState *game)
                     }
                     game->currentScreen = SCREEN_GAMEPLAY;
                     game->saveLoaded = true;
-                    // strcpy(game->notificationMsg, "GAME SAVED!");
+                    strcpy(game->notificationMsg, "GAME SAVED!");
                     game->timeElapsed = 0.0f;
                 }
                 else if (slotSelected == -1)

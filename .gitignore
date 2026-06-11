@@ -1,3 +1,7 @@
 .DS_Store
 Game/rpg_game
 Game/rpg_game_macos
+Game/rpg_game.exe
+# Saves gerados em tempo de execução (não versionar dados de jogo do usuário)
+Game/Saves/save_slot_*.txt
+Game/Saves/screenshot_slot_*.png

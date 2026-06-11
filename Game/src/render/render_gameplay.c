@@ -578,6 +578,13 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
         EndShaderMode();
     }
 
+    // Flash vermelho ao receber dano (feedback visual imediato)
+    if (game->hurtFlashTimer > 0.0f)
+    {
+        float a = (game->hurtFlashTimer / 0.35f) * 0.4f;
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(RED, a));
+    }
+
     if (drawHUD)
     {
         DrawHUD(game, font);
@@ -755,6 +762,13 @@ void DrawTelaTutorial(GameState *game, Font font)
 
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
         EndShaderMode();
+    }
+
+    // Flash vermelho ao receber dano (feedback visual imediato)
+    if (game->hurtFlashTimer > 0.0f)
+    {
+        float a = (game->hurtFlashTimer / 0.35f) * 0.4f;
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(RED, a));
     }
 
     char stepStr[32];
