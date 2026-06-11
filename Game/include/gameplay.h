@@ -66,6 +66,33 @@ void SpawnDamageText(GameState *game, Vector2 pos, int value, Color color);
 // Atualiza (sobe/some) os números de dano ativos
 void UpdateDamageTexts(GameState *game, float delta);
 
+// ---- Banner/Toast de feedback (onda, chefe, troca/desbloqueio de arma) ----
+void ShowBanner(GameState *game, const char *msg, const char *sub, Color color, float duration);
+void UpdateBanner(GameState *game, float delta);
+
+// ---- Armas / progressão ----
+// Informações de uma arma para HUD, Arsenal e Tutorial (fonte única da verdade)
+typedef struct WeaponInfo
+{
+    const char *name;     // Nome da arma
+    const char *desc;     // Descrição curta
+    const char *special;  // Efeito especial
+    const char *playstyle;// Como muda a jogabilidade
+    int         baseDamage; // Dano base (somado aos atributos do jogador)
+    const char *speedTxt; // Velocidade/cadência (qualitativo)
+    float       cooldown; // Cooldown em segundos
+    int         unlockLevel; // Nível mínimo para usar
+    int         key;      // Tecla (1..4)
+    Color       color;    // Cor representativa
+} WeaponInfo;
+
+// Retorna as informações da arma (weapon = 1..4). Fora do intervalo => Lâmina.
+WeaponInfo GetWeaponInfo(int weapon);
+// Nível mínimo do jogador para usar a arma (1=Lâmina ... 4=BFG)
+int  WeaponUnlockLevel(int weapon);
+// Nome curto da arma (1..4)
+const char *WeaponName(int weapon);
+
 // ---- Skins ----
 // Cores da skin de arma atual (primária = projétil/lâmina, secundária = brilho/trail)
 Color WeaponSkinPrimary(int weaponSkinId);

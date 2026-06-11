@@ -50,6 +50,13 @@ typedef struct Enemy
     float poisonTimer;
     float poisonAccum; // Acumulador fracionário do dano de veneno (hp é int)
     float slowTimer;
+
+    // ---- IA avançada ----
+    float flankSign;   // -1 ou +1: lado preferido para cercar o jogador (melee)
+    float fleeTimer;   // > 0 = recuando (inimigo frágil com pouca vida)
+    bool  isEscort;    // true = lacaio escolta do chefe (protege/orbita o boss)
+    int   aiPhase;     // fase de comportamento do CHEFE (0,1,2) p/ detectar transições
+    float summonTimer; // cronômetro do chefe para invocar lacaios
 } Enemy;
 
 #endif // ENEMY_H

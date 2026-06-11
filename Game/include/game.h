@@ -57,7 +57,9 @@ typedef enum GameScreen
     SCREEN_TUTORIAL,   // Tutorial inicial: interior da Seringa de Vacina
     SCREEN_LOADING,    // Tela de carregamento entre transições de cena
     SCREEN_QUIZ,       // Tela de quiz educacional (DF)
-    SCREEN_UPGRADE     // Tela de upgrade do SUS
+    SCREEN_UPGRADE,    // Tela de upgrade do SUS
+    SCREEN_ARSENAL,    // Tela de arsenal: detalhes de todas as armas
+    SCREEN_SKINS       // Tela de seleção de skins com preview
 } GameScreen;
 
 // Destino após a tela de carregamento completar
@@ -221,6 +223,18 @@ typedef struct GameState
     int         loadSlot;        // Slot de save para carregar após o loading (0 = não carrega)
     bool        shouldClose;     // Flag para fechar o jogo
     bool        syringeTransitionFX; // Efeito de compressão/tremor (tutorial -> gameplay)
+
+    // ---- Banner/Toast de feedback (onda, chefe, troca/desbloqueio de arma) ----
+    // Transitório, não é salvo/carregado.
+    char  bannerMsg[40];
+    char  bannerSub[48];
+    float bannerTimer;   // tempo restante visível
+    float bannerMax;     // duração total
+    Color bannerColor;
+
+    // Maior arma já desbloqueada nesta partida (progressão de RPG).
+    // 1=Lâmina, 2=Fuzil, 3=Granada, 4=BFG.
+    int   maxWeaponUnlocked;
 } GameState;
 
 #endif // GAME_H

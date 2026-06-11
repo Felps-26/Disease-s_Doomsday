@@ -31,6 +31,8 @@ SRCS = \
   src/telas/telas.c \
   src/telas/tela_quiz.c \
   src/telas/tela_upgrade.c \
+  src/telas/tela_arsenal.c \
+  src/telas/tela_skins.c \
   src/assets/asset_manager.c \
   Assets/@models/player_model.c \
   Assets/@models/enemy_model.c \

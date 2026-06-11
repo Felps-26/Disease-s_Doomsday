@@ -1,6 +1,7 @@
 #include "wave_manager.h"
 #include "../../include/gameplay.h"
 #include "raymath.h"
+#include <math.h>
 
 // Posiciona um ponto de spawn longe do jogador (distância mínima de 450 px)
 static Vector2 PickSpawnFarFromPlayer(GameState *game)
@@ -37,6 +38,11 @@ static void ConfigureBoss(GameState *game, int idx)
     b->poisonAccum = 0.0f;
     b->slowTimer = 0.0f;
     b->isTutorialEnemy = false;
+    b->flankSign = 0.0f;
+    b->fleeTimer = 0.0f;
+    b->isEscort = false;
+    b->aiPhase = 0;
+    b->summonTimer = 6.0f;
 }
 
 void StartNextWave(GameState *game)
@@ -62,14 +68,40 @@ void StartNextWave(GameState *game)
         startIdx = 1;
     }
 
-    // Spawna os lacaios/inimigos comuns longe do jogador
+    // Spawna os lacaios/inimigos comuns. Na onda do chefe eles nascem em anel
+    // ao redor do chefe, formando uma escolta que protege/distrai.
+    Vector2 bossPos = bossWave ? game->enemies[0].position : (Vector2){ 0, 0 };
     for (int i = startIdx; i < numEnemies; i++)
     {
-        Vector2 spawnPos = PickSpawnFarFromPlayer(game);
+        Vector2 spawnPos;
+        bool escort = false;
+        if (bossWave)
+        {
+            float ang = (float)(i - startIdx) / (float)(numEnemies - startIdx) * 2.0f * PI;
+            float ring = 170.0f + (float)((i - startIdx) % 3) * 55.0f;
+            spawnPos.x = bossPos.x + cosf(ang) * ring;
+            spawnPos.y = bossPos.y + sinf(ang) * ring;
+            // Mantém dentro do mapa
+            if (spawnPos.x < 80.0f) spawnPos.x = 80.0f;
+            if (spawnPos.x > MAP_WIDTH - 80.0f) spawnPos.x = MAP_WIDTH - 80.0f;
+            if (spawnPos.y < 80.0f) spawnPos.y = 80.0f;
+            if (spawnPos.y > MAP_HEIGHT - 80.0f) spawnPos.y = MAP_HEIGHT - 80.0f;
+            escort = true;
+        }
+        else
+        {
+            spawnPos = PickSpawnFarFromPlayer(game);
+        }
 
         game->enemies[i].position = spawnPos;
         game->enemies[i].active = true;
         game->enemies[i].poisonAccum = 0.0f;
+        // Inicializa campos de IA avançada
+        game->enemies[i].flankSign = (GetRandomValue(0, 1) == 0) ? -1.0f : 1.0f;
+        game->enemies[i].fleeTimer = 0.0f;
+        game->enemies[i].isEscort = escort;
+        game->enemies[i].aiPhase = 0;
+        game->enemies[i].summonTimer = 0.0f;
 
         // Determina tipo e dificuldade do inimigo.
         // Na onda do chefe, os lacaios pulam o tipo KPC pesado (já há o chefe).
@@ -155,5 +187,22 @@ void StartNextWave(GameState *game)
     {
         Vector2 vel = { (float)GetRandomValue(-150, 150), (float)GetRandomValue(-150, 150) };
         SpawnParticle(game, game->player.position, vel, SKYBLUE, 6.0f, 1.2f);
+    }
+
+    // Banner de aviso da nova horda / chefe.
+    if (bossWave)
+    {
+        ShowBanner(game, "CHEFE: SUPERBACTERIA KPC",
+                   "Cercada por lacaios! Use a Granada e a Vacina BFG.",
+                   (Color){ 255, 70, 90, 255 }, 4.0f);
+        game->screenShake = 0.8f;
+    }
+    else
+    {
+        const char *sub = (game->wave == 4)
+            ? "ALERTA: a proxima horda traz o CHEFE!"
+            : "Elimine todos os patogenos para avancar.";
+        ShowBanner(game, TextFormat("HORDA %d / 5", game->wave), sub,
+                   (Color){ 0, 229, 255, 255 }, 3.0f);
     }
 }

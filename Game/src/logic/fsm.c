@@ -51,7 +51,15 @@ void UpdateStateMachine(GameState *game)
             break;
 
         case SCREEN_CONTROLS:
-            UpdateButtonsControles(game, g_virtualMouse);
+            UpdateTelaTutorial(game, g_virtualMouse);
+            break;
+
+        case SCREEN_ARSENAL:
+            UpdateTelaArsenal(game, g_virtualMouse);
+            break;
+
+        case SCREEN_SKINS:
+            UpdateTelaSkins(game, g_virtualMouse);
             break;
 
         case SCREEN_SETTINGS:
@@ -173,6 +181,14 @@ void DrawStateMachine(GameState *game)
 
         case SCREEN_CONTROLS:
             DrawTelaControles(game, g_gameFont);
+            break;
+
+        case SCREEN_ARSENAL:
+            DrawTelaArsenal(game, g_gameFont);
+            break;
+
+        case SCREEN_SKINS:
+            DrawTelaSkins(game, g_gameFont);
             break;
 
         case SCREEN_SETTINGS:

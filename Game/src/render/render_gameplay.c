@@ -214,37 +214,75 @@ void DrawHUD(GameState *game, Font font)
         buffCount++;
     }
 
-    // HUD DA ARMA ATUAL (com barra de cooldown)
-    const char *weaponNames[4] = { "1. Lâmina Imunológica", "2. Fuzil Célula-T", "3. Granada Macrófago", "4. Vacina BFG" };
-    const float weaponCooldowns[4] = { 0.22f, 0.15f, 1.5f, 5.0f };
-    int wpnIdx = game->player.equippedWeapon - 1;
-    if (wpnIdx >= 0 && wpnIdx <= 3) {
-        Rectangle rWpn = { 20, 130.0f + (float)buffCount * 32.0f, 220, 30 };
-        Color wpnCol = WeaponSkinPrimary(game->player.weaponSkinId);
-        DrawRectangleRec(rWpn, Fade((Color){ 10, 8, 22, 255 }, 0.75f));
-        DrawRectangle((int)rWpn.x, (int)rWpn.y, 4, (int)rWpn.height, wpnCol);
-        DrawRectangleLinesEx(rWpn, 1.0f, Fade(wpnCol, 0.25f));
+    // ------------------------------------------------------------------------
+    // HOTBAR DE ARMAS (centro-inferior): mostra SEMPRE as 4 armas, deixando claro
+    // qual está equipada, quais teclas usar (1-4) e quais ainda estão bloqueadas.
+    // ------------------------------------------------------------------------
+    {
+        const char *shortNames[4] = { "LAMINA", "FUZIL", "GRANADA", "BFG" };
+        float slotW = 150.0f, slotH = 54.0f, gap = 10.0f;
+        float totalW = 4 * slotW + 3 * gap;
+        float startX = (SCREEN_WIDTH - totalW) / 2.0f;
+        float y = SCREEN_HEIGHT - slotH - 16.0f;
 
-        DrawTextEx(font, weaponNames[wpnIdx], (Vector2){ rWpn.x + 12, rWpn.y + 4 }, 12.0f, 1.0f, WHITE);
+        DrawTextEx(font, "ARMAS (teclas 1-4):", (Vector2){ startX, y - 20.0f }, 13.0f, 1.0f, Fade(WHITE, 0.7f));
 
-        // Barra de cooldown: cheia = pronto para atacar
-        float cdMax = weaponCooldowns[wpnIdx];
-        float cdPct = 1.0f - (game->player.attackCooldown / cdMax);
-        if (cdPct < 0.0f) cdPct = 0.0f;
-        if (cdPct > 1.0f) cdPct = 1.0f;
-        DrawRectangle((int)rWpn.x + 12, (int)rWpn.y + 21, 196, 4, Fade(BLACK, 0.6f));
-        DrawRectangle((int)rWpn.x + 12, (int)rWpn.y + 21, (int)(196 * cdPct), 4,
-                      (cdPct >= 1.0f) ? wpnCol : Fade(wpnCol, 0.45f));
-        buffCount++;
+        for (int s = 0; s < 4; s++)
+        {
+            WeaponInfo wi = GetWeaponInfo(s + 1);
+            bool unlocked = (game->player.level >= wi.unlockLevel);
+            bool current  = (game->player.equippedWeapon == s + 1);
+            Rectangle r = { startX + s * (slotW + gap), y, slotW, slotH };
+
+            Color bg = current ? Fade(wi.color, 0.22f) : Fade((Color){ 10, 8, 22, 255 }, 0.8f);
+            DrawRectangleRounded(r, 0.18f, 6, bg);
+            Color border = !unlocked ? Fade(GRAY, 0.4f) : current ? wi.color : Fade(wi.color, 0.5f);
+            DrawRectangleRoundedLines(r, 0.18f, 6, border);
+            if (current) DrawRectangleRoundedLines(r, 0.18f, 6, Fade(WHITE, 0.5f + 0.3f * sinf((float)GetTime() * 6.0f)));
+
+            // Tecla
+            DrawTextEx(font, TextFormat("%d", s + 1), (Vector2){ r.x + 8, r.y + 5 }, 20.0f, 1.0f,
+                       unlocked ? wi.color : Fade(GRAY, 0.6f));
+            // Nome curto
+            DrawTextEx(font, shortNames[s], (Vector2){ r.x + 34, r.y + 8 }, 16.0f, 1.0f,
+                       unlocked ? WHITE : Fade(GRAY, 0.7f));
+
+            if (!unlocked)
+            {
+                DrawTextEx(font, TextFormat("Nivel %d", wi.unlockLevel), (Vector2){ r.x + 34, r.y + 30 }, 13.0f, 1.0f, Fade(RED, 0.9f));
+                // cadeado simples
+                DrawRectangleRounded((Rectangle){ r.x + slotW - 26, r.y + 8, 16, 14 }, 0.4f, 4, Fade(GRAY, 0.8f));
+                DrawRectangleLines((int)(r.x + slotW - 24), (int)(r.y + 4), 12, 8, Fade(GRAY, 0.8f));
+            }
+            else
+            {
+                // efeito especial resumido
+                const char *tag = (s == 0) ? "360 / empurrao" : (s == 1) ? "rapida" : (s == 2) ? "area+veneno" : "perfurante";
+                DrawTextEx(font, tag, (Vector2){ r.x + 34, r.y + 31 }, 12.0f, 1.0f, Fade(wi.color, 0.9f));
+
+                // Barra de cooldown apenas na arma equipada
+                if (current)
+                {
+                    float cdPct = 1.0f - (game->player.attackCooldown / (wi.cooldown <= 0.0f ? 1.0f : wi.cooldown));
+                    if (cdPct < 0.0f) cdPct = 0.0f;
+                    if (cdPct > 1.0f) cdPct = 1.0f;
+                    DrawRectangle((int)r.x + 8, (int)(r.y + slotH - 7), (int)(slotW - 16), 4, Fade(BLACK, 0.6f));
+                    DrawRectangle((int)r.x + 8, (int)(r.y + slotH - 7), (int)((slotW - 16) * cdPct), 4,
+                                  (cdPct >= 1.0f) ? wi.color : Fade(wi.color, 0.5f));
+                }
+            }
+        }
+
+        // Poções de vida ao lado direito da hotbar
+        Rectangle rPot = { startX + totalW + 16.0f, y, 120.0f, slotH };
+        if (rPot.x + rPot.width <= SCREEN_WIDTH - 8.0f)
+        {
+            DrawRectangleRounded(rPot, 0.18f, 6, Fade((Color){ 10, 8, 22, 255 }, 0.8f));
+            DrawRectangleRoundedLines(rPot, 0.18f, 6, Fade(GREEN, 0.6f));
+            DrawTextEx(font, "[E] POCAO", (Vector2){ rPot.x + 12, rPot.y + 8 }, 14.0f, 1.0f, GREEN);
+            DrawTextEx(font, TextFormat("x %d", game->player.healthPotions), (Vector2){ rPot.x + 12, rPot.y + 28 }, 16.0f, 1.0f, WHITE);
+        }
     }
-
-    // HUD DE POÇÕES
-    Rectangle rPot = { 20, 130.0f + (float)buffCount * 32.0f, 220, 26 };
-    DrawRectangleRec(rPot, Fade((Color){ 10, 8, 22, 255 }, 0.75f));
-    DrawRectangle((int)rPot.x, (int)rPot.y, 4, (int)rPot.height, GREEN);
-    DrawRectangleLinesEx(rPot, 1.0f, Fade(GREEN, 0.25f));
-    DrawTextEx(font, TextFormat("[E] Poções de Vida: %d", game->player.healthPotions), (Vector2){ rPot.x + 12, rPot.y + 7 }, 12.0f, 1.0f, GREEN);
-    buffCount++;
 
     // E. RADAR ESPACIAL DENTRO DO HUD
     Vector2 radarCenter = { 1195.0f, 85.0f };
@@ -326,6 +364,37 @@ void DrawHUD(GameState *game, Font font)
         DrawTextEx(font, game->notificationMsg, (Vector2){ 490.0f + 150.0f - textSz.x/2.0f, 678.0f }, 14.0f, 1.0f, GREEN);
         
         if (game->timeElapsed > 3.0f) game->saveLoaded = false;
+    }
+
+    // ------------------------------------------------------------------------
+    // BANNER / TOAST central (onda, chefe, troca/desbloqueio de arma, level up)
+    // ------------------------------------------------------------------------
+    if (game->bannerTimer > 0.0f)
+    {
+        float t = game->bannerTimer / (game->bannerMax <= 0.0f ? 1.0f : game->bannerMax);
+        // Aparece e some suavemente (alpha nas pontas)
+        float alpha = 1.0f;
+        if (t > 0.85f) alpha = (1.0f - t) / 0.15f;          // fade-in
+        else if (t < 0.25f) alpha = t / 0.25f;               // fade-out
+        if (alpha < 0.0f) alpha = 0.0f;
+        if (alpha > 1.0f) alpha = 1.0f;
+
+        bool hasSub = game->bannerSub[0] != '\0';
+        float boxW = 640.0f, boxH = hasSub ? 78.0f : 52.0f;
+        Rectangle box = { (SCREEN_WIDTH - boxW) / 2.0f, 132.0f, boxW, boxH };
+        DrawRectangleRounded(box, 0.25f, 8, Fade((Color){ 8, 10, 16, 255 }, 0.86f * alpha));
+        DrawRectangleRoundedLines(box, 0.25f, 8, Fade(game->bannerColor, alpha));
+        DrawRectangle((int)box.x, (int)box.y, 5, (int)box.height, Fade(game->bannerColor, alpha));
+
+        Vector2 mSz = MeasureTextEx(font, game->bannerMsg, 26.0f, 1.0f);
+        DrawTextEx(font, game->bannerMsg, (Vector2){ SCREEN_WIDTH / 2.0f - mSz.x / 2.0f, box.y + 10.0f },
+                   26.0f, 1.0f, Fade(game->bannerColor, alpha));
+        if (hasSub)
+        {
+            Vector2 sSz = MeasureTextEx(font, game->bannerSub, 16.0f, 1.0f);
+            DrawTextEx(font, game->bannerSub, (Vector2){ SCREEN_WIDTH / 2.0f - sSz.x / 2.0f, box.y + 46.0f },
+                       16.0f, 1.0f, Fade(WHITE, alpha * 0.9f));
+        }
     }
 }
 

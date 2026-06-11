@@ -119,3 +119,40 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
         SpawnProjectile(game, game->player.position, worldMousePos, PROJ_PLAYER_BFG, 100 + danoBase);
     }
 }
+
+// ============================================================================
+// DADOS DAS ARMAS (fonte única usada por HUD, Arsenal e Tutorial)
+// ============================================================================
+WeaponInfo GetWeaponInfo(int weapon)
+{
+    switch (weapon)
+    {
+        case 2: return (WeaponInfo){
+            "Fuzil Celula-T", "Disparos rapidos em linha reta.",
+            "Cadencia altissima", "Pressao constante a distancia; otimo contra enxames.",
+            8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 200, 255, 255 } };
+        case 3: return (WeaponInfo){
+            "Granada Macrofago", "Explosao em area que libera enzimas.",
+            "Dano em area + VENENO", "Controle de grupos; veneno derrete alvos tanques.",
+            40, "Lenta", 1.5f, 3, 3, (Color){ 255, 140, 40, 255 } };
+        case 4: return (WeaponInfo){
+            "Vacina BFG", "Projetil pesado que ATRAVESSA inimigos.",
+            "Perfurante (atravessa todos)", "Limpa fileiras inteiras; guarde para hordas e chefe.",
+            100, "Muito lenta", 5.0f, 4, 4, (Color){ 120, 255, 160, 255 } };
+        case 1:
+        default: return (WeaponInfo){
+            "Lamina Imunologica", "Golpe corpo a corpo em 360 graus.",
+            "Acerta tudo ao redor + empurrao", "Defesa pessoal; segura inimigos colados em voce.",
+            15, "Rapida", 0.22f, 1, 1, (Color){ 0, 229, 255, 255 } };
+    }
+}
+
+int WeaponUnlockLevel(int weapon)
+{
+    return GetWeaponInfo(weapon).unlockLevel;
+}
+
+const char *WeaponName(int weapon)
+{
+    return GetWeaponInfo(weapon).name;
+}

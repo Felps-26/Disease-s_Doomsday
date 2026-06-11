@@ -6,7 +6,7 @@
 #include <math.h>
 #include <string.h>
 
-extern UIButton menuButtons[5];
+extern UIButton menuButtons[7];
 extern UIButton pauseButtons[5];
 extern UIButton controlsButton;
 extern UIButton gameOverButtons[2];
@@ -99,7 +99,7 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
     // Evita hover e clique acidentais nos botões do menu durante a digitação
     if (!game->nameInputActive)
     {
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 7; i++)
         {
             if (i == 1 && !anySaveExists)
             {
@@ -114,25 +114,23 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
     }
     else
     {
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 7; i++)
         {
             menuButtons[i].hover = false;
             menuButtons[i].clicked = false;
         }
     }
 
-    // Ações
-    if (menuButtons[0].clicked) // NOVO JOGO
+    // Ações (índices: 0 Jogar, 1 Carregar, 2 Arsenal, 3 Skins, 4 Tutorial, 5 Config, 6 Sair)
+    if (menuButtons[0].clicked) // JOGAR
     {
         InitGame(game);
         RequestLoadingScreen(game, LOAD_TO_TUTORIAL, 2.0f);
     }
     else if (menuButtons[1].clicked) // CARREGAR JOGO
     {
-        // Verifica se algum save existe antes de abrir a tela de slots
         if (anySaveExists)
         {
-            // Carrega os metadados dos slots para a tela de seleção
             for (int i = 0; i < 3; i++)
             {
                 game->slotsMeta[i] = CarregarMetadadosSlot(i + 1);
@@ -140,16 +138,24 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
             game->currentScreen = SCREEN_LOAD_SELECT;
         }
     }
-    else if (menuButtons[2].clicked) // CONTROLES
+    else if (menuButtons[2].clicked) // ARSENAL
+    {
+        game->currentScreen = SCREEN_ARSENAL;
+    }
+    else if (menuButtons[3].clicked) // SKINS
+    {
+        game->currentScreen = SCREEN_SKINS;
+    }
+    else if (menuButtons[4].clicked) // TUTORIAL
     {
         game->currentScreen = SCREEN_CONTROLS;
     }
-    else if (menuButtons[3].clicked) // CONFIGURACOES
+    else if (menuButtons[5].clicked) // CONFIG
     {
         game->currentScreen = SCREEN_SETTINGS;
     }
 
-    return menuButtons[4].clicked; // Retorna true se clicou em SAIR
+    return menuButtons[6].clicked; // Retorna true se clicou em SAIR
 }
 
 void UpdateButtonsControles(GameState *game, Vector2 mouse)

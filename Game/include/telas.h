@@ -18,6 +18,7 @@ void DrawSciFiBox(Rectangle r, Color col);
 void DrawHUD(GameState *game, Font font);
 void DrawTelaMenu(GameState *game, Font font, float time);
 void DrawTelaControles(GameState *game, Font font);
+void UpdateTelaTutorial(GameState *game, Vector2 mouse);
 void DrawTelaGameplay(GameState *game, Font font, bool drawHUD);
 void DrawTelaPausa(GameState *game, Font font);
 void DrawTelaGameOver(GameState *game, Font font);
@@ -53,5 +54,13 @@ void UpdateTelaQuiz(GameState *game, Vector2 mouse);
 // Tela de Upgrade do SUS
 void DrawTelaUpgrade(GameState *game, Font font);
 void UpdateTelaUpgrade(GameState *game, Vector2 mouse);
+
+// Tela de Arsenal (detalhes de todas as armas)
+void DrawTelaArsenal(GameState *game, Font font);
+void UpdateTelaArsenal(GameState *game, Vector2 mouse);
+
+// Tela dedicada de seleção de Skins (com preview)
+void DrawTelaSkins(GameState *game, Font font);
+void UpdateTelaSkins(GameState *game, Vector2 mouse);
 
 #endif // TELAS_H

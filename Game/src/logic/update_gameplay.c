@@ -118,6 +118,23 @@ void UpdateDamageTexts(GameState *game, float delta)
 }
 
 // ============================================================================
+// BANNER / TOAST DE FEEDBACK (onda, chefe, troca/desbloqueio de arma, level up)
+// ============================================================================
+void ShowBanner(GameState *game, const char *msg, const char *sub, Color color, float duration)
+{
+    snprintf(game->bannerMsg, sizeof(game->bannerMsg), "%s", msg ? msg : "");
+    snprintf(game->bannerSub, sizeof(game->bannerSub), "%s", sub ? sub : "");
+    game->bannerColor = color;
+    game->bannerTimer = duration;
+    game->bannerMax   = duration;
+}
+
+void UpdateBanner(GameState *game, float delta)
+{
+    if (game->bannerTimer > 0.0f) game->bannerTimer -= delta;
+}
+
+// ============================================================================
 // SKINS: CORES E NOMES
 // ============================================================================
 Color WeaponSkinPrimary(int weaponSkinId)
@@ -279,6 +296,7 @@ void InitGame(GameState *game)
     game->player.squashY = 1.0f;
     game->player.trailIndex = 0;
     game->player.equippedWeapon = 1; // 1 = Lâmina Imunológica
+    game->maxWeaponUnlocked = 1;     // só a Lâmina liberada no início (progressão)
     game->player.healthPotions = 3;
     game->player.poisonTimer = 0.0f;
     game->player.slowTimer = 0.0f;
@@ -871,6 +889,7 @@ void UpdateGameplay(GameState *game, float delta)
     }
     if (game->player.slowTimer > 0.0f) game->player.slowTimer -= delta;
     UpdateDamageTexts(game, delta);
+    UpdateBanner(game, delta);
 
     // ------------------------------------------------------------------------
     // 2. MOVIMENTAÇÃO DO JOGADOR
@@ -930,10 +949,33 @@ void UpdateGameplay(GameState *game, float delta)
     // ------------------------------------------------------------------------
     // 3. ENTRADA DE COMBATE E ARMAS
     // ------------------------------------------------------------------------
-    if (IsKeyPressed(KEY_ONE))   game->player.equippedWeapon = 1;
-    if (IsKeyPressed(KEY_TWO))   game->player.equippedWeapon = 2;
-    if (IsKeyPressed(KEY_THREE)) game->player.equippedWeapon = 3;
-    if (IsKeyPressed(KEY_FOUR))  game->player.equippedWeapon = 4;
+    // Troca de arma com feedback claro (mostra nome/efeito ou aviso de bloqueio).
+    int wpnRequest = 0;
+    if (IsKeyPressed(KEY_ONE))   wpnRequest = 1;
+    if (IsKeyPressed(KEY_TWO))   wpnRequest = 2;
+    if (IsKeyPressed(KEY_THREE)) wpnRequest = 3;
+    if (IsKeyPressed(KEY_FOUR))  wpnRequest = 4;
+    if (wpnRequest != 0)
+    {
+        WeaponInfo wi = GetWeaponInfo(wpnRequest);
+        if (game->player.level >= wi.unlockLevel)
+        {
+            if (wpnRequest != game->player.equippedWeapon)
+            {
+                game->player.equippedWeapon = wpnRequest;
+                PlaySound(g_assets.sfxPickup);
+                ShowBanner(game, wi.name, wi.special, wi.color, 2.2f);
+                SpawnParticleExplosion(game, game->player.position, wi.color, 10, 40.0f, 120.0f, 3.0f, 0.4f);
+            }
+        }
+        else
+        {
+            // Arma bloqueada: avisa o requisito de nível em vez de falhar em silêncio.
+            ShowBanner(game, TextFormat("%s BLOQUEADA", wi.name),
+                       TextFormat("Desbloqueia no Nivel %d", wi.unlockLevel),
+                       (Color){ 200, 80, 80, 255 }, 2.0f);
+        }
+    }
 
     if (IsKeyPressed(KEY_E) && game->player.healthPotions > 0 && game->player.hp < game->player.maxHp) {
         game->player.healthPotions--;
@@ -1063,6 +1105,64 @@ void UpdateGameplay(GameState *game, float delta)
         }
         if (enemy->slowTimer > 0.0f) enemy->slowTimer -= delta;
 
+        // --------------------------------------------------------------------
+        // FASES DE COMPORTAMENTO DO CHEFE (muda conforme perde vida)
+        // Fase 0 (>66%): padrão. Fase 1 (33-66%): mais rápido, invoca lacaios.
+        // Fase 2 (<33%): enfurecido, rajada radial de projéteis.
+        // --------------------------------------------------------------------
+        int bossPhase = 0;
+        float bossSpeedMult = 1.0f;
+        if (enemy->tier == TIER_3_BOSS && enemy->state != DEATH)
+        {
+            float pct = (float)enemy->hp / enemy->maxHp;
+            bossPhase = (pct > 0.66f) ? 0 : (pct > 0.33f) ? 1 : 2;
+            bossSpeedMult = 1.0f + (float)bossPhase * 0.35f;
+
+            if (bossPhase != enemy->aiPhase)
+            {
+                enemy->aiPhase = bossPhase;
+                game->screenShake = 0.7f;
+                SpawnParticleExplosion(game, enemy->position, (Color){ 255, 60, 80, 255 }, 40, 120.0f, 320.0f, 5.0f, 0.8f);
+                const char *psub = (bossPhase == 1)
+                    ? "FASE 2: enfurecida e invocando lacaios!"
+                    : "FASE FINAL: rajada em todas as direcoes!";
+                ShowBanner(game, "O CHEFE MUDOU DE FASE!", psub, (Color){ 255, 80, 90, 255 }, 3.0f);
+            }
+
+            // Invoca lacaios (escolta) nas fases avançadas
+            if (bossPhase >= 1)
+            {
+                enemy->summonTimer -= delta;
+                if (enemy->summonTimer <= 0.0f)
+                {
+                    enemy->summonTimer = (bossPhase == 2) ? 6.0f : 9.0f;
+                    int spawned = 0;
+                    for (int k = 0; k < MAX_ENEMIES && spawned < 2; k++)
+                    {
+                        if (!game->enemies[k].active)
+                        {
+                            Enemy *m = &game->enemies[k];
+                            float a = (float)GetRandomValue(0, 360) * DEG2RAD;
+                            m->position = (Vector2){ enemy->position.x + cosf(a) * 120.0f,
+                                                     enemy->position.y + sinf(a) * 120.0f };
+                            m->active = true; m->type = 1; m->tier = TIER_2;
+                            m->maxHp = 20 + game->wave * 5; m->hp = m->maxHp;
+                            m->speed = 220.0f; m->isRanged = true; m->state = IDLE;
+                            m->cooldownTimer = 1.5f; m->chargeTimer = 0.0f;
+                            m->patrolTarget = m->position; m->patrolTimer = 3.0f;
+                            m->poisonTimer = 0.0f; m->poisonAccum = 0.0f; m->slowTimer = 0.0f;
+                            m->isTutorialEnemy = false;
+                            m->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
+                            m->fleeTimer = 0.0f; m->isEscort = true; m->aiPhase = 0; m->summonTimer = 0.0f;
+                            game->enemiesRemaining++;
+                            SpawnParticleExplosion(game, m->position, DARKGRAY, 8, 40.0f, 120.0f, 2.0f, 0.4f);
+                            spawned++;
+                        }
+                    }
+                }
+            }
+        }
+
         // State Machine Update
         if (enemy->state == HURT) {
             enemy->cooldownTimer -= delta;
@@ -1106,10 +1206,24 @@ void UpdateGameplay(GameState *game, float delta)
                     Vector2 off2 = { game->player.position.x - 100, game->player.position.y };
                     SpawnProjectile(game, enemy->position, off1, ptype, dmg);
                     SpawnProjectile(game, enemy->position, off2, ptype, dmg);
+
+                    // FASE FINAL: rajada radial em todas as direções (bullet-hell leve)
+                    if (bossPhase >= 2) {
+                        for (int r = 0; r < 8; r++) {
+                            float a = (float)r / 8.0f * 2.0f * PI;
+                            Vector2 rt = { enemy->position.x + cosf(a) * 200.0f,
+                                           enemy->position.y + sinf(a) * 200.0f };
+                            SpawnProjectile(game, enemy->position, rt, ptype, dmg);
+                        }
+                    }
                 }
-                
+
                 enemy->state = IDLE;
-                enemy->cooldownTimer = (enemy->type == 2) ? 2.5f : 1.5f; // KPC tem cooldown maior
+                // Cadência: KPC atira mais devagar; o chefe acelera por fase.
+                if (enemy->tier == TIER_3_BOSS)
+                    enemy->cooldownTimer = 2.4f - (float)bossPhase * 0.7f; // 2.4 / 1.7 / 1.0
+                else
+                    enemy->cooldownTimer = (enemy->type == 2) ? 2.5f : 1.5f;
             }
         }
         else if (enemy->isRanged && distSqrToPlayer < 400.0f * 400.0f && enemy->cooldownTimer <= 0.0f) {
@@ -1138,11 +1252,30 @@ void UpdateGameplay(GameState *game, float delta)
             float currentSpeed = enemy->speed * (enemy->slowTimer > 0.0f ? 0.5f : 1.0f);
 
             if (!enemy->isRanged) {
-                // Inimigo melee comum (Patrulha / Persegue)
+                // Inimigo melee (SARS type 0, Chagas type 3): cerco + fuga com pouca vida
                 float chaseMult = (enemy->tier == TIER_2) ? 1.25f : 1.05f;
-                enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, currentSpeed * chaseMult * delta));
+                Vector2 perp = { -chaseDir.y, chaseDir.x };
+
+                // Fuga: tipos frágeis recuam quando estão com pouca vida (mas não a escolta)
+                bool frail = (enemy->type == 3 || enemy->type == 0);
+                if (frail && !enemy->isEscort && enemy->hp <= enemy->maxHp / 4)
+                    enemy->fleeTimer = 1.0f;
+
+                if (enemy->fleeTimer > 0.0f) {
+                    enemy->fleeTimer -= delta;
+                    // Recua do jogador com leve desvio lateral (menos previsível)
+                    Vector2 flee = Vector2Normalize(Vector2Add(Vector2Scale(chaseDir, -1.0f),
+                                                               Vector2Scale(perp, enemy->flankSign * 0.5f)));
+                    enemy->position = Vector2Add(enemy->position, Vector2Scale(flee, currentSpeed * 1.1f * delta));
+                } else {
+                    // Cerco: aproxima-se por um ângulo lateral quando longe, e reto quando perto,
+                    // fazendo o grupo "abraçar"/cercar o jogador em vez de enfileirar.
+                    float flankAmount = (distSqrToPlayer > 130.0f * 130.0f) ? 0.6f : 0.0f;
+                    Vector2 desired = Vector2Normalize(Vector2Add(chaseDir, Vector2Scale(perp, enemy->flankSign * flankAmount)));
+                    enemy->position = Vector2Add(enemy->position, Vector2Scale(desired, currentSpeed * chaseMult * delta));
+                }
             } else {
-                // IA Específica: Aedes aegypti (Type 1) e KPC (Type 2)
+                // IA Específica: Aedes aegypti (Type 1), KPC/Chefe (Type 2) e TB (Type 4)
                 if (enemy->type == 1) { // Aedes aegypti (errático, tenta manter distância)
                     if (distSqrToPlayer > 300.0f * 300.0f) {
                         float timeFactor = GetTime() * 15.0f;
@@ -1155,9 +1288,10 @@ void UpdateGameplay(GameState *game, float delta)
                         // Foge se o jogador chegar muito perto
                         enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, -currentSpeed * delta));
                     }
-                } else if (enemy->type == 2) { // KPC / Superbactéria (Lento, mas persegue constantemente)
+                } else if (enemy->type == 2) { // KPC / Superbactéria / Chefe (persegue mantendo média distância)
+                    // O chefe acelera conforme muda de fase (bossSpeedMult).
                     if (distSqrToPlayer > 250.0f * 250.0f) {
-                        enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, currentSpeed * 0.8f * delta));
+                        enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, currentSpeed * 0.8f * bossSpeedMult * delta));
                     }
                 }
             }
@@ -1364,6 +1498,26 @@ void UpdateGameplay(GameState *game, float delta)
         PlaySound(g_assets.sfxPickup); // som festivo de level up
 
         game->screenShake = 0.5f;
+
+        // Detecta desbloqueio de nova arma por nível e mostra banner adequado.
+        int newMax = 1;
+        for (int w = 2; w <= 4; w++)
+            if (game->player.level >= WeaponUnlockLevel(w)) newMax = w;
+
+        if (newMax > game->maxWeaponUnlocked)
+        {
+            game->maxWeaponUnlocked = newMax;
+            WeaponInfo wi = GetWeaponInfo(newMax);
+            ShowBanner(game, TextFormat("NOVA ARMA: %s", wi.name),
+                       TextFormat("Tecla [%d] desbloqueada - %s", wi.key, wi.special),
+                       wi.color, 3.4f);
+        }
+        else
+        {
+            ShowBanner(game, TextFormat("NIVEL %d", game->player.level),
+                       "Atributos aumentados! Vida restaurada.",
+                       GOLD, 2.4f);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -1663,6 +1817,14 @@ void CarregarJogoSlot(GameState *game, int slot)
         if (game->player.attackPower <= 0) game->player.attackPower = 15;
         if (game->player.speed < 100.0f || game->player.speed > 1000.0f) game->player.speed = 280.0f;
         if (game->wave < 1 || game->wave > 5) game->wave = 1;
+
+        // Recalcula as armas desbloqueadas a partir do nível carregado e garante
+        // que a arma equipada não esteja bloqueada.
+        game->maxWeaponUnlocked = 1;
+        for (int w = 2; w <= 4; w++)
+            if (game->player.level >= WeaponUnlockLevel(w)) game->maxWeaponUnlocked = w;
+        if (game->player.equippedWeapon > game->maxWeaponUnlocked)
+            game->player.equippedWeapon = game->maxWeaponUnlocked;
         if (game->player.position.x < 0.0f || game->player.position.x > MAP_WIDTH ||
             game->player.position.y < 0.0f || game->player.position.y > MAP_HEIGHT)
         {

@@ -44,18 +44,22 @@ A morte do Anticorpo leva à tela de **Game Over** (Tentar Novamente pula o tuto
 | Salvar rápido (slot 1) | `F5` |
 | Carregar rápido (slot 1) | `F9` |
 
-As quatro armas estão disponíveis desde o início (não há bloqueio de armas).
+A arma equipada e as quatro teclas (1-4) ficam **sempre visíveis na hotbar** no rodapé do HUD: a atual fica destacada e as bloqueadas aparecem em cinza com o nível necessário.
 
 ---
 
-## Armas
+## Armas e desbloqueio por nível
 
-| # | Arma | Tipo | Característica | Cooldown |
-|---|---|---|---|---|
-| 1 | Lâmina Imunológica | Corpo a corpo | Golpe em **360°** ao redor, com empurrão (knockback) | 0,22 s |
-| 2 | Fuzil Célula-T | Projétil rápido | Tiro reto veloz, dano por acerto | 0,15 s |
-| 3 | Granada Macrófago | Explosivo | Dano em área **+ veneno (DoT)** nos sobreviventes — ideal contra alvos tanques | 1,5 s |
-| 4 | Vacina BFG | Projétil pesado | Projétil **perfurante** de dano alto | 5,0 s |
+As armas são liberadas conforme o jogador **sobe de nível** (progressão de RPG). Ao desbloquear, um banner avisa na tela. A tela **ARSENAL** (no menu) detalha cada uma.
+
+| # | Arma | Tipo | Característica | Cooldown | Desbloqueio |
+|---|---|---|---|---|---|
+| 1 | Lâmina Imunológica | Corpo a corpo | Golpe em **360°** ao redor, com empurrão (knockback) | 0,22 s | Início |
+| 2 | Fuzil Célula-T | Projétil rápido | Tiro reto veloz, dano por acerto | 0,15 s | Nível 2 |
+| 3 | Granada Macrófago | Explosivo | Dano em área **+ veneno (DoT)** nos sobreviventes — ideal contra alvos tanques | 1,5 s | Nível 3 |
+| 4 | Vacina BFG | Projétil pesado | Projétil **perfurante** de dano alto | 5,0 s | Nível 4 |
+
+Trocar de arma (1-4) mostra um **banner** com o nome e o efeito; tentar usar uma arma bloqueada avisa o nível necessário.
 
 ---
 
@@ -69,7 +73,27 @@ As quatro armas estão disponíveis desde o início (não há bloqueio de armas)
 | 3 | Trypanosoma cruzi (Chagas) | Muito rápido, frágil, corpo a corpo; **invoca** mosquitos Aedes |
 | 4 | Mycobacterium tuberculosis | Atirador pesado, lento e resistente |
 
-Os inimigos usam uma máquina de estados: `IDLE` (parado/patrulha), `AGGRO` (perseguindo), `ATTACK` (atacando), `HURT` (atordoado), `DEATH` (morrendo).
+Os inimigos usam uma máquina de estados: `IDLE` (parado/patrulha), `AGGRO` (perseguindo), `ATTACK` (atacando), `HURT` (atordoado), `DEATH` (morrendo). Além disso, os de corpo a corpo tentam **cercar/flanquear** o jogador (não vão em linha reta) e os mais frágeis **recuam quando estão com pouca vida**.
+
+### Chefe (onda 5) — Superbactéria KPC
+
+Aparece **sempre na onda 5**, com corpo muito maior, **cercado por lacaios de escolta** que o protegem e distraem. Tem **3 fases** conforme perde vida: tiros duplos → mais rápido e invocando lacaios → enfurecido, com **rajada radial** de projéteis. Uma barra de vida do chefe fica fixa no topo da tela.
+
+---
+
+## Menu principal e telas
+
+O menu deixa todos os sistemas visíveis e acessíveis:
+
+- **JOGAR** — inicia o tutorial e a partida.
+- **CARREGAR JOGO** — slots de save com preview.
+- **ARSENAL** — detalhes das 4 armas (dano, cadência, cooldown, efeito, nível de desbloqueio, tecla).
+- **SKINS** — seleção de skin do Anticorpo (com preview ao vivo) e da arma.
+- **TUTORIAL** — guia em abas: Básico/Controles, Armas, Inimigos, Chefe, Skins, XP/Upgrades e Hordas.
+- **CONFIG** — volume e skins.
+- **SAIR**.
+
+Durante o jogo, **banners** comunicam nova horda, chegada do chefe, troca/desbloqueio de arma e level up.
 
 ---
 
