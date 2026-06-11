@@ -1,8 +1,52 @@
 #include "player_model.h"
 #include "weapons_model.h"
+#include "../../include/gameplay.h"
 #include "raymath.h"
 #include "rlgl.h"
 #include <math.h>
+
+// ============================================================================
+// PALETA DE CORES POR SKIN DO JOGADOR
+// 0 = Padrão (cavaleiro branco)  |  1 = Médica  |  2 = Infectada/Biológica
+// ============================================================================
+typedef struct PlayerSkinPalette
+{
+    Color armor;
+    Color armorDark;
+    Color joint;
+    Color detail;   // dourado / cruz / espinhos
+    Color earTip;
+} PlayerSkinPalette;
+
+static PlayerSkinPalette GetPlayerSkinPalette(int skinId)
+{
+    PlayerSkinPalette p;
+    switch (skinId)
+    {
+        case 1: // MÉDICA: jaleco branco, detalhes verde-saúde e cruz vermelha
+            p.armor     = (Color){ 250, 252, 255, 255 };
+            p.armorDark = (Color){ 185, 205, 210, 255 };
+            p.joint     = (Color){ 60, 80, 85, 255 };
+            p.detail    = (Color){ 225, 55, 60, 255 };   // cruz vermelha
+            p.earTip    = (Color){ 0, 190, 130, 255 };   // verde-saúde
+            break;
+        case 2: // INFECTADA: armadura roxa corrompida com brilho tóxico
+            p.armor     = (Color){ 110, 70, 150, 255 };
+            p.armorDark = (Color){ 60, 35, 90, 255 };
+            p.joint     = (Color){ 30, 15, 45, 255 };
+            p.detail    = (Color){ 130, 220, 40, 255 };  // verde-ácido
+            p.earTip    = (Color){ 130, 220, 40, 255 };
+            break;
+        default: // PADRÃO
+            p.armor     = (Color){ 235, 240, 250, 255 };
+            p.armorDark = (Color){ 160, 170, 190, 255 };
+            p.joint     = (Color){ 40, 45, 50, 255 };
+            p.detail    = (Color){ 230, 180, 50, 255 };  // dourado
+            p.earTip    = (Color){ 30, 100, 200, 255 };  // azul
+            break;
+    }
+    return p;
+}
 
 // ============================================================================
 // MODELO: JOGADOR (Estilo Cavaleiro Coelho)
@@ -24,12 +68,17 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
     rlScalef(player->squashX, player->squashY, 1.0f);
     rlTranslatef(-pPos.x, -pPos.y, 0.0f);
     
-    Color colorArmor = (Color){ 235, 240, 250, 255 }; // Branco/Prata da armadura
-    Color colorArmorDark = (Color){ 160, 170, 190, 255 }; // Sombra da armadura
-    Color colorJoint = (Color){ 40, 45, 50, 255 };   // Juntas escuras
-    Color colorVisor = BLACK;
-    Color colorDetail = (Color){ 230, 180, 50, 255 }; // Detalhes dourados (borda escudo, guarda espada)
-    Color colorBlueTip = (Color){ 30, 100, 200, 255 }; // Azul ponta da orelha / detalhe escudo
+    // Cores definidas pela skin selecionada do jogador
+    PlayerSkinPalette pal = GetPlayerSkinPalette(player->skinId);
+    Color colorArmor = pal.armor;          // Base da armadura
+    Color colorArmorDark = pal.armorDark;  // Sombra da armadura
+    Color colorJoint = pal.joint;          // Juntas escuras
+    Color colorVisor = (player->skinId == 2) ? (Color){ 130, 220, 40, 255 } : BLACK; // Visor brilha na skin infectada
+    Color colorDetail = pal.detail;        // Detalhes (fivela, cruz, espinhos)
+    Color colorBlueTip = pal.earTip;       // Ponta da orelha
+
+    // Líquido da espada-seringa segue a skin da arma equipada
+    Color swordLiquid = WeaponSkinPrimary(player->weaponSkinId);
 
     if (!player->isMoving) {
         // ========================================================
@@ -67,7 +116,7 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
 
         DrawLineEx(armLStart, armLHand, size*0.12f, colorArmorDark);
         DrawCircleV(armLStart, size*0.15f, colorArmorDark); // Ombro
-        DrawSyringeSword(armLHand, size*0.5f, swordAngle); // Espada na frente do ombro
+        DrawSyringeSword(armLHand, size*0.5f, swordAngle, swordLiquid); // Espada na frente do ombro
         DrawCircleV(armLHand, size*0.08f, colorArmor); // Mão segura a espada
         
         // Braço Dir (mão esquerda do personagem, lado direito da tela)
@@ -87,6 +136,19 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
         // Cinto
         DrawRectangle(torso.x, torso.y + torso.height - size*0.1f, torso.width, size*0.08f, colorJoint);
         DrawCircle(pPos.x, torso.y + torso.height - size*0.06f, size*0.05f, colorDetail); // Fivela
+
+        // Detalhe exclusivo por skin (peito)
+        if (player->skinId == 1) {
+            // Cruz médica vermelha no peitoral
+            DrawRectangle(pPos.x - size*0.03f, torso.y + size*0.06f, size*0.06f, size*0.2f, colorDetail);
+            DrawRectangle(pPos.x - size*0.1f, torso.y + size*0.13f, size*0.2f, size*0.06f, colorDetail);
+        } else if (player->skinId == 2) {
+            // Pústulas tóxicas pulsantes na armadura corrompida
+            float pulse = 0.8f + sinf(time * 6.0f) * 0.2f;
+            DrawCircle(pPos.x - size*0.15f, torso.y + size*0.12f, size*0.05f * pulse, colorDetail);
+            DrawCircle(pPos.x + size*0.12f, torso.y + size*0.2f, size*0.04f * pulse, colorDetail);
+            DrawCircle(pPos.x + size*0.02f, torso.y + size*0.3f, size*0.03f * pulse, colorDetail);
+        }
 
         // 4. Cabeça e Elmo
         Vector2 headPos = { pPos.x, pPos.y - size*0.35f + bob };
@@ -148,6 +210,17 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
         DrawRectangle(torso.x, torso.y + torso.height - size*0.1f, torso.width, size*0.08f, colorJoint);
         DrawCircle(pPos.x + dir*size*0.15f, torso.y + torso.height - size*0.06f, size*0.04f, colorDetail); // Fivela lateral
 
+        // Detalhe exclusivo por skin (lateral)
+        if (player->skinId == 1) {
+            // Cruz médica vermelha lateral
+            DrawRectangle(pPos.x - size*0.025f, torso.y + size*0.08f, size*0.05f, size*0.16f, colorDetail);
+            DrawRectangle(pPos.x - size*0.08f, torso.y + size*0.135f, size*0.16f, size*0.05f, colorDetail);
+        } else if (player->skinId == 2) {
+            float pulse = 0.8f + sinf(time * 6.0f) * 0.2f;
+            DrawCircle(pPos.x - dir*size*0.08f, torso.y + size*0.14f, size*0.045f * pulse, colorDetail);
+            DrawCircle(pPos.x + dir*size*0.05f, torso.y + size*0.26f, size*0.035f * pulse, colorDetail);
+        }
+
         // Perna da Frente
         float legFrontAngle = sinf(walkCycle) * 0.5f;
         Vector2 legFrontStart = { pPos.x + dir*size*0.1f, pPos.y + size*0.2f + bob };
@@ -205,8 +278,8 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
         
         DrawLineEx(armFrontStart, armFrontElbow, size*0.12f, colorArmorDark);
         DrawLineEx(armFrontElbow, armFrontHand, size*0.1f, colorArmorDark);
-        DrawCircleV(armFrontStart, size*0.15f, colorArmorDark); // Ombro       
-        DrawSyringeSword(armFrontHand, size*0.5f, swordAngle);
+        DrawCircleV(armFrontStart, size*0.15f, colorArmorDark); // Ombro
+        DrawSyringeSword(armFrontHand, size*0.5f, swordAngle, swordLiquid);
         DrawCircleV(armFrontHand, size*0.08f, colorArmor); // Mão da frente
         
         // Ombro frente

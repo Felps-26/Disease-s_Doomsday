@@ -11,7 +11,24 @@
 #include "../../include/asset_manager.h"
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
 #include <process.h>
+#define THREAD_RETURN void
+#define THREAD_END() _endthread()
+#define START_THREAD(func, arg) _beginthread(func, 0, arg)
+#else
+#include <pthread.h>
+#define THREAD_RETURN void *
+#define THREAD_END() return NULL
+static void StartDetachedThread(void *(*func)(void *), void *arg)
+{
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, func, arg) == 0) {
+        pthread_detach(thread);
+    }
+}
+#define START_THREAD(func, arg) StartDetachedThread(func, arg)
+#endif
 #include <math.h>
 #include <time.h>
 #include <string.h>
@@ -68,6 +85,113 @@ void SpawnParticleExplosion(GameState *game, Vector2 pos, Color col, int count, 
 }
 
 // ============================================================================
+// AUXILIAR: NÚMEROS DE DANO FLUTUANTES (FEEDBACK DE COMBATE)
+// ============================================================================
+void SpawnDamageText(GameState *game, Vector2 pos, int value, Color color)
+{
+    for (int i = 0; i < MAX_DAMAGE_TEXTS; i++)
+    {
+        if (!game->damageTexts[i].active)
+        {
+            game->damageTexts[i].active = true;
+            game->damageTexts[i].position = (Vector2){ pos.x + (float)GetRandomValue(-12, 12), pos.y - 30.0f };
+            game->damageTexts[i].value = value;
+            game->damageTexts[i].maxTime = 0.7f;
+            game->damageTexts[i].timer = 0.7f;
+            game->damageTexts[i].color = color;
+            return;
+        }
+    }
+}
+
+void UpdateDamageTexts(GameState *game, float delta)
+{
+    for (int i = 0; i < MAX_DAMAGE_TEXTS; i++)
+    {
+        if (game->damageTexts[i].active)
+        {
+            game->damageTexts[i].position.y -= 55.0f * delta; // sobe
+            game->damageTexts[i].timer -= delta;
+            if (game->damageTexts[i].timer <= 0.0f) game->damageTexts[i].active = false;
+        }
+    }
+}
+
+// ============================================================================
+// SKINS: CORES E NOMES
+// ============================================================================
+Color WeaponSkinPrimary(int weaponSkinId)
+{
+    switch (weaponSkinId)
+    {
+        case 1:  return (Color){ 220, 70, 255, 255 };  // Plasma (magenta)
+        case 2:  return (Color){ 130, 220, 40, 255 };  // Tóxica (verde-ácido)
+        default: return (Color){ 120, 200, 255, 255 }; // Padrão (azul-imune)
+    }
+}
+
+Color WeaponSkinSecondary(int weaponSkinId)
+{
+    switch (weaponSkinId)
+    {
+        case 1:  return (Color){ 0, 229, 255, 255 };   // Plasma (ciano)
+        case 2:  return (Color){ 200, 255, 90, 255 };  // Tóxica (lima)
+        default: return (Color){ 235, 245, 255, 255 }; // Padrão (branco-gelo)
+    }
+}
+
+const char *PlayerSkinName(int skinId)
+{
+    switch (skinId)
+    {
+        case 1:  return "MEDICA";
+        case 2:  return "INFECTADA";
+        default: return "PADRAO";
+    }
+}
+
+const char *WeaponSkinName(int weaponSkinId)
+{
+    switch (weaponSkinId)
+    {
+        case 1:  return "PLASMA";
+        case 2:  return "TOXICA";
+        default: return "PADRAO";
+    }
+}
+
+// ============================================================================
+// CONFIGURAÇÃO PERSISTENTE (VOLUME + SKINS)
+// ============================================================================
+void LoadPlayerConfig(GameState *game)
+{
+    FILE *f = fopen("Saves/config.txt", "r");
+    if (f == NULL) return;
+
+    float vol = 1.0f;
+    int skin = 0, wskin = 0;
+    if (fscanf(f, "%f %d %d", &vol, &skin, &wskin) == 3)
+    {
+        if (vol < 0.0f) vol = 0.0f;
+        if (vol > 1.0f) vol = 1.0f;
+        if (skin < 0 || skin >= SKIN_COUNT) skin = 0;
+        if (wskin < 0 || wskin >= WEAPON_SKIN_COUNT) wskin = 0;
+        game->masterVolume = vol;
+        game->player.skinId = skin;
+        game->player.weaponSkinId = wskin;
+    }
+    fclose(f);
+}
+
+void SavePlayerConfig(GameState *game)
+{
+    FILE *f = fopen("Saves/config.txt", "w");
+    if (f == NULL) return;
+    fprintf(f, "%f %d %d\n", game->masterVolume, game->player.skinId, game->player.weaponSkinId);
+    fclose(f);
+}
+
+// ============================================================================
 // AUXILIAR: SPAWN DE POWER-UPS
 // ============================================================================
 void SpawnPowerUpAt(GameState *game, Vector2 position, int forcedType)
@@ -91,13 +215,16 @@ void SpawnPowerUpAt(GameState *game, Vector2 position, int forcedType)
 // ============================================================================
 void InitGame(GameState *game)
 {
-    // Preserva o nome do jogador se ja estiver definido
+    // Preserva nome, volume e skins escolhidas pelo jogador
     char tempName[16] = "";
     float tempVol = 1.0f;
+    int tempSkin = 0, tempWSkin = 0;
     if (game != NULL)
     {
         snprintf(tempName, sizeof(tempName), "%s", game->player.name);
         tempVol = game->masterVolume;
+        tempSkin = game->player.skinId;
+        tempWSkin = game->player.weaponSkinId;
     }
 
     memset(game, 0, sizeof(GameState));
@@ -111,6 +238,8 @@ void InitGame(GameState *game)
         strcpy(game->player.name, "HERO");
     }
     game->masterVolume = tempVol;
+    game->player.skinId = tempSkin;
+    game->player.weaponSkinId = tempWSkin;
 
     // Jogador inicial
     game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
@@ -174,6 +303,16 @@ void InitTutorial(GameState *game)
     game->tutorialStep         = 0;
     game->tutorialTimer        = 0.0f;
     game->tutorialEnemySpawned = false;
+
+    // Garante estado de combate limpo ao entrar na seringa
+    game->player.hp = game->player.maxHp;
+    game->player.poisonTimer = 0.0f;
+    game->player.slowTimer = 0.0f;
+    game->player.damageCooldown = 0.0f;
+    game->player.attackCooldown = 0.0f;
+    game->poisonTickAccum = 0.0f;
+    if (game->player.equippedWeapon < 1 || game->player.equippedWeapon > 4)
+        game->player.equippedWeapon = 1;
 
     // Inicia o diálogo do passo 0 (página 0)
     game->tutorialDialog.active    = true;
@@ -274,9 +413,11 @@ void UpdateTutorial(GameState *game, float delta)
     if (game->player.speedTimer > 0.0f) currentSpeed *= 1.6f;
 
     Vector2 moveDir = { 0.0f, 0.0f };
-    // O jogador no tutorial (seringa) só pode se mover no eixo X
+    // Movimento completo dentro da seringa (as paredes limitam o eixo Y)
     if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) { moveDir.x += 1.0f; game->player.facingDir = 1; }
     if (IsKeyDown(KEY_LEFT)  || IsKeyDown(KEY_A)) { moveDir.x -= 1.0f; game->player.facingDir = -1; }
+    if (IsKeyDown(KEY_DOWN)  || IsKeyDown(KEY_S)) moveDir.y += 1.0f;
+    if (IsKeyDown(KEY_UP)    || IsKeyDown(KEY_W)) moveDir.y -= 1.0f;
 
     bool moving = (moveDir.x != 0.0f || moveDir.y != 0.0f);
     game->player.isMoving = moving;
@@ -300,7 +441,7 @@ void UpdateTutorial(GameState *game, float delta)
     // Colisão com paredes do mapa (via função do mapa da seringa)
     MapSeringa_ApplyWallCollision(&game->player.position, 20.0f);
 
-    // --- Atualiza partículas ---
+    // --- Atualiza partículas (devolvendo ao pool corretamente) ---
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         if (game->particles[i].active)
@@ -314,7 +455,7 @@ void UpdateTutorial(GameState *game, float delta)
             );
             game->particles[i].lifeTime -= delta;
             if (game->particles[i].lifeTime <= 0.0f)
-                game->particles[i].active = false;
+                FreeParticle(game, i); // BUGFIX: antes vazava o slot do pool
         }
     }
 
@@ -324,7 +465,25 @@ void UpdateTutorial(GameState *game, float delta)
     if (game->player.speedTimer > 0.0f) game->player.speedTimer -= delta;
     if (game->player.shieldTimer > 0.0f) game->player.shieldTimer -= delta;
     if (game->player.attackBoostTimer > 0.0f) game->player.attackBoostTimer -= delta;
+    // BUGFIX: poison/slow não eram decrementados no tutorial e vazavam para a gameplay
+    if (game->player.slowTimer > 0.0f) game->player.slowTimer -= delta;
+    if (game->player.poisonTimer > 0.0f)
+    {
+        game->player.poisonTimer -= delta;
+        // Dano de veneno suave também no tutorial (acumulador fracionário)
+        game->poisonTickAccum += 6.0f * delta;
+        if (game->poisonTickAccum >= 1.0f)
+        {
+            int dmg = (int)game->poisonTickAccum;
+            game->poisonTickAccum -= (float)dmg;
+            game->player.hp -= dmg;
+            if (game->player.hp < 1) game->player.hp = 1; // tutorial nunca mata por veneno
+        }
+        if (GetRandomValue(0, 30) == 0)
+            SpawnParticle(game, game->player.position, (Vector2){0, -20}, PURPLE, 4.0f, 0.5f);
+    }
     if (game->slashAnimTimer > 0.0f) game->slashAnimTimer -= delta;
+    UpdateDamageTexts(game, delta);
 
     // ========================================================================
     // PASSO 0: Andar para a esquerda (Treino de Mobilidade)
@@ -509,9 +668,9 @@ void UpdateTutorial(GameState *game, float delta)
         if (game->injectionCutscene)
         {
             game->injectionTimer += delta;
-            
-            // Tremor de tela
-            game->screenShake = 12.0f;
+
+            // Tremor de tela crescente durante a injeção
+            game->screenShake = 0.5f + (game->injectionTimer / 1.5f) * 1.5f;
 
             // Empurra o jogador para a esquerda
             game->player.position.x -= 800.0f * delta;
@@ -519,15 +678,15 @@ void UpdateTutorial(GameState *game, float delta)
             if (game->injectionTimer > 1.5f)
             {
                 game->injectionCutscene = false;
-                game->inTutorial = false;
                 game->screenShake = 0.0f;
 
                 // Limpa inimigos e partículas da seringa
                 for (int i = 0; i < MAX_POWERUPS; i++) game->powerUps[i].active = false;
                 InitParticlePool(game);
 
-                // Tela de carregamento para o organismo
-                RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 2.0f);
+                // Tela de carregamento para o organismo (com efeito de compressão)
+                // OBS: inTutorial ainda é true aqui — é o que ativa o syringeTransitionFX
+                RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 3.0f);
             }
         }
     }
@@ -613,7 +772,24 @@ void UpdateTutorial(GameState *game, float delta)
     // Atualiza câmera suavemente
     game->camera.target.x += (game->player.position.x - game->camera.target.x) * 0.10f;
     game->camera.target.y += (game->player.position.y - game->camera.target.y) * 0.10f;
-    
+
+    // Screen shake também no tutorial (golpes e cutscene de injeção)
+    if (game->screenShake > 0.0f)
+    {
+        if (!game->injectionCutscene) // a cutscene mantém o tremor constante
+        {
+            game->screenShake -= delta * 1.5f;
+            if (game->screenShake < 0.0f) game->screenShake = 0.0f;
+        }
+        float sh = (game->screenShake > 2.0f) ? 2.0f : game->screenShake; // limite p/ não enjoar
+        game->camera.offset.x = (SCREEN_WIDTH / 2.0f) + (float)GetRandomValue(-15, 15) * sh;
+        game->camera.offset.y = (SCREEN_HEIGHT / 2.0f) + (float)GetRandomValue(-15, 15) * sh;
+    }
+    else
+    {
+        game->camera.offset = (Vector2){ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
+    }
+
     // Squash & Stretch recovery (essencial para resetar após tomar dano)
     game->player.squashX = Lerp(game->player.squashX, 1.0f, 10.0f * delta);
     game->player.squashY = Lerp(game->player.squashY, 1.0f, 10.0f * delta);
@@ -652,8 +828,14 @@ void UpdateGameplay(GameState *game, float delta)
     if (game->player.damageCooldown > 0.0f) game->player.damageCooldown -= delta;
     if (game->player.poisonTimer > 0.0f) {
         game->player.poisonTimer -= delta;
-        // Dano de poison a cada frame (equivalente a 8 dano por segundo)
-        game->player.hp -= 8 * delta;
+        // BUGFIX: HP é int — "hp -= 8*delta" truncava e drenava ~60 HP/s.
+        // Agora acumula a fração e aplica 8 de dano por segundo de fato.
+        game->poisonTickAccum += 8.0f * delta;
+        if (game->poisonTickAccum >= 1.0f) {
+            int dmg = (int)game->poisonTickAccum;
+            game->poisonTickAccum -= (float)dmg;
+            game->player.hp -= dmg;
+        }
         if (game->player.hp <= 0) {
             game->player.hp = 0;
             game->currentScreen = SCREEN_GAMEOVER;
@@ -664,6 +846,7 @@ void UpdateGameplay(GameState *game, float delta)
         }
     }
     if (game->player.slowTimer > 0.0f) game->player.slowTimer -= delta;
+    UpdateDamageTexts(game, delta);
 
     // ------------------------------------------------------------------------
     // 2. MOVIMENTAÇÃO DO JOGADOR
@@ -831,7 +1014,18 @@ void UpdateGameplay(GameState *game, float delta)
         // Status updates
         if (enemy->poisonTimer > 0.0f && enemy->state != DEATH) {
             enemy->poisonTimer -= delta;
-            enemy->hp -= 15 * delta; // 15 dmg per second
+            // BUGFIX: "hp -= 15*delta" truncava para 0 todo frame (hp é int) e o
+            // veneno em inimigos nunca causava dano. Agora acumula a fração e
+            // aplica 15 de dano por segundo de fato.
+            enemy->poisonAccum += 15.0f * delta;
+            if (enemy->poisonAccum >= 1.0f) {
+                int pdmg = (int)enemy->poisonAccum;
+                enemy->poisonAccum -= (float)pdmg;
+                enemy->hp -= pdmg;
+            }
+            // Pequena partícula tóxica para feedback visual do veneno
+            if (GetRandomValue(0, 20) == 0)
+                SpawnParticle(game, enemy->position, (Vector2){ 0, -25 }, (Color){ 150, 60, 200, 255 }, 3.0f, 0.4f);
             if (enemy->hp <= 0) {
                 enemy->hp = 0;
                 enemy->state = DEATH;
@@ -839,6 +1033,7 @@ void UpdateGameplay(GameState *game, float delta)
                 PlaySound(g_assets.sfxEnemyHurt);
                 game->player.xp += (enemy->tier + 1) * 10;
                 game->player.score += (enemy->tier + 1) * 50;
+                game->totalEnemiesKilled++;
                 if (game->enemiesRemaining > 0) game->enemiesRemaining--;
             }
         }
@@ -1047,12 +1242,17 @@ void UpdateGameplay(GameState *game, float delta)
                         int eIdx = collIndices[k];
                         if (game->enemies[eIdx].active && game->enemies[eIdx].state != DEATH) {
                             game->enemies[eIdx].hp -= game->projectiles[i].damage;
+                            SpawnDamageText(game, game->enemies[eIdx].position, game->projectiles[i].damage, ORANGE);
+                            // A Granada Macrófago libera enzimas: aplica veneno (DoT)
+                            // nos sobreviventes, dando-lhe um papel claro contra alvos tanques.
+                            game->enemies[eIdx].poisonTimer = 2.5f;
                             if (game->enemies[eIdx].hp <= 0) {
                                 game->enemies[eIdx].hp = 0;
                                 game->enemies[eIdx].state = DEATH;
                                 game->enemies[eIdx].cooldownTimer = 0.5f;
                                 game->player.xp += (game->enemies[eIdx].tier + 1) * 10;
                                 game->player.score += (game->enemies[eIdx].tier + 1) * 50;
+                                game->totalEnemiesKilled++;
                                 if (game->enemiesRemaining > 0) game->enemiesRemaining--;
                             } else {
                                 game->enemies[eIdx].state = HURT;
@@ -1063,8 +1263,18 @@ void UpdateGameplay(GameState *game, float delta)
                 }
                 else {
                     // Colisão normal de projéteis do player (exceto granada que explode no timer)
+                    // OTIMIZAÇÃO: usa o spatial grid em vez de varrer todos os inimigos
                     if (game->projectiles[i].type != PROJ_PLAYER_GRENADE) {
-                        for (int j = 0; j < MAX_ENEMIES; j++) {
+                        Rectangle searchRect = {
+                            game->projectiles[i].hitbox.x - 40.0f,
+                            game->projectiles[i].hitbox.y - 40.0f,
+                            game->projectiles[i].hitbox.width + 80.0f,
+                            game->projectiles[i].hitbox.height + 80.0f
+                        };
+                        int hitIdx[MAX_ENEMIES];
+                        int hitCount = GetEnemiesInRect(game, searchRect, hitIdx);
+                        for (int k = 0; k < hitCount; k++) {
+                            int j = hitIdx[k];
                             if (game->enemies[j].active && game->enemies[j].state != DEATH) {
                                 // Hitbox maior para garantir colisão
                                 float eRadius = 45.0f;
@@ -1074,23 +1284,25 @@ void UpdateGameplay(GameState *game, float delta)
                                     if (game->projectiles[i].type != PROJ_PLAYER_BFG) {
                                         game->projectiles[i].active = false;
                                     }
-                                    
+
                                     game->enemies[j].hp -= game->projectiles[i].damage;
                                     PlaySound(g_assets.sfxEnemyHurt);
-                                    SpawnParticleExplosion(game, game->enemies[j].position, RED, 10, 50.0f, 150.0f, 3.0f, 0.4f);
-                                    
+                                    SpawnParticleExplosion(game, game->enemies[j].position, WeaponSkinPrimary(game->player.weaponSkinId), 10, 50.0f, 150.0f, 3.0f, 0.4f);
+                                    SpawnDamageText(game, game->enemies[j].position, game->projectiles[i].damage, WeaponSkinSecondary(game->player.weaponSkinId));
+
                                     if (game->enemies[j].hp <= 0) {
                                         game->enemies[j].hp = 0;
                                         game->enemies[j].state = DEATH;
                                         game->enemies[j].cooldownTimer = 0.5f;
                                         game->player.xp += (game->enemies[j].tier + 1) * 10;
                                         game->player.score += (game->enemies[j].tier + 1) * 50;
+                                        game->totalEnemiesKilled++;
                                         if (game->enemiesRemaining > 0) game->enemiesRemaining--;
                                     } else {
                                         game->enemies[j].state = HURT;
                                         game->enemies[j].cooldownTimer = 0.25f;
                                     }
-                                    
+
                                     // Se não é BFG, sai do loop (1 hit por projétil)
                                     if (game->projectiles[i].type != PROJ_PLAYER_BFG) break;
                                 }
@@ -1146,6 +1358,37 @@ void UpdateGameplay(GameState *game, float delta)
     }
 
     // ------------------------------------------------------------------------
+    // 7.5 CONCLUSÃO DA ONDA (CENTRALIZADO)
+    // BUGFIX: antes a onda só avançava se o último inimigo morresse pelo golpe
+    // melee; mortes por projétil/granada/veneno deixavam o jogo travado.
+    // ------------------------------------------------------------------------
+    if (game->enemiesRemaining <= 0)
+    {
+        bool anyAlive = false;
+        for (int i = 0; i < MAX_ENEMIES; i++)
+        {
+            if (game->enemies[i].active && game->enemies[i].state != DEATH)
+            {
+                anyAlive = true;
+                break;
+            }
+        }
+        if (!anyAlive)
+        {
+            game->wave++;
+            if (game->wave > 5)
+            {
+                RequestLoadingScreen(game, LOAD_TO_VICTORY, 2.5f);
+            }
+            else
+            {
+                game->currentScreen = SCREEN_QUIZ;
+            }
+            return;
+        }
+    }
+
+    // ------------------------------------------------------------------------
     // 8. ATUALIZAÇÃO DA CÂMERA (SUAVE COM LERP + SHAKE)
     // ------------------------------------------------------------------------
     float targetX = game->player.position.x;
@@ -1175,7 +1418,7 @@ typedef struct {
     int slot;
 } SaveThreadData;
 
-void SaveGameThread(void *lpParam)
+THREAD_RETURN SaveGameThread(void *lpParam)
 {
     SaveThreadData *data = (SaveThreadData *)lpParam;
     GameState *game = data->gameSnapshot;
@@ -1217,12 +1460,20 @@ void SaveGameThread(void *lpParam)
         fprintf(arquivo, "%f\n", game->timeElapsed);
 
         // 3. Contagem e Estado dos Inimigos
-        fprintf(arquivo, "%d\n", game->enemiesRemaining);
+        // Grava exatamente o número de linhas de inimigos que serão escritas
+        // (inimigos em animação de morte ou do tutorial não são salvos)
+        int savedEnemies = 0;
+        for (int i = 0; i < MAX_ENEMIES; i++)
+        {
+            if (game->enemies[i].active && game->enemies[i].state != DEATH && !game->enemies[i].isTutorialEnemy)
+                savedEnemies++;
+        }
+        fprintf(arquivo, "%d\n", savedEnemies);
 
         // Escreve cada inimigo ativo
         for (int i = 0; i < MAX_ENEMIES; i++)
         {
-            if (game->enemies[i].active)
+            if (game->enemies[i].active && game->enemies[i].state != DEATH && !game->enemies[i].isTutorialEnemy)
             {
                 fprintf(arquivo, "%f %f %d %d %d %f %d %d\n",
                         game->enemies[i].position.x,
@@ -1236,13 +1487,21 @@ void SaveGameThread(void *lpParam)
             }
         }
 
+        // 4. Bloco extra (versão 2): poções, pontos do SUS, arma e skins
+        fprintf(arquivo, "EXTRA %d %d %d %d %d\n",
+                game->player.healthPotions,
+                game->player.susPoints,
+                game->player.equippedWeapon,
+                game->player.skinId,
+                game->player.weaponSkinId);
+
         fclose(arquivo);
     }
 
     // Libera a memória do snapshot e dos parâmetros da thread
     free(game);
     free(data);
-    _endthread();
+    THREAD_END();
 }
 
 void SalvarJogoSlot(GameState *game, int slot)
@@ -1261,7 +1520,7 @@ void SalvarJogoSlot(GameState *game, int slot)
             data->slot = slot;
             
             // Inicia a thread de salvamento em background usando _beginthread (C runtime)
-            _beginthread(SaveGameThread, 0, data);
+            START_THREAD(SaveGameThread, data);
         } else {
             free(snapshot);
         }
@@ -1283,6 +1542,8 @@ void CarregarJogoSlot(GameState *game, int slot)
         float shakeOld = game->screenShake;
         GameScreen oldScreen = game->currentScreen;
         float tempVol = game->masterVolume;
+        int tempSkin = game->player.skinId;
+        int tempWSkin = game->player.weaponSkinId;
 
         // Limpa estados de buffs temporários
         memset(game, 0, sizeof(GameState));
@@ -1290,6 +1551,8 @@ void CarregarJogoSlot(GameState *game, int slot)
         game->currentScreen = oldScreen;
         game->screenShake = shakeOld;
         game->masterVolume = tempVol;
+        game->player.skinId = tempSkin;
+        game->player.weaponSkinId = tempWSkin;
         InitParticlePool(game);
 
         // Pular/Ler metadados iniciais
@@ -1300,59 +1563,114 @@ void CarregarJogoSlot(GameState *game, int slot)
             strncpy(game->player.name, nameLine, 15);
             game->player.name[15] = '\0';
         }
-        int dummyLevel, dummyScore, dummyWave;
+        // Consome as linhas de metadados (nível/score/onda já constam mais abaixo).
+        // O retorno é verificado apenas para silenciar avisos do compilador.
+        int dummyLevel = 0, dummyScore = 0, dummyWave = 0;
         char dummyDate[32];
-        fscanf(arquivo, "%d\n", &dummyLevel);
-        fscanf(arquivo, "%d\n", &dummyScore);
-        fscanf(arquivo, "%d\n", &dummyWave);
+        if (fscanf(arquivo, "%d\n", &dummyLevel) != 1) dummyLevel = 0;
+        if (fscanf(arquivo, "%d\n", &dummyScore) != 1) dummyScore = 0;
+        if (fscanf(arquivo, "%d\n", &dummyWave)  != 1) dummyWave = 0;
+        (void)dummyLevel; (void)dummyScore; (void)dummyWave;
         if (fgets(dummyDate, sizeof(dummyDate), arquivo) != NULL)
         {
             // Apenas consome a linha da data
         }
 
-        // 1. Dados do Jogador
-        fscanf(arquivo, "%f\n", &game->player.position.x);
-        fscanf(arquivo, "%f\n", &game->player.position.y);
-        fscanf(arquivo, "%d\n", &game->player.hp);
-        fscanf(arquivo, "%d\n", &game->player.maxHp);
-        fscanf(arquivo, "%d\n", &game->player.score);
-        fscanf(arquivo, "%d\n", &game->player.level);
-        fscanf(arquivo, "%d\n", &game->player.xp);
-        fscanf(arquivo, "%d\n", &game->player.xpNeeded);
-        fscanf(arquivo, "%d\n", &game->player.attackPower);
-        fscanf(arquivo, "%f\n", &game->player.speed);
+        // 1. Dados do Jogador (com verificação básica de leitura)
+        bool readOk = true;
+        readOk &= (fscanf(arquivo, "%f\n", &game->player.position.x) == 1);
+        readOk &= (fscanf(arquivo, "%f\n", &game->player.position.y) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.hp) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.maxHp) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.score) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.level) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.xp) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.xpNeeded) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->player.attackPower) == 1);
+        readOk &= (fscanf(arquivo, "%f\n", &game->player.speed) == 1);
 
         // 2. Estado do Mundo
-        fscanf(arquivo, "%d\n", &game->wave);
-        fscanf(arquivo, "%d\n", &game->totalEnemiesKilled);
-        fscanf(arquivo, "%f\n", &game->timeElapsed);
+        readOk &= (fscanf(arquivo, "%d\n", &game->wave) == 1);
+        readOk &= (fscanf(arquivo, "%d\n", &game->totalEnemiesKilled) == 1);
+        readOk &= (fscanf(arquivo, "%f\n", &game->timeElapsed) == 1);
 
         // 3. Contagem e Inimigos
-        fscanf(arquivo, "%d\n", &game->enemiesRemaining);
+        int enemyCount = 0;
+        readOk &= (fscanf(arquivo, "%d\n", &enemyCount) == 1);
+        if (enemyCount < 0) enemyCount = 0;
+        if (enemyCount > MAX_ENEMIES) enemyCount = MAX_ENEMIES;
+        game->enemiesRemaining = enemyCount;
 
-        for (int i = 0; i < game->enemiesRemaining; i++)
+        for (int i = 0; i < enemyCount; i++)
         {
-            if (i < MAX_ENEMIES)
+            int t = 0, isR = 0;
+            if (fscanf(arquivo, "%f %f %d %d %d %f %d %d\n",
+                    &game->enemies[i].position.x,
+                    &game->enemies[i].position.y,
+                    &game->enemies[i].hp,
+                    &game->enemies[i].maxHp,
+                    &game->enemies[i].type,
+                    &game->enemies[i].speed,
+                    &t,
+                    &isR) != 8)
             {
-                int t = 0, isR = 0;
-                fscanf(arquivo, "%f %f %d %d %d %f %d %d\n",
-                        &game->enemies[i].position.x,
-                        &game->enemies[i].position.y,
-                        &game->enemies[i].hp,
-                        &game->enemies[i].maxHp,
-                        &game->enemies[i].type,
-                        &game->enemies[i].speed,
-                        &t,
-                        &isR);
-                game->enemies[i].tier = (EnemyTier)t;
-                game->enemies[i].isRanged = (bool)isR;
-                
-                game->enemies[i].active = true;
-                game->enemies[i].state = IDLE;
-                game->enemies[i].patrolTarget = game->enemies[i].position;
-                game->enemies[i].patrolTimer = 3.0f;
+                // Linha corrompida/faltando: ajusta a contagem e para a leitura
+                game->enemiesRemaining = i;
+                break;
+            }
+            if (t < 0 || t > TIER_3_BOSS) t = TIER_1;
+            game->enemies[i].tier = (EnemyTier)t;
+            game->enemies[i].isRanged = (bool)isR;
+
+            game->enemies[i].active = true;
+            game->enemies[i].state = IDLE;
+            game->enemies[i].patrolTarget = game->enemies[i].position;
+            game->enemies[i].patrolTimer = 3.0f;
+        }
+
+        // 4. Bloco extra (versão 2) — opcional para compatibilidade com saves antigos
+        int potions = 3, sus = 0, weapon = 1, skin = game->player.skinId, wskin = game->player.weaponSkinId;
+        char extraTag[8] = { 0 };
+        if (fscanf(arquivo, "%7s", extraTag) == 1 && strcmp(extraTag, "EXTRA") == 0)
+        {
+            // Se o bloco extra estiver incompleto, os valores padrão acima são mantidos.
+            if (fscanf(arquivo, "%d %d %d %d %d", &potions, &sus, &weapon, &skin, &wskin) != 5)
+            {
+                potions = 3; sus = 0; weapon = 1;
             }
         }
+        game->player.healthPotions = (potions >= 0 && potions <= 99) ? potions : 3;
+        game->player.susPoints = (sus >= 0) ? sus : 0;
+        // BUGFIX: após carregar um save, equippedWeapon ficava 0 e o ataque não fazia nada
+        game->player.equippedWeapon = (weapon >= 1 && weapon <= 4) ? weapon : 1;
+        game->player.skinId = (skin >= 0 && skin < SKIN_COUNT) ? skin : 0;
+        game->player.weaponSkinId = (wskin >= 0 && wskin < WEAPON_SKIN_COUNT) ? wskin : 0;
+
+        // Sanitiza valores para evitar estados inválidos com arquivos corrompidos
+        if (game->player.maxHp <= 0) game->player.maxHp = 100;
+        if (game->player.hp <= 0 || game->player.hp > game->player.maxHp) game->player.hp = game->player.maxHp;
+        if (game->player.xpNeeded <= 0) game->player.xpNeeded = 100;
+        if (game->player.level <= 0) game->player.level = 1;
+        if (game->player.attackPower <= 0) game->player.attackPower = 15;
+        if (game->player.speed < 100.0f || game->player.speed > 1000.0f) game->player.speed = 280.0f;
+        if (game->wave < 1 || game->wave > 5) game->wave = 1;
+        if (game->player.position.x < 0.0f || game->player.position.x > MAP_WIDTH ||
+            game->player.position.y < 0.0f || game->player.position.y > MAP_HEIGHT)
+        {
+            game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
+        }
+        if (!readOk)
+        {
+            // Save gravemente corrompido: garante pelo menos um estado jogável
+            game->enemiesRemaining = 0;
+        }
+
+        // Atributos derivados que não vão para o arquivo
+        game->player.squashX = 1.0f;
+        game->player.squashY = 1.0f;
+        game->player.facingDir = 1;
+        for (int i = 0; i < 10; i++) game->player.trail[i] = game->player.position;
+        game->player.damageCooldown = 1.5f; // breve invulnerabilidade pós-load
 
         // Câmera re-alinhada instantaneamente
         game->camera.target = game->player.position;
@@ -1388,15 +1706,12 @@ SaveSlotMeta CarregarMetadadosSlot(int slot)
             meta.name[strcspn(meta.name, "\r\n")] = '\0';
         }
         
-        // Linha 2: Nível
-        fscanf(arquivo, "%d\n", &meta.level);
-        
-        // Linha 3: Score
-        fscanf(arquivo, "%d\n", &meta.score);
-        
-        // Linha 4: Wave
-        fscanf(arquivo, "%d\n", &meta.wave);
-        
+        // Linhas 2-4: Nível, Score e Onda (meta já é zero-inicializado).
+        // O retorno é verificado para silenciar avisos e tolerar saves parciais.
+        if (fscanf(arquivo, "%d\n", &meta.level) != 1) meta.level = 0;
+        if (fscanf(arquivo, "%d\n", &meta.score) != 1) meta.score = 0;
+        if (fscanf(arquivo, "%d\n", &meta.wave)  != 1) meta.wave = 0;
+
         // Linha 5: Data
         if (fgets(meta.date, sizeof(meta.date), arquivo) != NULL)
         {
@@ -1412,31 +1727,6 @@ SaveSlotMeta CarregarMetadadosSlot(int slot)
     return meta;
 }
 
-// ===========================================================// Estruturas e variáveis globais para a thread de loading
-static volatile bool g_isBackgroundLoading = false;
-static GameState *g_tempLoadState = NULL;
-
-typedef struct LoadThreadData {
-    GameState *tempState;
-    int slot;
-} LoadThreadData;
-
-void BackgroundLoadThread(void *arg) {
-    LoadThreadData *data = (LoadThreadData *)arg;
-    CarregarJogoSlot(data->tempState, data->slot);
-    
-    // Simula um carregamento de assets pesado
-    int waitLoops = GetRandomValue(5, 10);
-    for (int i = 0; i < waitLoops; i++) {
-        // Simula delay de carregamento de texturas pesadas / leitura de disco
-        WaitTime(0.1);  
-    }
-
-    g_isBackgroundLoading = false;
-    free(data);
-    _endthread();
-}
-
 // ============================================================================
 // TELA DE CARREGAMENTO (LOADING SCREEN)
 // ============================================================================
@@ -1447,6 +1737,10 @@ void RequestLoadingScreen(GameState *game, LoadTarget target, float duration)
     for (int i = 0; i < MAX_POWERUPS; i++) game->powerUps[i].active = false;
     InitParticlePool(game);
     for (int i = 0; i < MAX_PROJECTILES; i++) game->projectiles[i].active = false;
+    for (int i = 0; i < MAX_DAMAGE_TEXTS; i++) game->damageTexts[i].active = false;
+
+    // Efeito especial de "injeção": ativo apenas na transição tutorial -> gameplay
+    game->syringeTransitionFX = (game->inTutorial && target == LOAD_TO_GAMEPLAY);
 
     // Se estivermos saindo do tutorial, reseta inTutorial
     if (target == LOAD_TO_GAMEPLAY)
@@ -1459,28 +1753,7 @@ void RequestLoadingScreen(GameState *game, LoadTarget target, float duration)
     game->loadingTimer = 0.0f;
     game->loadingDuration = duration;
     game->loadingTip = GetRandomValue(0, 4);
-
-    if (game->loadSlot > 0) {
-        g_isBackgroundLoading = true;
-        g_tempLoadState = (GameState *)malloc(sizeof(GameState));
-        if (g_tempLoadState) {
-            memcpy(g_tempLoadState, game, sizeof(GameState));
-
-            LoadThreadData *data = (LoadThreadData *)malloc(sizeof(LoadThreadData));
-            if (data) {
-                data->tempState = g_tempLoadState;
-                data->slot = game->loadSlot;
-                _beginthread(BackgroundLoadThread, 0, data);
-            } else {
-                free(g_tempLoadState);
-                g_isBackgroundLoading = false;
-            }
-        } else {
-            g_isBackgroundLoading = false;
-        }
-    } else {
-        g_isBackgroundLoading = false;
-    }
+    game->screenShake = 0.0f;
 }
 
 void UpdateTelaLoading(GameState *game, float delta)
@@ -1508,17 +1781,20 @@ void UpdateTelaLoading(GameState *game, float delta)
         }
     }
 
-    if (game->loadingTimer >= game->loadingDuration && !g_isBackgroundLoading)
+    if (game->loadingTimer >= game->loadingDuration)
     {
-        // Se houver slot de save especificado para carregar, carrega-o agora
+        // O efeito de injeção termina LIMPO: nada de tremor residual
+        game->syringeTransitionFX = false;
+        game->screenShake = 0.0f;
+
+        // Se houver slot de save especificado para carregar, carrega-o agora.
+        // O arquivo é texto pequeno: carregamento síncrono é instantâneo e
+        // elimina a antiga thread com WaitTime (causa de travamentos/races).
         if (game->loadSlot > 0)
         {
+            int slot = game->loadSlot;
             game->loadSlot = 0; // reseta
-            if (g_tempLoadState) {
-                memcpy(game, g_tempLoadState, sizeof(GameState));
-                free(g_tempLoadState);
-                g_tempLoadState = NULL;
-            }
+            CarregarJogoSlot(game, slot);
             game->currentScreen = SCREEN_GAMEPLAY;
             game->saveLoaded = true;
             strcpy(game->notificationMsg, "GAME LOADED!");
@@ -1536,12 +1812,38 @@ void UpdateTelaLoading(GameState *game, float delta)
             case LOAD_TO_GAMEPLAY:
                 game->inTutorial = false;
                 game->currentScreen = SCREEN_GAMEPLAY;
-                // Posiciona jogador no centro do organismo
+
+                // ------------------------------------------------------------
+                // BUGFIX: estado do jogador totalmente saneado ao entrar no
+                // organismo (antes o veneno/dano do tutorial vazava e matava
+                // o jogador instantaneamente).
+                // ------------------------------------------------------------
+                game->player.hp = game->player.maxHp;     // HP cheio
+                game->player.poisonTimer = 0.0f;          // sem veneno residual
+                game->player.slowTimer = 0.0f;
+                game->player.speedTimer = 0.0f;
+                game->player.shieldTimer = 0.0f;
+                game->player.attackBoostTimer = 0.0f;
+                game->player.attackCooldown = 0.0f;       // pode atacar de imediato
+                game->player.damageCooldown = 2.0f;       // 2s de invulnerabilidade inicial
+                game->poisonTickAccum = 0.0f;
+                game->player.squashX = 1.0f;
+                game->player.squashY = 1.0f;
+                if (game->player.equippedWeapon < 1 || game->player.equippedWeapon > 4)
+                    game->player.equippedWeapon = 1;
+
+                // Posiciona jogador no centro do organismo (posição segura;
+                // a onda spawna inimigos a pelo menos 450px de distância)
                 game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
-                // Reinicia a câmera
+                for (int i = 0; i < 10; i++) game->player.trail[i] = game->player.position;
+
+                // Reinicia a câmera (sem tremor herdado da cutscene)
                 game->camera.target = game->player.position;
                 game->camera.offset = (Vector2){ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
                 game->camera.zoom = 1.0f;
+                game->camera.rotation = 0.0f;
+                game->screenShake = 0.0f;
+
                 // Inicia wave
                 StartNextWave(game);
                 break;
@@ -1573,46 +1875,45 @@ void GetTutorialDialogText(int step, int page, const char **line1, const char **
     {
         if (page == 0)
         {
-            *line1 = "Voce e um Anticorpo convocado para salvar o organismo de um humano infectado no DF.";
-            *line2 = "Sua missao e combater patogenos e ensinar a populacao a prevenir doencas.";
-            *line3 = "[Aperte 'Q' ou 'ESPACO' para continuar...]";
+            *line1 = "Voce e um Anticorpo convocado para salvar um paciente infectado no DF.";
+            *line2 = "Sua missao: eliminar patogenos e proteger o organismo.";
+            *line3 = "[Q ou ESPACO para continuar]";
         }
         else
         {
-            *line1 = "Voce foi gerado dentro de uma Seringa de Vacina, pronto para ser injetado.";
-            *line2 = "Primeiro, vamos calibrar os biossensores e absorver doses iniciais de vacina.";
-            *line3 = "Use WASD/Setas para se mover e colete as 3 ampolas de vacina no cenario.";
+            *line1 = "Voce esta dentro de uma Seringa de Vacina, pronto para ser injetado.";
+            *line2 = "Mova-se com WASD ou as SETAS.";
+            *line3 = "Avance para a ESQUERDA, em direcao a agulha, para calibrar os sensores.";
         }
     }
     else if (step == 1)
     {
         if (page == 0)
         {
-            *line1 = "Alerta! Uma bacteria enfraquecida (vacina atenuada) foi inserida para treino!";
+            *line1 = "Alerta! Uma bacteria de treino (vacina atenuada) foi inserida.";
             *line2 = "Seu corpo precisa aprender a reconhecer e destruir essa ameaca.";
-            *line3 = "[Aperte 'Q' ou 'ESPACO' para continuar...]";
+            *line3 = "[Q ou ESPACO para continuar]";
         }
         else
         {
-            *line1 = "Aproxime-se e use o BOTAO ESQUERDO DO MOUSE ou ESPACO para atacar.";
-            *line2 = "Cuidado: ela persegue voce e dispara toxinas acidas. Esquive-se!";
-            *line3 = "Ao ser eliminada, ela deixara uma cura. Colete-a para abrir o bocal!";
+            *line1 = "ATAQUE com o BOTAO ESQUERDO DO MOUSE ou ESPACO (o golpe acerta ao redor).";
+            *line2 = "Cuidado: ela dispara toxinas. Esquive-se andando!";
+            *line3 = "Ao derrota-la, colete a cura que ela deixa cair.";
         }
     }
     else if (step == 2)
     {
         if (page == 0)
         {
-            *line1 = "Excelente! Seu sistema imunologico registrou a assinatura desse patogeno.";
-            *line2 = "Agora voce esta pronto para o combate real no corpo do paciente.";
-            *line3 = "[Aperte 'Q' ou 'ESPACO' para continuar...]";
+            *line1 = "Excelente! Assinatura do patogeno registrada com sucesso.";
+            *line2 = "No organismo: troque de arma com 1-4 e use pocao de vida com E.";
+            *line3 = "[Q ou ESPACO para continuar]";
         }
         else
         {
-            *line1 = "Va ate a ponta inferior da seringa (o bocal da agulha que esta piscando em verde).";
-            *line2 = "Ao entrar no bocal, voce sera injetado na corrente sanguinea!";
-            *line3 = "Siga em frente e salve o Distrito Federal!";
+            *line1 = "Siga ate o BOCAL DA AGULHA, a esquerda (piscando em verde).";
+            *line2 = "Ao entrar, voce sera injetado na corrente sanguinea do paciente.";
+            *line3 = "Boa sorte, Anticorpo. O Distrito Federal conta com voce!";
         }
     }
 }
-

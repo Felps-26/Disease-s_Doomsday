@@ -8,6 +8,10 @@
 // Desenha um botão UIButton com o estilo Premium da interface
 void DrawButton(UIButton botao, Font font, bool enabled);
 
+// Verifica (com cache de ~1s) se existe algum arquivo de save nos 3 slots.
+// Evita abrir arquivos do disco a cada frame no menu.
+bool AnySaveExistsCached(void);
+
 void DrawSciFiBox(Rectangle r, Color col);
 
 // Funções de desenho das respectivas telas

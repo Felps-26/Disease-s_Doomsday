@@ -34,6 +34,11 @@
 #define MAX_POWERUPS 20
 #define MAX_PARTICLES 250
 #define MAX_PROJECTILES 100
+#define MAX_DAMAGE_TEXTS 32
+
+// Skins disponíveis (player e armas)
+#define SKIN_COUNT 3
+#define WEAPON_SKIN_COUNT 3
 
 // ============================================================================
 // ENUMS
@@ -112,6 +117,17 @@ typedef struct Particle
     bool active;
 } Particle;
 
+// Número de dano flutuante (feedback de combate)
+typedef struct DamageText
+{
+    Vector2 position;
+    int value;
+    float timer;    // tempo restante de vida
+    float maxTime;  // duração total
+    Color color;
+    bool active;
+} DamageText;
+
 
 
 // ============================================================================
@@ -172,6 +188,12 @@ typedef struct GameState
     Vector2 slashAnimPos;
     float slashAnimRadius;
 
+    // Números de dano flutuantes
+    DamageText damageTexts[MAX_DAMAGE_TEXTS];
+
+    // Acumulador fracionário do dano de veneno no jogador (HP é int)
+    float poisonTickAccum;
+
     // Metadados dos slots carregados na tela de seleção
     SaveSlotMeta slotsMeta[3];
     
@@ -194,6 +216,7 @@ typedef struct GameState
     int         loadingTip;      // Índice da dica educativa atual
     int         loadSlot;        // Slot de save para carregar após o loading (0 = não carrega)
     bool        shouldClose;     // Flag para fechar o jogo
+    bool        syringeTransitionFX; // Efeito de compressão/tremor (tutorial -> gameplay)
 } GameState;
 
 #endif // GAME_H

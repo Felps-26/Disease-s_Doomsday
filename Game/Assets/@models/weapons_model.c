@@ -4,18 +4,18 @@
 // ============================================================================
 // MODELO: ESPADA SERINGA
 // ============================================================================
-void DrawSyringeSword(Vector2 handPos, float size, float rotationDeg)
+void DrawSyringeSword(Vector2 handPos, float size, float rotationDeg, Color liquidColor)
 {
     rlPushMatrix();
     rlTranslatef(handPos.x, handPos.y, 0.0f);
     rlRotatef(rotationDeg, 0.0f, 0.0f, 1.0f);
-    
+
     float s = size; // scale factor
-    
+
     Color metal = (Color){ 200, 205, 215, 255 };
     Color metalDark = (Color){ 140, 150, 160, 255 };
     Color glass = Fade((Color){ 150, 220, 255, 255 }, 0.4f);
-    Color liquid = (Color){ 50, 220, 50, 255 };
+    Color liquid = liquidColor; // Skin da arma define o líquido da lâmina
     Color handle = (Color){ 180, 80, 20, 255 };
     Color gold = (Color){ 230, 180, 40, 255 };
     

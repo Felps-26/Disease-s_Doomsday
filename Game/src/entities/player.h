@@ -39,8 +39,12 @@ typedef struct Player
     
     // Armas
     int equippedWeapon; // 1 = Lâmina, 2 = Fuzil, 3 = Granada, 4 = Vacina BFG
-    
+
     int healthPotions; // Poções de vida
+
+    // Skins (visuais, sem efeito de balanceamento)
+    int skinId;       // 0 = Padrão, 1 = Médica, 2 = Infectada
+    int weaponSkinId; // 0 = Padrão, 1 = Plasma, 2 = Tóxica
 
 } Player;
 

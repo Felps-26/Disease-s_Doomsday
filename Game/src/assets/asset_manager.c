@@ -7,8 +7,14 @@ void LoadGameAssets(void)
 {
     InitAudioDevice();
 
-    // Carrega Fonte
-    g_assets.font = LoadFontEx("Assets/font.ttf", 96, 0, 0);
+    // Carrega Fonte com suporte a acentuação (PT-BR)
+    // ASCII básico (32..126) + Latin-1 com acentos (À..ÿ, 192..255)
+    int codepoints[95 + 64];
+    int cpCount = 0;
+    for (int c = 32; c <= 126; c++) codepoints[cpCount++] = c;
+    for (int c = 192; c <= 255; c++) codepoints[cpCount++] = c;
+
+    g_assets.font = LoadFontEx("Assets/font.ttf", 96, codepoints, cpCount);
     if (g_assets.font.texture.id == 0)
     {
         g_assets.font = GetFontDefault();

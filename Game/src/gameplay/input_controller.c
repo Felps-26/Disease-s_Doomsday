@@ -93,20 +93,8 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
         }
     }
 
-    // Determina se existem arquivos de save
-    bool anySaveExists = false;
-    for (int i = 1; i <= 3; i++)
-    {
-        char path[64];
-        sprintf(path, "Saves/save_slot_%d.txt", i);
-        FILE *fTest = fopen(path, "r");
-        if (fTest != NULL)
-        {
-            fclose(fTest);
-            anySaveExists = true;
-            break;
-        }
-    }
+    // Determina se existem arquivos de save (com cache de ~1s)
+    bool anySaveExists = AnySaveExistsCached();
 
     // Evita hover e clique acidentais nos botões do menu durante a digitação
     if (!game->nameInputActive)
@@ -142,20 +130,6 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
     else if (menuButtons[1].clicked) // CARREGAR JOGO
     {
         // Verifica se algum save existe antes de abrir a tela de slots
-        bool anySaveExists = false;
-        for (int i = 1; i <= 3; i++)
-        {
-            char path[64];
-            sprintf(path, "Saves/save_slot_%d.txt", i);
-            FILE *fTest = fopen(path, "r");
-            if (fTest != NULL)
-            {
-                fclose(fTest);
-                anySaveExists = true;
-                break;
-            }
-        }
-        
         if (anySaveExists)
         {
             // Carrega os metadados dos slots para a tela de seleção
@@ -238,6 +212,7 @@ void UpdateButtonsGameOver(GameState *game, Vector2 mouse)
     if (gameOverButtons[0].clicked) // TENTAR NOVAMENTE
     {
         InitGame(game);
+        game->inTutorial = false; // retry pula o tutorial (sem efeito de injeção)
         RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 2.0f);
     }
     else if (gameOverButtons[1].clicked) // MENU
@@ -253,7 +228,7 @@ void UpdateButtonsVitoria(GameState *game, Vector2 mouse)
     {
         Vector2 pPos = { (float)GetRandomValue(0, SCREEN_WIDTH), SCREEN_HEIGHT + 10.0f };
         Vector2 pVel = { (float)GetRandomValue(-20, 20), (float)GetRandomValue(-80, -35) };
-        SpawnParticle(game, pPos, pVel, GOLD, (float)GetRandomValue(2, 5), (float)GetRandomValue(2.5f, 5));
+        SpawnParticle(game, pPos, pVel, GOLD, (float)GetRandomValue(2, 5), (float)GetRandomValue(3, 5));
     }
 
     // Atualiza lógica das partículas festivas
@@ -276,6 +251,7 @@ void UpdateButtonsVitoria(GameState *game, Vector2 mouse)
     if (victoryButtons[0].clicked) // JOGAR DE NOVO
     {
         InitGame(game);
+        game->inTutorial = false; // nova jornada direto na gameplay
         RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 2.0f);
     }
     else if (victoryButtons[1].clicked) // MENU
@@ -389,17 +365,44 @@ void UpdateButtonsSettings(GameState *game, Vector2 mouse, GameScreen backScreen
     UpdateBtnState(&settingsBtnVoltar, mouse);
     if (settingsBtnVoltar.clicked)
     {
+        SavePlayerConfig(game); // persiste volume + skins ao sair
         game->currentScreen = backScreen;
         return;
     }
-    
-    Rectangle sliderBounds = { 600, 230, 300, 60 };
+
+    Rectangle sliderBounds = { 600, 220, 300, 40 };
     if (CheckCollisionPointRec(mouse, sliderBounds) && IsMouseButtonDown(MOUSE_LEFT_BUTTON))
     {
         float pct = (mouse.x - 600.0f) / 300.0f;
         if (pct < 0.0f) pct = 0.0f;
         if (pct > 1.0f) pct = 1.0f;
         game->masterVolume = pct;
+    }
+
+    // Seletores de skin (mesmas posições do DrawTelaSettings)
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+    {
+        for (int row = 0; row < 2; row++)
+        {
+            float y = 355.0f + row * 70.0f;
+            Rectangle btnPrev = { 600, y, 40, 40 };
+            Rectangle btnNext = { 860, y, 40, 40 };
+
+            int dirClick = 0;
+            if (CheckCollisionPointRec(mouse, btnPrev)) dirClick = -1;
+            else if (CheckCollisionPointRec(mouse, btnNext)) dirClick = 1;
+            if (dirClick == 0) continue;
+
+            if (row == 0)
+            {
+                game->player.skinId = (game->player.skinId + dirClick + SKIN_COUNT) % SKIN_COUNT;
+            }
+            else
+            {
+                game->player.weaponSkinId = (game->player.weaponSkinId + dirClick + WEAPON_SKIN_COUNT) % WEAPON_SKIN_COUNT;
+            }
+            SavePlayerConfig(game);
+        }
     }
 }
 

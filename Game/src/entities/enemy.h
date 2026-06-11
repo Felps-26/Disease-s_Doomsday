@@ -48,6 +48,7 @@ typedef struct Enemy
     
     // Status effects
     float poisonTimer;
+    float poisonAccum; // Acumulador fracionário do dano de veneno (hp é int)
     float slowTimer;
 } Enemy;
 

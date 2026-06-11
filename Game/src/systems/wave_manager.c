@@ -2,33 +2,79 @@
 #include "../../include/gameplay.h"
 #include "raymath.h"
 
+// Posiciona um ponto de spawn longe do jogador (distância mínima de 450 px)
+static Vector2 PickSpawnFarFromPlayer(GameState *game)
+{
+    Vector2 spawnPos;
+    int tries = 0;
+    do
+    {
+        spawnPos.x = (float)GetRandomValue(100, MAP_WIDTH - 100);
+        spawnPos.y = (float)GetRandomValue(100, MAP_HEIGHT - 100);
+        tries++;
+    } while (Vector2DistanceSqr(game->player.position, spawnPos) < 450.0f * 450.0f && tries < 32);
+    return spawnPos;
+}
+
+// Configura o chefe final (Superbactéria KPC) num índice específico
+static void ConfigureBoss(GameState *game, int idx)
+{
+    Enemy *b = &game->enemies[idx];
+    b->position = PickSpawnFarFromPlayer(game);
+    b->active = true;
+    b->type = 2;            // KPC / Superbactéria
+    b->tier = TIER_3_BOSS;
+    b->maxHp = 1400 + game->wave * 100;
+    b->hp = b->maxHp;
+    b->speed = 70.0f;
+    b->isRanged = true;
+    b->state = IDLE;
+    b->patrolTarget = b->position;
+    b->patrolTimer = 3.0f;
+    b->cooldownTimer = 1.5f;
+    b->chargeTimer = 0.0f;
+    b->poisonTimer = 0.0f;
+    b->poisonAccum = 0.0f;
+    b->slowTimer = 0.0f;
+    b->isTutorialEnemy = false;
+}
+
 void StartNextWave(GameState *game)
 {
+    // ------------------------------------------------------------------
+    // ONDA FINAL (5): Confronto garantido com o Chefe (Superbactéria KPC)
+    // Antes o chefe só aparecia por acaso (chance < 10%), tornando o clímax
+    // imprevisível. Agora a última onda é sempre uma batalha de chefe com um
+    // grupo curado de lacaios — desafiador, porém justo.
+    // ------------------------------------------------------------------
+    bool bossWave = (game->wave >= 5);
+
     // Aumenta quantidade a cada onda
-    int numEnemies = 8 + game->wave * 4;
+    int numEnemies = bossWave ? 13 : (8 + game->wave * 4); // 1 chefe + 12 lacaios na final
     if (numEnemies > MAX_ENEMIES) numEnemies = MAX_ENEMIES;
 
     game->enemiesRemaining = numEnemies;
 
-    // Spawna inimigos longe do jogador (distância mínima de 450 px)
-    for (int i = 0; i < numEnemies; i++)
+    int startIdx = 0;
+    if (bossWave)
     {
-        Vector2 spawnPos;
-        float distanceSqr = 0.0f;
-        
-        do
-        {
-            spawnPos.x = (float)GetRandomValue(100, MAP_WIDTH - 100);
-            spawnPos.y = (float)GetRandomValue(100, MAP_HEIGHT - 100);
-            distanceSqr = Vector2DistanceSqr(game->player.position, spawnPos);
-        } while (distanceSqr < 450.0f * 450.0f);
+        ConfigureBoss(game, 0); // O chefe é sempre o inimigo 0
+        startIdx = 1;
+    }
+
+    // Spawna os lacaios/inimigos comuns longe do jogador
+    for (int i = startIdx; i < numEnemies; i++)
+    {
+        Vector2 spawnPos = PickSpawnFarFromPlayer(game);
 
         game->enemies[i].position = spawnPos;
         game->enemies[i].active = true;
+        game->enemies[i].poisonAccum = 0.0f;
 
-        // Determina tipo e dificuldade do inimigo
-        int randVal = GetRandomValue(0, 100);
-        
+        // Determina tipo e dificuldade do inimigo.
+        // Na onda do chefe, os lacaios pulam o tipo KPC pesado (já há o chefe).
+        int randVal = GetRandomValue(0, bossWave ? 89 : 100);
+
         if (randVal < 40 || game->wave == 1)
         {
             // Tipo 0: SARS-CoV-2 (Equilibrado, Melee)
@@ -71,15 +117,12 @@ void StartNextWave(GameState *game)
         }
         else
         {
-            // Tipo 2: KPC (Superbactéria, Elite/Boss, Lento e Tank)
+            // Tipo 2: KPC (Superbactéria, Elite, Lento e Tank).
+            // O chefe propriamente dito é criado por ConfigureBoss(); aqui é
+            // apenas uma versão elite que aparece a partir da onda 3.
             game->enemies[i].type = 2;
-            if (game->wave >= 5 && i == 0) {
-                game->enemies[i].tier = TIER_3_BOSS;
-                game->enemies[i].maxHp = 1200 + game->wave * 100;
-            } else {
-                game->enemies[i].tier = TIER_3;
-                game->enemies[i].maxHp = 200 + game->wave * 40;
-            }
+            game->enemies[i].tier = TIER_3;
+            game->enemies[i].maxHp = 200 + game->wave * 40;
             game->enemies[i].hp = game->enemies[i].maxHp;
             game->enemies[i].speed = 60.0f + GetRandomValue(-5, 5);
             game->enemies[i].isRanged = true;

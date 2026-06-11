@@ -42,6 +42,7 @@ int main(void)
     memset(&game, 0, sizeof(GameState));
     game.currentScreen = SCREEN_MENU;
     game.masterVolume = 1.0f; // Default volume
+    LoadPlayerConfig(&game);  // Restaura volume e skins salvos (Saves/config.txt)
     SetMasterVolume(game.masterVolume);
     
     GameScreen previousScreen = SCREEN_MENU;

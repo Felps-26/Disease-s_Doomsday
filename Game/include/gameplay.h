@@ -54,4 +54,22 @@ void UpdateTelaLoading(GameState *game, float delta);
 // Obtém as linhas de texto para um determinado passo e página do diálogo do tutorial
 void GetTutorialDialogText(int step, int page, const char **line1, const char **line2, const char **line3);
 
+// ---- Feedback de combate ----
+// Cria um número de dano flutuante na posição informada
+void SpawnDamageText(GameState *game, Vector2 pos, int value, Color color);
+// Atualiza (sobe/some) os números de dano ativos
+void UpdateDamageTexts(GameState *game, float delta);
+
+// ---- Skins ----
+// Cores da skin de arma atual (primária = projétil/lâmina, secundária = brilho/trail)
+Color WeaponSkinPrimary(int weaponSkinId);
+Color WeaponSkinSecondary(int weaponSkinId);
+// Nomes legíveis para a UI
+const char *PlayerSkinName(int skinId);
+const char *WeaponSkinName(int weaponSkinId);
+
+// ---- Configuração persistente (volume + skins) ----
+void LoadPlayerConfig(GameState *game);
+void SavePlayerConfig(GameState *game);
+
 #endif // GAMEPLAY_H

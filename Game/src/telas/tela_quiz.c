@@ -29,10 +29,43 @@ static QuizQuestion quizDB[] = {
         "Como a Vigilancia Ambiental atua no controle de zoonoses?",
         {"Vacinando criancas nas escolas", "Multando pedestres", "Monitorando vetores e animais transmissores", "Limpando as ruas do centro"},
         2
+    },
+    {
+        "Qual a melhor forma de evitar criadouros do Aedes aegypti em casa?",
+        {"Manter agua parada coberta ou eliminada", "Borrifar perfume nos vasos", "Deixar pratos de plantas cheios", "Acumular garrafas no quintal"},
+        0
+    },
+    {
+        "O que e o SUS (Sistema Unico de Saude)?",
+        {"Um plano de saude privado", "Saude publica, universal e gratuita", "Um hospital so de Brasilia", "Uma farmacia popular"},
+        1
+    },
+    {
+        "Qual sintoma classico exige atencao na Dengue grave?",
+        {"Espirros frequentes", "Sangramentos e dor abdominal intensa", "Unhas fracas", "Soluco"},
+        1
+    },
+    {
+        "Por que NAO se deve usar antibiotico sem prescricao medica?",
+        {"Tem gosto ruim", "Favorece superbacterias resistentes (como a KPC)", "E muito caro", "Mancha os dentes"},
+        1
+    },
+    {
+        "Qual atitude ajuda a frear uma epidemia respiratoria?",
+        {"Compartilhar copos", "Lavar as maos e cobrir a boca ao tossir", "Ficar em locais lotados", "Evitar a vacina"},
+        1
+    },
+    {
+        "A vacinacao em massa protege a comunidade por meio de qual efeito?",
+        {"Efeito estufa", "Imunidade de rebanho (coletiva)", "Efeito domino", "Efeito placebo"},
+        1
     }
 };
 
+#define QUIZ_COUNT ((int)(sizeof(quizDB) / sizeof(quizDB[0])))
+
 static int currentQuestionIdx = 0;
+static int lastQuestionIdx = -1; // Evita repetir a mesma pergunta em ondas seguidas
 static bool questionAnswered = false;
 static int selectedOption = -1;
 static bool quizInitialized = false;
@@ -42,7 +75,11 @@ static UIButton quizOptionsBtn[4];
 void DrawTelaQuiz(GameState *game, Font font)
 {
     if (!quizInitialized) {
-        currentQuestionIdx = GetRandomValue(0, 3);
+        // Sorteia uma pergunta diferente da anterior (sem repetir na onda seguinte)
+        do {
+            currentQuestionIdx = GetRandomValue(0, QUIZ_COUNT - 1);
+        } while (QUIZ_COUNT > 1 && currentQuestionIdx == lastQuestionIdx);
+        lastQuestionIdx = currentQuestionIdx;
         questionAnswered = false;
         selectedOption = -1;
         

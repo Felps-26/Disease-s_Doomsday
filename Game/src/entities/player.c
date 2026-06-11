@@ -10,9 +10,17 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
 {
     if (game->player.attackCooldown > 0.0f) return;
 
+    // BUGFIX: garante arma válida (após load de save antigo, equippedWeapon
+    // podia ficar 0 e o ataque silenciosamente não fazia nada)
+    if (game->player.equippedWeapon < 1 || game->player.equippedWeapon > 4)
+        game->player.equippedWeapon = 1;
+
     int wpn = game->player.equippedWeapon;
     int danoBase = game->player.attackPower;
     if (game->player.attackBoostTimer > 0.0f) danoBase *= 2; // Buff de ataque dobra dano
+
+    Color skinPrim = WeaponSkinPrimary(game->player.weaponSkinId);
+    Color skinSec  = WeaponSkinSecondary(game->player.weaponSkinId);
 
     if (wpn == 1) {
         // Define cooldown base
@@ -24,17 +32,17 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
         game->slashAnimPos = game->player.position;
         game->slashAnimRadius = 140.0f;
 
-        // Efeitos visuais: explosão de partículas de slash (brancas e azul claro)
-        SpawnParticleExplosion(game, game->player.position, LIGHTGRAY, 12, 100.0f, 250.0f, 4.0f, 0.4f);
-        SpawnParticleExplosion(game, game->player.position, SKYBLUE, 8, 150.0f, 300.0f, 3.5f, 0.35f);
+        // Efeitos visuais: explosão de partículas de slash (cores da skin da arma)
+        SpawnParticleExplosion(game, game->player.position, skinSec, 12, 100.0f, 250.0f, 4.0f, 0.4f);
+        SpawnParticleExplosion(game, game->player.position, skinPrim, 8, 150.0f, 300.0f, 3.5f, 0.35f);
 
         // Câmera dá uma leve chacoalhada no ataque
         game->screenShake = 0.25f;
 
-        Vector2 toMouse = Vector2Subtract(worldMousePos, game->player.position);
-        float attackAngle = atan2f(toMouse.y, toMouse.x);
-
-        // Verifica colisão com inimigos na área do ataque usando Spatial Grid
+        // BUGFIX: o golpe agora acerta em 360 graus, exatamente como o efeito
+        // visual circular sugere. Antes era um cone de +-90 graus na direção
+        // do mouse — atacando com ESPAÇO com o mouse "do lado errado", o
+        // jogador errava a bactéria mesmo colado nela.
         int collIndices[MAX_ENEMIES];
         int collCount = GetEnemiesInRadius(game, game->player.position, game->slashAnimRadius, collIndices);
 
@@ -43,23 +51,17 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
             int i = collIndices[k];
             if (!game->enemies[i].active || game->enemies[i].state == DEATH) continue;
 
-            // Cone de ataque de 90 graus (PI/2 = +-45 de cada lado = 90 total)
-            Vector2 toEnemy = Vector2Subtract(game->enemies[i].position, game->player.position);
-            float enemyAngle = atan2f(toEnemy.y, toEnemy.x);
-            float angleDiff = fabs(enemyAngle - attackAngle);
-            if (angleDiff > PI) angleDiff = 2.0f * PI - angleDiff;
-            
-            if (angleDiff > PI / 2.0f) continue; // +-90 graus
-
             // Acertou! Causa dano
-            game->enemies[i].hp -= (15 + danoBase);
+            int danoTotal = 15 + danoBase;
+            game->enemies[i].hp -= danoTotal;
             PlaySound(g_assets.sfxEnemyHurt);
+            SpawnDamageText(game, game->enemies[i].position, danoTotal, skinSec);
 
             // Empurrão (Knockback) na direção oposta ao jogador
             Vector2 knockbackDir = Vector2Subtract(game->enemies[i].position, game->player.position);
             if (knockbackDir.x == 0.0f && knockbackDir.y == 0.0f) knockbackDir = (Vector2){ 1.0f, 0.0f };
             knockbackDir = Vector2Normalize(knockbackDir);
-            
+
             // Empurra o inimigo a uma distância segura
             game->enemies[i].position = Vector2Add(game->enemies[i].position, Vector2Scale(knockbackDir, 55.0f));
 
@@ -70,6 +72,7 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
             // Se o inimigo morreu
             if (game->enemies[i].hp <= 0)
             {
+                game->enemies[i].hp = 0;
                 game->enemies[i].state = DEATH;
                 game->enemies[i].cooldownTimer = 0.5f; // Duração da animação de morte
 
@@ -85,7 +88,7 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                 }
 
                 // --- Lógica normal de jogo (fora do tutorial) ---
-                game->enemiesRemaining--;
+                if (game->enemiesRemaining > 0) game->enemiesRemaining--;
                 game->totalEnemiesKilled++;
 
                 // Aumenta score
@@ -100,20 +103,8 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                     SpawnPowerUpAt(game, game->enemies[i].position, -1);
                 }
 
-                // Verifica se eliminou todos os inimigos da onda
-                if (game->enemiesRemaining <= 0)
-                {
-                    game->wave++;
-                    if (game->wave > 5)
-                    {
-                        RequestLoadingScreen(game, LOAD_TO_VICTORY, 2.5f);
-                    }
-                    else
-                    {
-                        game->currentScreen = SCREEN_QUIZ;
-                    }
-                    return;
-                }
+                // A conclusão da onda é verificada de forma centralizada
+                // no fim do UpdateGameplay (vale para todas as armas).
             }
             else
             {

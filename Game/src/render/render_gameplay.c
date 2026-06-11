@@ -130,7 +130,7 @@ void DrawHUD(GameState *game, Font font)
     Rectangle waveBox = { 490, 20, 300, 60 };
     DrawSciFiBox(waveBox, THEME_COLOR_MAIN);
 
-    const char *waveTxt = TextFormat("ONDA DE INFEÇÃO: %d / 5", game->wave);
+    const char *waveTxt = TextFormat("ONDA DE INFECÇÃO: %d / 5", game->wave);
     Vector2 waveTxtSize = MeasureTextEx(font, waveTxt, 16.0f, 1.0f);
     DrawTextEx(font, waveTxt, (Vector2){ 640.0f - waveTxtSize.x / 2.0f, 28.0f }, 16.0f, 1.0f, GOLD);
 
@@ -142,6 +142,36 @@ void DrawHUD(GameState *game, Font font)
     DrawSciFiBox((Rectangle){ 900, 20, 150, 55 }, THEME_COLOR_MAIN);
     DrawTextEx(font, "SCORE", (Vector2){ 915, 27 }, 12.0f, 1.0f, GRAY);
     DrawTextEx(font, TextFormat("%06d", game->player.score), (Vector2){ 915, 42 }, 20.0f, 1.0f, YELLOW);
+
+    // C.2. BARRA DE VIDA DO CHEFE (fixa no topo, visível mesmo com o chefe fora da tela)
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (game->enemies[i].active && game->enemies[i].tier == TIER_3_BOSS && game->enemies[i].state != DEATH)
+        {
+            float bossPct = (float)game->enemies[i].hp / game->enemies[i].maxHp;
+            if (bossPct < 0.0f) bossPct = 0.0f;
+
+            Rectangle barBg = { 340, 92, 600, 26 };
+            DrawRectangleRounded(barBg, 0.4f, 6, Fade((Color){ 20, 0, 6, 255 }, 0.85f));
+            Color bossCol = (bossPct > 0.66f) ? (Color){ 200, 40, 60, 255 }
+                          : (bossPct > 0.33f) ? (Color){ 230, 60, 200, 255 }
+                          : (Color){ 255, 90, 40, 255 };
+            if (bossPct > 0.0f)
+            {
+                Rectangle barFill = { barBg.x, barBg.y, barBg.width * bossPct, barBg.height };
+                DrawRectangleRounded(barFill, 0.4f, 6, bossCol);
+            }
+            DrawRectangleRoundedLines(barBg, 0.4f, 6, (Color){ 255, 80, 90, 255 });
+
+            const char *bossName = "SUPERBACTERIA KPC — RESISTENTE";
+            Vector2 nSz = MeasureTextEx(font, bossName, 16.0f, 1.0f);
+            DrawTextEx(font, bossName, (Vector2){ 640.0f - nSz.x / 2.0f, 70.0f }, 16.0f, 1.0f, (Color){ 255, 120, 130, 255 });
+            const char *hpTxt = TextFormat("%d / %d", game->enemies[i].hp, game->enemies[i].maxHp);
+            Vector2 hSz = MeasureTextEx(font, hpTxt, 13.0f, 1.0f);
+            DrawTextEx(font, hpTxt, (Vector2){ 640.0f - hSz.x / 2.0f, 97.0f }, 13.0f, 1.0f, WHITE);
+            break;
+        }
+    }
 
     // D. INDICADORES VISUAIS DE BUFFS ATIVOS
     int buffCount = 0;
@@ -182,16 +212,27 @@ void DrawHUD(GameState *game, Font font)
         buffCount++;
     }
 
-    // HUD DA ARMA ATUAL
+    // HUD DA ARMA ATUAL (com barra de cooldown)
     const char *weaponNames[4] = { "1. Lâmina Imunológica", "2. Fuzil Célula-T", "3. Granada Macrófago", "4. Vacina BFG" };
+    const float weaponCooldowns[4] = { 0.22f, 0.15f, 1.5f, 5.0f };
     int wpnIdx = game->player.equippedWeapon - 1;
     if (wpnIdx >= 0 && wpnIdx <= 3) {
-        Rectangle rWpn = { 20, 130.0f + (float)buffCount * 32.0f, 220, 26 };
+        Rectangle rWpn = { 20, 130.0f + (float)buffCount * 32.0f, 220, 30 };
+        Color wpnCol = WeaponSkinPrimary(game->player.weaponSkinId);
         DrawRectangleRec(rWpn, Fade((Color){ 10, 8, 22, 255 }, 0.75f));
-        DrawRectangle((int)rWpn.x, (int)rWpn.y, 4, (int)rWpn.height, WHITE);
-        DrawRectangleLinesEx(rWpn, 1.0f, Fade(WHITE, 0.25f));
-        
-        DrawTextEx(font, weaponNames[wpnIdx], (Vector2){ rWpn.x + 12, rWpn.y + 7 }, 12.0f, 1.0f, WHITE);
+        DrawRectangle((int)rWpn.x, (int)rWpn.y, 4, (int)rWpn.height, wpnCol);
+        DrawRectangleLinesEx(rWpn, 1.0f, Fade(wpnCol, 0.25f));
+
+        DrawTextEx(font, weaponNames[wpnIdx], (Vector2){ rWpn.x + 12, rWpn.y + 4 }, 12.0f, 1.0f, WHITE);
+
+        // Barra de cooldown: cheia = pronto para atacar
+        float cdMax = weaponCooldowns[wpnIdx];
+        float cdPct = 1.0f - (game->player.attackCooldown / cdMax);
+        if (cdPct < 0.0f) cdPct = 0.0f;
+        if (cdPct > 1.0f) cdPct = 1.0f;
+        DrawRectangle((int)rWpn.x + 12, (int)rWpn.y + 21, 196, 4, Fade(BLACK, 0.6f));
+        DrawRectangle((int)rWpn.x + 12, (int)rWpn.y + 21, (int)(196 * cdPct), 4,
+                      (cdPct >= 1.0f) ? wpnCol : Fade(wpnCol, 0.45f));
         buffCount++;
     }
 
@@ -438,6 +479,9 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
         }
     }
 
+    Color wpnPrim = WeaponSkinPrimary(game->player.weaponSkinId);
+    Color wpnSec  = WeaponSkinSecondary(game->player.weaponSkinId);
+
     for (int i = 0; i < MAX_PROJECTILES; i++)
     {
         if (game->projectiles[i].active)
@@ -448,18 +492,24 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
             if (p->type == PROJ_ACID_ARC) pCol = LIME;
             else if (p->type == PROJ_VOID_BOLT) pCol = MAGENTA;
             else if (p->type == PROJ_BOSS_BULLET) pCol = RED;
-            else if (p->type == PROJ_PLAYER_RIFLE) pCol = SKYBLUE;
+            else if (p->type == PROJ_PLAYER_RIFLE) pCol = wpnPrim;   // skin da arma
             else if (p->type == PROJ_PLAYER_GRENADE) pCol = ORANGE;
-            else if (p->type == PROJ_PLAYER_BFG) pCol = GREEN;
-            
+            else if (p->type == PROJ_PLAYER_BFG) pCol = wpnPrim;
+
             if (p->type == PROJ_PLAYER_BFG) {
                 srcSize = 30.0f;
-                DrawCircleGradient(p->position, srcSize, GREEN, BLANK);
-                DrawCircleLines(p->position.x, p->position.y, srcSize, WHITE);
+                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize, pCol, BLANK);
+                DrawCircleLines(p->position.x, p->position.y, srcSize, wpnSec);
             } else if (p->type == PROJ_PLAYER_GRENADE) {
                 srcSize = 15.0f;
                 DrawCircle(p->position.x, p->position.y, srcSize, pCol);
-                DrawCircleLines(p->position.x, p->position.y, srcSize, BLACK);
+                DrawCircleLines(p->position.x, p->position.y, srcSize, wpnPrim);
+            } else if (p->type == PROJ_PLAYER_RIFLE) {
+                // Projétil do jogador mais legível: rastro curto + núcleo brilhante
+                Vector2 tail = Vector2Subtract(p->position, Vector2Scale(Vector2Normalize(p->velocity), 22.0f));
+                DrawLineEx(tail, p->position, 5.0f, Fade(pCol, 0.45f));
+                DrawCircle(p->position.x, p->position.y, 9.0f, pCol);
+                DrawCircle(p->position.x, p->position.y, 4.0f, wpnSec);
             } else {
                 DrawCircle(p->position.x, p->position.y, srcSize, pCol);
                 DrawCircleLines(p->position.x, p->position.y, srcSize, WHITE);
@@ -477,10 +527,10 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
     {
         float t = 1.0f - (game->slashAnimTimer / 0.22f);
         float currentRadius = t * game->slashAnimRadius;
-        
-        DrawCircleLines(game->slashAnimPos.x, game->slashAnimPos.y, currentRadius, Fade(WHITE, (1.0f - t) * 0.9f));
-        DrawCircleLines(game->slashAnimPos.x, game->slashAnimPos.y, currentRadius - 8.0f, Fade(SKYBLUE, (1.0f - t) * 0.7f));
-        DrawCircle(game->slashAnimPos.x, game->slashAnimPos.y, currentRadius, Fade(SKYBLUE, (1.0f - t) * 0.15f));
+
+        DrawCircleLines(game->slashAnimPos.x, game->slashAnimPos.y, currentRadius, Fade(wpnSec, (1.0f - t) * 0.9f));
+        DrawCircleLines(game->slashAnimPos.x, game->slashAnimPos.y, currentRadius - 8.0f, Fade(wpnPrim, (1.0f - t) * 0.7f));
+        DrawCircle(game->slashAnimPos.x, game->slashAnimPos.y, currentRadius, Fade(wpnPrim, (1.0f - t) * 0.15f));
     }
 
     for (int i = 0; i < MAX_PARTICLES; i++)
@@ -494,6 +544,21 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 (Vector2){ size * 2.0f, size * 2.0f },
                 Fade(game->particles[i].color, lifePercent)
             );
+        }
+    }
+
+    // Números de dano flutuantes (feedback de combate)
+    for (int i = 0; i < MAX_DAMAGE_TEXTS; i++)
+    {
+        if (game->damageTexts[i].active)
+        {
+            DamageText *dt = &game->damageTexts[i];
+            float alpha = dt->timer / dt->maxTime;
+            const char *txt = TextFormat("%d", dt->value);
+            Vector2 sz = MeasureTextEx(font, txt, 20.0f, 1.0f);
+            Vector2 pos = { dt->position.x - sz.x / 2.0f, dt->position.y };
+            DrawTextEx(font, txt, (Vector2){ pos.x + 1, pos.y + 1 }, 20.0f, 1.0f, Fade(BLACK, alpha * 0.8f));
+            DrawTextEx(font, txt, pos, 20.0f, 1.0f, Fade(dt->color, alpha));
         }
     }
 
@@ -661,6 +726,21 @@ void DrawTelaTutorial(GameState *game, Font font)
         }
     }
 
+    // Números de dano flutuantes (também no tutorial)
+    for (int i = 0; i < MAX_DAMAGE_TEXTS; i++)
+    {
+        if (game->damageTexts[i].active)
+        {
+            DamageText *dt = &game->damageTexts[i];
+            float alpha = dt->timer / dt->maxTime;
+            const char *txt = TextFormat("%d", dt->value);
+            Vector2 sz = MeasureTextEx(font, txt, 20.0f, 1.0f);
+            Vector2 dpos = { dt->position.x - sz.x / 2.0f, dt->position.y };
+            DrawTextEx(font, txt, (Vector2){ dpos.x + 1, dpos.y + 1 }, 20.0f, 1.0f, Fade(BLACK, alpha * 0.8f));
+            DrawTextEx(font, txt, dpos, 20.0f, 1.0f, Fade(dt->color, alpha));
+        }
+    }
+
     EndMode2D();
 
     float hpPct = (float)game->player.hp / game->player.maxHp;
@@ -670,7 +750,7 @@ void DrawTelaTutorial(GameState *game, Font font)
         float res[2] = { (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
         SetShaderValue(g_assets.shdLowHP, g_assets.shdLowHPTimeLoc, &time, SHADER_UNIFORM_FLOAT);
         SetShaderValue(g_assets.shdLowHP, g_assets.shdLowHPResLoc, res, SHADER_UNIFORM_VEC2);
-        
+
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
         EndShaderMode();
     }

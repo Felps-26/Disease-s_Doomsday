@@ -117,6 +117,26 @@ Se você quer programar e testar direto pelo VS Code pressionando apenas um bot�
 
 ---
 
+## 🐧🍎 Rodando no Linux ou macOS
+
+No Windows o build é feito pelo `compilar.bat`. Em Linux/macOS use o **Makefile** incluído na pasta `Game`.
+
+1. **Instale a Raylib:**
+   - **Linux (Debian/Ubuntu):** `sudo apt install libraylib-dev` (ou compile a Raylib a partir do código-fonte).
+   - **macOS (Homebrew):** `brew install raylib`
+2. **Compile e jogue** (dentro da pasta `Game`):
+   ```bash
+   make            # gera o executável ./rpg_game
+   ./rpg_game
+   ```
+   Ou use o atalho que compila e já executa:
+   ```bash
+   ./build.sh
+   ```
+   > Importante: rode o jogo a partir da pasta `Game`, pois ele carrega `Assets/` e grava em `Saves/` por caminhos relativos.
+
+---
+
 ## 🎮 Controles Gerais do Jogo
 
 Após iniciar o jogo, você poderá usar os seguintes controles no teclado:

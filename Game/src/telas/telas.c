@@ -19,6 +19,40 @@ static float EaseOutCubic(float t) {
     return t * t * t + 1.0f;
 }
 
+// Smoothstep clássico (para o efeito de compressão na transição)
+static float SmoothStep01(float t) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t * t * (3.0f - 2.0f * t);
+}
+
+// ============================================================================
+// CACHE: EXISTE ALGUM SAVE? (evita fopen em disco a cada frame no menu)
+// ============================================================================
+bool AnySaveExistsCached(void)
+{
+    static double lastCheck = -10.0;
+    static bool cached = false;
+
+    double now = GetTime();
+    if (now - lastCheck > 1.0)
+    {
+        lastCheck = now;
+        cached = false;
+        for (int i = 1; i <= 3; i++)
+        {
+            char path[64];
+            sprintf(path, "Saves/save_slot_%d.txt", i);
+            if (FileExists(path))
+            {
+                cached = true;
+                break;
+            }
+        }
+    }
+    return cached;
+}
+
 // ============================================================================
 // DEFINIÇÃO DOS BOTÕES DAS TELAS (GLOBAIS DA UI)
 // ============================================================================
@@ -218,19 +252,7 @@ void DrawTelaMenu(GameState *game, Font font, float time)
     }
 
     // Se existe arquivo de save em qualquer um dos 3 slots, indica que pode carregar
-    bool anySaveExists = false;
-    for (int i = 1; i <= 3; i++)
-    {
-        char path[64];
-        sprintf(path, "Saves/save_slot_%d.txt", i);
-        FILE *fTest = fopen(path, "r");
-        if (fTest != NULL)
-        {
-            fclose(fTest);
-            anySaveExists = true;
-            break;
-        }
-    }
+    bool anySaveExists = AnySaveExistsCached();
 
     // Desenha Botões do Menu
     for (int i = 0; i < 5; i++)
@@ -272,17 +294,23 @@ void DrawTelaControles(GameState *game, Font font)
     DrawTextEx(font, "- Mova o Anticorpo pelo campo de batalha", (Vector2){ 480, (float)startY }, 22.0f, 1.0f, WHITE);
     
     DrawTextEx(font, "ESPAÇO ou CLIQUE ESQUERDO", (Vector2){ 280, (float)(startY + spacing) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Ataque circular (Slash Imune)", (Vector2){ 580, (float)(startY + spacing) }, 22.0f, 1.0f, WHITE);
+    DrawTextEx(font, "- Ataque (acerta ao redor com a Lâmina)", (Vector2){ 580, (float)(startY + spacing) }, 22.0f, 1.0f, WHITE);
 
-    DrawTextEx(font, "ESC", (Vector2){ 280, (float)(startY + spacing * 2) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Pausar / Voltar ao Menu", (Vector2){ 580, (float)(startY + spacing * 2) }, 22.0f, 1.0f, WHITE);
+    DrawTextEx(font, "TECLAS 1, 2, 3 e 4", (Vector2){ 280, (float)(startY + spacing * 2) }, 22.0f, 1.0f, YELLOW);
+    DrawTextEx(font, "- Troca de arma (Lâmina, Fuzil, Granada, BFG)", (Vector2){ 580, (float)(startY + spacing * 2) }, 22.0f, 1.0f, WHITE);
 
-    DrawTextEx(font, "SALVAR & CARREGAR", (Vector2){ 280, (float)(startY + spacing * 3.5f) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Use as opções de pause (ESC) para gerenciar slots", (Vector2){ 580, (float)(startY + spacing * 3.5f) }, 22.0f, 1.0f, WHITE);
+    DrawTextEx(font, "E", (Vector2){ 280, (float)(startY + spacing * 3) }, 22.0f, 1.0f, YELLOW);
+    DrawTextEx(font, "- Usa uma Poção de Vida (cura 50%)", (Vector2){ 580, (float)(startY + spacing * 3) }, 22.0f, 1.0f, WHITE);
 
-    // Legenda de Itêns
-    DrawTextEx(font, "POWER-UPS (AMARELOS NO MAPA):", (Vector2){ 280, (float)(startY + spacing * 5.5) }, 20.0f, 1.0f, GOLD);
-    DrawTextEx(font, "Cura (+35 HP) | Velocidade (+60%) | Escudo (invencível) | Dano Duplo (x2)", (Vector2){ 280, (float)(startY + spacing * 6.5) }, 18.0f, 1.0f, LIGHTGRAY);
+    DrawTextEx(font, "ESC", (Vector2){ 280, (float)(startY + spacing * 4) }, 22.0f, 1.0f, YELLOW);
+    DrawTextEx(font, "- Pausar / Voltar ao Menu", (Vector2){ 580, (float)(startY + spacing * 4) }, 22.0f, 1.0f, WHITE);
+
+    DrawTextEx(font, "F5 / F9", (Vector2){ 280, (float)(startY + spacing * 5) }, 22.0f, 1.0f, YELLOW);
+    DrawTextEx(font, "- Quicksave / Quickload (Slot 1)", (Vector2){ 580, (float)(startY + spacing * 5) }, 22.0f, 1.0f, WHITE);
+
+    // Legenda de Itens
+    DrawTextEx(font, "POWER-UPS (BRILHANTES NO MAPA):", (Vector2){ 280, (float)(startY + spacing * 6.3f) }, 20.0f, 1.0f, GOLD);
+    DrawTextEx(font, "Cura (+35 HP) | Velocidade (+60%) | Escudo (invencível) | Dano Duplo (x2)", (Vector2){ 280, (float)(startY + spacing * 7.2f) }, 18.0f, 1.0f, LIGHTGRAY);
 
     // Botão voltar
     DrawButton(controlsButton, font, true);
@@ -349,7 +377,7 @@ void DrawTelaGameOver(GameState *game, Font font)
     // Painel de estatísticas (Estilo SciFi)
     DrawSciFiBox((Rectangle){ 400, 200, 480, 160 }, MAROON);
 
-    DrawTextEx(font, TextFormat("Pontução Final: %d", game->player.score), (Vector2){ 440, 225 }, 22.0f, 1.0f, WHITE);
+    DrawTextEx(font, TextFormat("Pontuação Final: %d", game->player.score), (Vector2){ 440, 225 }, 22.0f, 1.0f, WHITE);
     DrawTextEx(font, TextFormat("Nível Final: Lvl %d", game->player.level), (Vector2){ 440, 260 }, 22.0f, 1.0f, WHITE);
     DrawTextEx(font, TextFormat("Patógenos Eliminados: %d", game->totalEnemiesKilled), (Vector2){ 440, 295 }, 22.0f, 1.0f, WHITE);
 
@@ -400,7 +428,7 @@ void DrawTelaVitoria(GameState *game, Font font)
     // Painel de estatísticas (Estilo SciFi)
     DrawSciFiBox((Rectangle){ 400, 200, 480, 160 }, GOLD);
 
-    DrawTextEx(font, TextFormat("Pontução Final: %d", game->player.score), (Vector2){ 440, 225 }, 22.0f, 1.0f, GOLD);
+    DrawTextEx(font, TextFormat("Pontuação Final: %d", game->player.score), (Vector2){ 440, 225 }, 22.0f, 1.0f, GOLD);
     DrawTextEx(font, TextFormat("Nível Final: Lvl %d", game->player.level), (Vector2){ 440, 260 }, 22.0f, 1.0f, WHITE);
     DrawTextEx(font, TextFormat("Total de Patógenos: %d", game->totalEnemiesKilled), (Vector2){ 440, 295 }, 22.0f, 1.0f, WHITE);
 
@@ -666,22 +694,70 @@ void DrawTelaSettings(GameState *game, Font font)
     DrawTextEx(font, "SETTINGS", (Vector2){ 540, 60 }, 42.0f, 1.5f, SKYBLUE);
 
     DrawSciFiBox((Rectangle){ 340, 150, 600, 400 }, THEME_COLOR_MAIN);
-    
+
     DrawTextEx(font, "AUDIO", (Vector2){ 380, 170 }, 28.0f, 1.0f, YELLOW);
     DrawLine(380, 205, 900, 205, Fade(YELLOW, 0.5f));
-    
-    DrawTextEx(font, "MASTER VOLUME", (Vector2){ 380, 250 }, 24.0f, 1.0f, WHITE);
-    
-    Rectangle sliderBg = { 600, 250, 300, 20 };
-    Rectangle sliderFill = { 600, 250, 300 * game->masterVolume, 20 };
-    
+
+    DrawTextEx(font, "MASTER VOLUME", (Vector2){ 380, 230 }, 24.0f, 1.0f, WHITE);
+
+    Rectangle sliderBg = { 600, 230, 300, 20 };
+    Rectangle sliderFill = { 600, 230, 300 * game->masterVolume, 20 };
+
     DrawRectangleRec(sliderBg, Fade(BLACK, 0.6f));
     DrawRectangleRec(sliderFill, THEME_COLOR_MAIN);
     DrawRectangleLinesEx(sliderBg, 2.0f, THEME_COLOR_BORDER);
-    
+
     char volText[16];
     sprintf(volText, "%d%%", (int)(game->masterVolume * 100));
-    DrawTextEx(font, volText, (Vector2){ 920, 248 }, 24.0f, 1.0f, WHITE);
+    DrawTextEx(font, volText, (Vector2){ 920, 228 }, 24.0f, 1.0f, WHITE);
+
+    // ------------------------------------------------------------------------
+    // SELETORES DE SKIN (personagem e arma)
+    // ------------------------------------------------------------------------
+    DrawTextEx(font, "APARENCIA", (Vector2){ 380, 290 }, 28.0f, 1.0f, YELLOW);
+    DrawLine(380, 325, 900, 325, Fade(YELLOW, 0.5f));
+
+    const char *rowLabels[2] = { "SKIN DO ANTICORPO", "SKIN DA ARMA" };
+    for (int row = 0; row < 2; row++)
+    {
+        float y = 355.0f + row * 70.0f;
+        DrawTextEx(font, rowLabels[row], (Vector2){ 380, y + 8 }, 20.0f, 1.0f, WHITE);
+
+        // Setas < >
+        Rectangle btnPrev = { 600, y, 40, 40 };
+        Rectangle btnNext = { 860, y, 40, 40 };
+        bool hovPrev = CheckCollisionPointRec(g_virtualMouse, btnPrev);
+        bool hovNext = CheckCollisionPointRec(g_virtualMouse, btnNext);
+        DrawRectangleRounded(btnPrev, 0.3f, 6, Fade(THEME_COLOR_BORDER, hovPrev ? 0.9f : 0.5f));
+        DrawRectangleRounded(btnNext, 0.3f, 6, Fade(THEME_COLOR_BORDER, hovNext ? 0.9f : 0.5f));
+        DrawTextEx(font, "<", (Vector2){ btnPrev.x + 14, btnPrev.y + 8 }, 24.0f, 1.0f, hovPrev ? THEME_COLOR_MAIN : WHITE);
+        DrawTextEx(font, ">", (Vector2){ btnNext.x + 14, btnNext.y + 8 }, 24.0f, 1.0f, hovNext ? THEME_COLOR_MAIN : WHITE);
+
+        // Nome da skin atual + amostra de cor
+        const char *skinName;
+        Color swatch;
+        if (row == 0)
+        {
+            skinName = PlayerSkinName(game->player.skinId);
+            swatch = (game->player.skinId == 1) ? (Color){ 225, 55, 60, 255 }
+                   : (game->player.skinId == 2) ? (Color){ 130, 220, 40, 255 }
+                                                : (Color){ 235, 240, 250, 255 };
+        }
+        else
+        {
+            skinName = WeaponSkinName(game->player.weaponSkinId);
+            swatch = WeaponSkinPrimary(game->player.weaponSkinId);
+        }
+
+        Rectangle nameBox = { 650, y, 200, 40 };
+        DrawRectangleRounded(nameBox, 0.2f, 6, Fade(BLACK, 0.55f));
+        DrawRectangleRoundedLines(nameBox, 0.2f, 6, THEME_COLOR_BORDER);
+        DrawCircle((int)(nameBox.x + 22), (int)(y + 20), 10.0f, swatch);
+        Vector2 nameSz = MeasureTextEx(font, skinName, 18.0f, 1.0f);
+        DrawTextEx(font, skinName, (Vector2){ nameBox.x + 110.0f - nameSz.x / 2.0f + 10.0f, y + 11 }, 18.0f, 1.0f, WHITE);
+    }
+
+    DrawTextEx(font, "As skins sao salvas automaticamente.", (Vector2){ 380, 505 }, 14.0f, 1.0f, GRAY);
 
     DrawButton(settingsBtnVoltar, font, true);
 }
@@ -701,8 +777,33 @@ static const char *loadingTips[] = {
 
 void DrawTelaLoading(GameState *game, Font font)
 {
+    // ------------------------------------------------------------------------
+    // EFEITO "INJEÇÃO": na transição tutorial -> gameplay o personagem é
+    // comprimido pela ampola e a tela treme progressivamente (smoothstep).
+    // ------------------------------------------------------------------------
+    float fxProgress = 0.0f;
+    bool fxActive = game->syringeTransitionFX;
+    if (fxActive && game->loadingDuration > 0.0f)
+    {
+        fxProgress = game->loadingTimer / game->loadingDuration;
+        if (fxProgress > 1.0f) fxProgress = 1.0f;
+    }
+
+    // shakeIntensity = smoothstep(0,1,progress) * maxShake
+    float maxShake = 14.0f;
+    float shakeIntensity = fxActive ? SmoothStep01(fxProgress) * maxShake : 0.0f;
+    Vector2 shakeOff = { 0.0f, 0.0f };
+    if (shakeIntensity > 0.1f)
+    {
+        shakeOff.x = (float)GetRandomValue(-100, 100) / 100.0f * shakeIntensity;
+        shakeOff.y = (float)GetRandomValue(-100, 100) / 100.0f * shakeIntensity;
+    }
+
+    rlPushMatrix();
+    rlTranslatef(shakeOff.x, shakeOff.y, 0.0f);
+
     // Fundo verde-petróleo biológico escuro degradê
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+    DrawRectangleGradientV(-20, -20, SCREEN_WIDTH + 40, SCREEN_HEIGHT + 40,
                            (Color){ 8, 20, 12, 255 }, (Color){ 10, 28, 20, 255 });
 
     // Células/partículas decorativas de fundo que simulam o sangue/tecido
@@ -715,10 +816,50 @@ void DrawTelaLoading(GameState *game, Font font)
         }
     }
 
-    // Título
-    const char *titulo = "CARREGANDO SISTEMA IMUNOLOGICO...";
+    // Título (muda durante a injeção da seringa)
+    const char *titulo = fxActive ? "INJETANDO NA CORRENTE SANGUINEA..."
+                                  : "CARREGANDO SISTEMA IMUNOLOGICO...";
     Vector2 titleSz = MeasureTextEx(font, titulo, 26.0f, 1.2f);
     DrawTextEx(font, titulo, (Vector2){ (SCREEN_WIDTH / 2.0f) - (titleSz.x / 2.0f), 240.0f }, 26.0f, 1.2f, THEME_COLOR_MAIN);
+
+    // ------------------------------------------------------------------------
+    // CENA DA COMPRESSÃO: ampola apertando o herói (apenas no efeito de injeção)
+    // ------------------------------------------------------------------------
+    if (fxActive)
+    {
+        float cx = SCREEN_WIDTH / 2.0f;
+        float cy = 140.0f;
+        float ease = SmoothStep01(fxProgress);
+
+        // Paredes da ampola convergindo (de 180px de abertura para 36px)
+        float gap = 90.0f - ease * 72.0f;
+        Color wallCol = (Color){ 155, 175, 192, 255 };
+        DrawRectangleRounded((Rectangle){ cx - 160.0f, cy - gap - 26.0f, 320.0f, 22.0f }, 0.5f, 6, wallCol);
+        DrawRectangleRounded((Rectangle){ cx - 160.0f, cy + gap + 4.0f, 320.0f, 22.0f }, 0.5f, 6, wallCol);
+        DrawRectangleLinesEx((Rectangle){ cx - 160.0f, cy - gap - 26.0f, 320.0f, gap * 2.0f + 52.0f }, 2.0f, Fade(THEME_COLOR_MAIN, 0.35f));
+
+        // Herói sendo comprimido (squash crescente)
+        float squashY = 1.0f - ease * 0.62f;
+        float squashX = 1.0f + ease * 0.85f;
+        float heroR = 26.0f;
+        Color heroCol = (Color){ 235, 240, 250, 255 };
+        DrawEllipse((int)cx, (int)cy, heroR * squashX, heroR * squashY, heroCol);
+        DrawEllipseLines((int)cx, (int)cy, heroR * squashX, heroR * squashY, THEME_COLOR_MAIN);
+        // Visor do elmo
+        DrawRectangle((int)(cx - 6.0f * squashX), (int)(cy - 3.0f * squashY), (int)(12.0f * squashX), (int)(5.0f * squashY), BLACK);
+
+        // Linhas de pressão / gotículas escapando conforme aperta
+        if (ease > 0.25f)
+        {
+            float t = (float)GetTime();
+            for (int i = 0; i < 6; i++)
+            {
+                float px = cx + sinf(t * 6.0f + i * 1.7f) * (40.0f + i * 18.0f);
+                float py = cy + ((i % 2 == 0) ? -(gap + 34.0f) : (gap + 30.0f));
+                DrawCircleV((Vector2){ px, py }, 2.0f + (i % 3), Fade((Color){ 0, 200, 255, 255 }, 0.5f * ease));
+            }
+        }
+    }
 
     // Barra de progresso (Fundo)
     Rectangle progressBg = { 340, 310, 600, 30 };
@@ -775,5 +916,14 @@ void DrawTelaLoading(GameState *game, Font font)
     if (line2[0] != '\0') {
         Vector2 line2Sz = MeasureTextEx(font, line2, 15.0f, 1.0f);
         DrawTextEx(font, line2, (Vector2){ (SCREEN_WIDTH / 2.0f) - (line2Sz.x / 2.0f), 565.0f }, 15.0f, 1.0f, WHITE);
+    }
+
+    rlPopMatrix();
+
+    // Flash branco final da injeção (últimos 12% do loading), sem tremor
+    if (fxActive && fxProgress > 0.88f)
+    {
+        float flash = (fxProgress - 0.88f) / 0.12f;
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(WHITE, flash * 0.85f));
     }
 }
