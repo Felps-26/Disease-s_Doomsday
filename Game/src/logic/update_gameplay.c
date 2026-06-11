@@ -211,6 +211,26 @@ void SpawnPowerUpAt(GameState *game, Vector2 position, int forcedType)
 
 
 // ============================================================================
+// AUXILIAR: RECOMPENSA DE MORTE DE INIMIGO (CENTRALIZADA)
+// Antes cada arma dava recompensas diferentes — o golpe melee dava o DOBRO de
+// XP/score das armas de fogo e era a única fonte de drops de power-up, o que
+// tornava os fuzis/granada/BFG inúteis. Agora todas as mortes passam por aqui.
+// ============================================================================
+void RegisterEnemyKill(GameState *game, Enemy *enemy)
+{
+    game->player.xp += (enemy->tier + 1) * 10;
+    game->player.score += (enemy->tier + 1) * 50;
+    game->totalEnemiesKilled++;
+    if (game->enemiesRemaining > 0) game->enemiesRemaining--;
+
+    // Chance de drop de power-up (25%) válida para qualquer arma
+    if (GetRandomValue(0, 100) < 25)
+    {
+        SpawnPowerUpAt(game, enemy->position, -1);
+    }
+}
+
+// ============================================================================
 // INICIALIZAÇÃO DO JOGO
 // ============================================================================
 void InitGame(GameState *game)
@@ -1031,10 +1051,7 @@ void UpdateGameplay(GameState *game, float delta)
                 enemy->state = DEATH;
                 enemy->cooldownTimer = 0.5f; // Death animation duration
                 PlaySound(g_assets.sfxEnemyHurt);
-                game->player.xp += (enemy->tier + 1) * 10;
-                game->player.score += (enemy->tier + 1) * 50;
-                game->totalEnemiesKilled++;
-                if (game->enemiesRemaining > 0) game->enemiesRemaining--;
+                RegisterEnemyKill(game, enemy);
             }
         }
         if (enemy->slowTimer > 0.0f) enemy->slowTimer -= delta;
@@ -1093,30 +1110,6 @@ void UpdateGameplay(GameState *game, float delta)
             enemy->cooldownTimer -= delta;
         }
 
-        // Lógica do Spawner (Type 3)
-        if (enemy->type == 3 && enemy->cooldownTimer <= 0.0f && enemy->state != DEATH) {
-            // Tenta spawnar um Aedes (type 1)
-            for (int k = 0; k < MAX_ENEMIES; k++) {
-                if (!game->enemies[k].active) {
-                    game->enemies[k].active = true;
-                    game->enemies[k].position = enemy->position;
-                    game->enemies[k].type = 1; // Aedes
-                    game->enemies[k].tier = TIER_2;
-                    game->enemies[k].maxHp = 20 + game->wave * 5;
-                    game->enemies[k].hp = game->enemies[k].maxHp;
-                    game->enemies[k].speed = 210.0f + GetRandomValue(-15, 15);
-                    game->enemies[k].isRanged = true;
-                    game->enemies[k].state = IDLE;
-                    game->enemies[k].cooldownTimer = 2.0f;
-                    game->enemiesRemaining++; // Conta para a onda
-                    // Partícula de spawn
-                    SpawnParticleExplosion(game, enemy->position, DARKGRAY, 10, 50.0f, 150.0f, 2.0f, 0.4f);
-                    break;
-                }
-            }
-            enemy->cooldownTimer = 6.0f; // Tempo para o próximo spawn
-        }
-
         // Ações de Movimentação
         if (enemy->state == AGGRO)
         {
@@ -1151,7 +1144,7 @@ void UpdateGameplay(GameState *game, float delta)
                 }
             }
         }
-        else if (enemy->state == IDLE && !enemy->isRanged && enemy->type != 3)
+        else if (enemy->state == IDLE && !enemy->isRanged)
         {
             float currentSpeed = enemy->speed * (enemy->slowTimer > 0.0f ? 0.5f : 1.0f);
             Vector2 dir = Vector2Subtract(enemy->patrolTarget, enemy->position);
@@ -1206,8 +1199,9 @@ void UpdateGameplay(GameState *game, float delta)
         // --------------------------------------------------------------------
         // COLISÃO: DANO NO JOGADOR
         // --------------------------------------------------------------------
-        // Aumentado a pedido do usuário para que não entrem no personagem
-        float colRange = (enemy->type == 2) ? 65.0f : 45.0f;
+        // Aumentado a pedido do usuário para que não entrem no personagem.
+        // O chefe (corpo de 140px) usa um alcance maior para que encostar nele doa.
+        float colRange = (enemy->tier == TIER_3_BOSS) ? 110.0f : (enemy->type == 2) ? 65.0f : 45.0f;
         if (distSqrToPlayer < colRange * colRange)
         {
             HandlePlayerEnemyCollision(game, enemy);
@@ -1250,10 +1244,7 @@ void UpdateGameplay(GameState *game, float delta)
                                 game->enemies[eIdx].hp = 0;
                                 game->enemies[eIdx].state = DEATH;
                                 game->enemies[eIdx].cooldownTimer = 0.5f;
-                                game->player.xp += (game->enemies[eIdx].tier + 1) * 10;
-                                game->player.score += (game->enemies[eIdx].tier + 1) * 50;
-                                game->totalEnemiesKilled++;
-                                if (game->enemiesRemaining > 0) game->enemiesRemaining--;
+                                RegisterEnemyKill(game, &game->enemies[eIdx]);
                             } else {
                                 game->enemies[eIdx].state = HURT;
                                 game->enemies[eIdx].cooldownTimer = 0.25f;
@@ -1276,8 +1267,10 @@ void UpdateGameplay(GameState *game, float delta)
                         for (int k = 0; k < hitCount; k++) {
                             int j = hitIdx[k];
                             if (game->enemies[j].active && game->enemies[j].state != DEATH) {
-                                // Hitbox maior para garantir colisão
-                                float eRadius = 45.0f;
+                                // Hitbox proporcional ao tamanho do inimigo. O chefe é
+                                // enorme (140px) — com raio fixo de 45 os projéteis
+                                // atravessavam o corpo dele sem registrar acerto.
+                                float eRadius = (game->enemies[j].tier == TIER_3_BOSS) ? 100.0f : 45.0f;
                                 Rectangle eRect = { game->enemies[j].position.x - eRadius, game->enemies[j].position.y - eRadius, eRadius * 2, eRadius * 2 };
                                 if (CheckCollisionRecs(game->projectiles[i].hitbox, eRect)) {
                                     // BFG não é desativado no primeiro hit
@@ -1294,10 +1287,7 @@ void UpdateGameplay(GameState *game, float delta)
                                         game->enemies[j].hp = 0;
                                         game->enemies[j].state = DEATH;
                                         game->enemies[j].cooldownTimer = 0.5f;
-                                        game->player.xp += (game->enemies[j].tier + 1) * 10;
-                                        game->player.score += (game->enemies[j].tier + 1) * 50;
-                                        game->totalEnemiesKilled++;
-                                        if (game->enemiesRemaining > 0) game->enemiesRemaining--;
+                                        RegisterEnemyKill(game, &game->enemies[j]);
                                     } else {
                                         game->enemies[j].state = HURT;
                                         game->enemies[j].cooldownTimer = 0.25f;

@@ -151,7 +151,9 @@ void DrawHUD(GameState *game, Font font)
             float bossPct = (float)game->enemies[i].hp / game->enemies[i].maxHp;
             if (bossPct < 0.0f) bossPct = 0.0f;
 
-            Rectangle barBg = { 340, 92, 600, 26 };
+            // Posicionada abaixo da fileira superior do HUD (painel de status do
+            // jogador termina em y=115) para não sobrepor nome/nível/onda.
+            Rectangle barBg = { 340, 128, 600, 26 };
             DrawRectangleRounded(barBg, 0.4f, 6, Fade((Color){ 20, 0, 6, 255 }, 0.85f));
             Color bossCol = (bossPct > 0.66f) ? (Color){ 200, 40, 60, 255 }
                           : (bossPct > 0.33f) ? (Color){ 230, 60, 200, 255 }
@@ -165,10 +167,10 @@ void DrawHUD(GameState *game, Font font)
 
             const char *bossName = "SUPERBACTERIA KPC — RESISTENTE";
             Vector2 nSz = MeasureTextEx(font, bossName, 16.0f, 1.0f);
-            DrawTextEx(font, bossName, (Vector2){ 640.0f - nSz.x / 2.0f, 70.0f }, 16.0f, 1.0f, (Color){ 255, 120, 130, 255 });
+            DrawTextEx(font, bossName, (Vector2){ 640.0f - nSz.x / 2.0f, 108.0f }, 16.0f, 1.0f, (Color){ 255, 120, 130, 255 });
             const char *hpTxt = TextFormat("%d / %d", game->enemies[i].hp, game->enemies[i].maxHp);
             Vector2 hSz = MeasureTextEx(font, hpTxt, 13.0f, 1.0f);
-            DrawTextEx(font, hpTxt, (Vector2){ 640.0f - hSz.x / 2.0f, 97.0f }, 13.0f, 1.0f, WHITE);
+            DrawTextEx(font, hpTxt, (Vector2){ 640.0f - hSz.x / 2.0f, 133.0f }, 13.0f, 1.0f, WHITE);
             break;
         }
     }

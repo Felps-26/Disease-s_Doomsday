@@ -88,23 +88,10 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                 }
 
                 // --- Lógica normal de jogo (fora do tutorial) ---
-                if (game->enemiesRemaining > 0) game->enemiesRemaining--;
-                game->totalEnemiesKilled++;
-
-                // Aumenta score
-                int xpGanho = 20 * (game->enemies[i].type + 1);
-                int scoreGanho = 100 * (game->enemies[i].type + 1);
-                game->player.score += scoreGanho;
-                game->player.xp += xpGanho;
-
-                // Chance de drop de PowerUp (25%)
-                if (GetRandomValue(0, 100) < 25)
-                {
-                    SpawnPowerUpAt(game, game->enemies[i].position, -1);
-                }
-
-                // A conclusão da onda é verificada de forma centralizada
-                // no fim do UpdateGameplay (vale para todas as armas).
+                // Recompensa centralizada (XP/score/contador/drop) idêntica à das
+                // demais armas. A conclusão da onda é verificada no fim do
+                // UpdateGameplay (vale para todas as armas).
+                RegisterEnemyKill(game, &game->enemies[i]);
             }
             else
             {

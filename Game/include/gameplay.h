@@ -26,6 +26,12 @@ void SpawnParticleExplosion(GameState *game, Vector2 pos, Color col, int count, 
 // Spawna um power-up em uma posição específica (por exemplo, após derrotar um inimigo)
 void SpawnPowerUpAt(GameState *game, Vector2 position, int type);
 
+// Contabiliza a morte de um inimigo de forma centralizada: XP, score, contadores
+// de onda e chance de drop de power-up. Usado por TODAS as armas (lâmina, fuzil,
+// granada, BFG, veneno) para manter recompensas consistentes.
+// O chamador é responsável por colocar o inimigo em estado DEATH.
+void RegisterEnemyKill(GameState *game, Enemy *enemy);
+
 // Salva o progresso do jogo atual em um slot específico (1, 2 ou 3)
 void SalvarJogoSlot(GameState *game, int slot);
 
