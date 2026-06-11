@@ -51,7 +51,19 @@ void UpdateStateMachine(GameState *game)
             break;
 
         case SCREEN_CONTROLS:
-            UpdateButtonsControles(game, g_virtualMouse);
+            UpdateTelaTutorial(game, g_virtualMouse);
+            break;
+
+        case SCREEN_ARSENAL:
+            UpdateTelaArsenal(game, g_virtualMouse);
+            break;
+
+        case SCREEN_SKINS:
+            UpdateTelaSkins(game, g_virtualMouse);
+            break;
+
+        case SCREEN_ADMIN:
+            UpdateTelaAdmin(game, g_virtualMouse);
             break;
 
         case SCREEN_SETTINGS:
@@ -109,7 +121,7 @@ void UpdateStateMachine(GameState *game)
                     }
                     game->currentScreen = SCREEN_GAMEPLAY;
                     game->saveLoaded = true;
-                    // strcpy(game->notificationMsg, "GAME SAVED!");
+                    strcpy(game->notificationMsg, "GAME SAVED!");
                     game->timeElapsed = 0.0f;
                 }
                 else if (slotSelected == -1)
@@ -175,6 +187,18 @@ void DrawStateMachine(GameState *game)
             DrawTelaControles(game, g_gameFont);
             break;
 
+        case SCREEN_ARSENAL:
+            DrawTelaArsenal(game, g_gameFont);
+            break;
+
+        case SCREEN_SKINS:
+            DrawTelaSkins(game, g_gameFont);
+            break;
+
+        case SCREEN_ADMIN:
+            DrawTelaAdmin(game, g_gameFont);
+            break;
+
         case SCREEN_SETTINGS:
             DrawTelaSettings(game, g_gameFont);
             break;
@@ -202,5 +226,27 @@ void DrawStateMachine(GameState *game)
         case SCREEN_VICTORY:
             DrawTelaVitoria(game, g_gameFont);
             break;
+
+        default: break;
+    }
+
+    // ------------------------------------------------------------------------
+    // TRANSIÇÃO SUAVE (fade-in) ao trocar de tela. Não aplica em GAMEPLAY/PAUSE
+    // para não cobrir o combate. Dá um acabamento mais profissional aos menus.
+    // ------------------------------------------------------------------------
+    static GameScreen prevScreen = SCREEN_MENU;
+    static float fadeTimer = 0.0f;
+    if (game->currentScreen != prevScreen)
+    {
+        prevScreen = game->currentScreen;
+        if (game->currentScreen != SCREEN_GAMEPLAY && game->currentScreen != SCREEN_PAUSE)
+            fadeTimer = 0.30f;
+    }
+    if (fadeTimer > 0.0f)
+    {
+        fadeTimer -= GetFrameTime();
+        if (fadeTimer < 0.0f) fadeTimer = 0.0f;
+        float a = (fadeTimer / 0.30f) * 0.7f;
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, a));
     }
 }

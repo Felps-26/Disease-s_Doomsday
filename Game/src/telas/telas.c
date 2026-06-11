@@ -2,6 +2,7 @@
 // Implementação do HUD, minimapa, efeitos visuais e menus interativos.
 #include "../../include/telas.h"
 #include "../../include/gameplay.h"
+#include "../../include/input_controller.h"
 #include "../../include/asset_manager.h"
 #include "raymath.h"
 #include "../../Assets/Maps/map_seringa.h"
@@ -56,13 +57,27 @@ bool AnySaveExistsCached(void)
 // ============================================================================
 // DEFINIÇÃO DOS BOTÕES DAS TELAS (GLOBAIS DA UI)
 // ============================================================================
+// Menu principal: opções claras para todos os sistemas do jogo.
 UIButton menuButtons[] = {
-    { { 500, 285, 280, 40 }, "NEW GAME", false, false },
-    { { 500, 335, 280, 40 }, "LOAD GAME", false, false },
-    { { 500, 385, 280, 40 }, "CONTROLS", false, false },
-    { { 500, 435, 280, 40 }, "SETTINGS", false, false },
-    { { 500, 485, 280, 40 }, "EXIT", false, false }
+    { { 500, 248, 280, 34 }, "JOGAR", false, false },
+    { { 500, 286, 280, 34 }, "CARREGAR JOGO", false, false },
+    { { 500, 324, 280, 34 }, "ARSENAL (ARMAS)", false, false },
+    { { 500, 362, 280, 34 }, "SKINS", false, false },
+    { { 500, 400, 280, 34 }, "TUTORIAL", false, false },
+    { { 500, 438, 280, 34 }, "CONFIG", false, false },
+    { { 500, 476, 280, 34 }, "MODO ADMIN", false, false },
+    { { 500, 514, 280, 34 }, "SAIR", false, false }
 };
+#define MENU_BTN_COUNT ((int)(sizeof(menuButtons) / sizeof(menuButtons[0])))
+
+// Retângulos do seletor de dificuldade no menu (3 segmentos), abaixo do painel.
+Rectangle MenuDifficultyRect(int i)
+{
+    float segW = 200.0f, gap = 12.0f;
+    float total = 3 * segW + 2 * gap;
+    float startX = (SCREEN_WIDTH - total) / 2.0f;
+    return (Rectangle){ startX + i * (segW + gap), 632.0f, segW, 46.0f };
+}
 
 UIButton pauseButtons[] = {
     { { 500, 210, 280, 40 }, "RESUME GAME", false, false },
@@ -85,12 +100,45 @@ UIButton victoryButtons[] = {
 };
 
 // ============================================================================
-// AUXILIAR: DESENHA BOTÃO ESTILIZADO (GLASSMORPHISM + GRADIENTE DE HOVER)
+// AUXILIAR: TEXTO CENTRADO QUE SE AJUSTA À LARGURA (com sombra opcional)
+// Reduz a fonte ate caber em (maxW) para nunca estourar/sobrepor componentes.
+// ============================================================================
+void DrawTextFitCentered(Font font, const char *text, Rectangle area, float maxFont, Color color, bool shadow)
+{
+    float fs = maxFont;
+    float padding = 16.0f;
+    Vector2 sz = MeasureTextEx(font, text, fs, 1.0f);
+    while (sz.x > area.width - padding && fs > 9.0f)
+    {
+        fs -= 1.0f;
+        sz = MeasureTextEx(font, text, fs, 1.0f);
+    }
+    Vector2 pos = { area.x + (area.width - sz.x) / 2.0f, area.y + (area.height - sz.y) / 2.0f };
+    if (shadow)
+        DrawTextEx(font, text, (Vector2){ pos.x + 1.5f, pos.y + 1.5f }, fs, 1.0f, Fade(BLACK, 0.55f));
+    DrawTextEx(font, text, pos, fs, 1.0f, color);
+}
+
+// ============================================================================
+// AUXILIAR: BOTÃO ESTILIZADO COM HOVER/PRESS ANIMADO E TEXTO QUE SE AJUSTA
+// - hover: leve escala + brilho/glow + borda pulsante ciano;
+// - pressionado: compressão (escala < 1) para feedback de clique;
+// - desabilitado: cinza apagado e claramente inativo;
+// - texto encolhe automaticamente para nunca sair do botão.
 // ============================================================================
 void DrawButton(UIButton botao, Font font, bool enabled)
 {
-    // Cores de base
-    Color corFundo = Fade((Color){ 26, 21, 44, 255 }, 0.75f);
+    extern Vector2 g_virtualMouse;
+    bool pressed = enabled && botao.hover && IsMouseButtonDown(MOUSE_LEFT_BUTTON) &&
+                   CheckCollisionPointRec(g_virtualMouse, botao.bounds);
+
+    // Escala animada (hover cresce, pressionado comprime)
+    float sc = !enabled ? 1.0f : pressed ? 0.96f : (botao.hover ? 1.04f : 1.0f);
+    Rectangle b = botao.bounds;
+    float cx = b.x + b.width / 2.0f, cy = b.y + b.height / 2.0f;
+    Rectangle r = { cx - b.width * sc / 2.0f, cy - b.height * sc / 2.0f, b.width * sc, b.height * sc };
+
+    Color corFundo = Fade((Color){ 26, 21, 44, 255 }, 0.78f);
     Color corBorda = (Color){ 104, 76, 172, 255 };
     Color corTexto = WHITE;
 
@@ -100,35 +148,35 @@ void DrawButton(UIButton botao, Font font, bool enabled)
         corBorda = Fade(GRAY, 0.25f);
         corTexto = Fade(GRAY, 0.4f);
     }
-    else
+    else if (pressed)
     {
-        if (botao.hover)
-        {
-            corFundo = Fade(THEME_COLOR_BORDER, 0.85f);
-            corBorda = THEME_COLOR_MAIN; // Cyan brilhante no hover
-            corTexto = THEME_COLOR_MAIN;
-        }
-
-        if (botao.clicked)
-        {
-            corFundo = (Color){ 120, 80, 220, 255 };
-            corTexto = WHITE;
-        }
+        corFundo = (Color){ 120, 80, 220, 255 };
+        corBorda = THEME_COLOR_MAIN;
+        corTexto = WHITE;
+    }
+    else if (botao.hover)
+    {
+        // Glow externo pulsante ao passar o mouse
+        float pulse = 0.45f + 0.25f * sinf((float)GetTime() * 6.0f);
+        DrawRectangleRounded((Rectangle){ r.x - 5, r.y - 5, r.width + 10, r.height + 10 }, 0.3f, 8, Fade(THEME_COLOR_MAIN, 0.12f * pulse + 0.05f));
+        corFundo = Fade(THEME_COLOR_BORDER, 0.85f);
+        corBorda = THEME_COLOR_MAIN;
+        corTexto = THEME_COLOR_MAIN;
     }
 
-    // Desenha fundo e borda arredondados (Premium feel)
-    DrawRectangleRounded(botao.bounds, 0.25f, 8, corFundo);
-    DrawRectangleRoundedLines(botao.bounds, 0.25f, 8, corBorda);
+    // Fundo e borda
+    DrawRectangleRounded(r, 0.25f, 8, corFundo);
+    DrawRectangleRoundedLines(r, 0.25f, 8, corBorda);
+    if (enabled && botao.hover && !pressed)
+    {
+        float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 6.0f);
+        DrawRectangleRoundedLines(r, 0.25f, 8, Fade(THEME_COLOR_MAIN, pulse));
+        // Acento lateral animado
+        DrawRectangle((int)r.x + 3, (int)(r.y + r.height * 0.2f), 3, (int)(r.height * 0.6f), Fade(THEME_COLOR_MAIN, pulse));
+    }
 
-    // Centralização do texto com fonte personalizada
-    int fontSize = 22;
-    Vector2 textSize = MeasureTextEx(font, botao.text, (float)fontSize, 1.0f);
-    Vector2 textPos = {
-        botao.bounds.x + (botao.bounds.width / 2.0f) - (textSize.x / 2.0f),
-        botao.bounds.y + (botao.bounds.height / 2.0f) - (textSize.y / 2.0f)
-    };
-
-    DrawTextEx(font, botao.text, textPos, (float)fontSize, 1.0f, corTexto);
+    // Texto centralizado e ajustado à largura (com sombra)
+    DrawTextFitCentered(font, botao.text, r, 22.0f, corTexto, true);
 }
 
 // ============================================================================
@@ -164,18 +212,24 @@ void DrawTelaMenu(GameState *game, Font font, float time)
     int titleFontSize = 48;
     Vector2 titleSize = MeasureTextEx(font, titulo, (float)titleFontSize, 2.0f);
     
-    // Sombra do título
-    Vector2 shadowPos = {
-        (SCREEN_WIDTH / 2.0f) - (titleSize.x / 2.0f) + 3.0f,
-        75.0f + titleOffsetY + 3.0f
-    };
-    DrawTextEx(font, titulo, shadowPos, (float)titleFontSize, 2.0f, Fade(BLACK, 0.45f));
-
-    // Texto principal (verde lime biológico)
     Vector2 titlePos = {
         (SCREEN_WIDTH / 2.0f) - (titleSize.x / 2.0f),
         75.0f + titleOffsetY
     };
+
+    // Glow/halo ciano pulsante atrás do título (acabamento profissional)
+    float glowPulse = 0.35f + 0.15f * sinf(time * 3.0f);
+    for (int gx = -2; gx <= 2; gx++)
+        for (int gy = -2; gy <= 2; gy++)
+            if (gx != 0 || gy != 0)
+                DrawTextEx(font, titulo, (Vector2){ titlePos.x + gx * 2.0f, titlePos.y + gy * 2.0f },
+                           (float)titleFontSize, 2.0f, Fade(THEME_COLOR_MAIN, 0.05f * glowPulse));
+
+    // Sombra do título
+    DrawTextEx(font, titulo, (Vector2){ titlePos.x + 3.0f, titlePos.y + 3.0f }, (float)titleFontSize, 2.0f, Fade(BLACK, 0.45f));
+
+    // Texto principal (verde lime biológico) + leve contorno escuro
+    DrawTextEx(font, titulo, (Vector2){ titlePos.x - 1.5f, titlePos.y - 1.5f }, (float)titleFontSize, 2.0f, Fade((Color){ 0, 60, 40, 255 }, 0.6f));
     DrawTextEx(font, titulo, titlePos, (float)titleFontSize, 2.0f, THEME_COLOR_TEXT);
 
     // Subtítulo
@@ -254,66 +308,216 @@ void DrawTelaMenu(GameState *game, Font font, float time)
     // Se existe arquivo de save em qualquer um dos 3 slots, indica que pode carregar
     bool anySaveExists = AnySaveExistsCached();
 
-    // Desenha Botões do Menu
-    for (int i = 0; i < 5; i++)
+    // Desenha Botões do Menu (índice 1 = Carregar, desabilitado sem saves)
+    for (int i = 0; i < MENU_BTN_COUNT; i++)
     {
         DrawButton(menuButtons[i], font, (i == 1) ? anySaveExists : true);
     }
 
     // Rodapé decorativo no painel
-    DrawLineEx((Vector2){ 460, 575 }, (Vector2){ 820, 575 }, 1.0f, Fade(THEME_COLOR_TEXT, 0.25f));
-    const char *verText = "SISTEMA: ATIVO v1.0 | Fase 1: A Seringa";
+    DrawLineEx((Vector2){ 460, 556 }, (Vector2){ 820, 556 }, 1.0f, Fade(THEME_COLOR_TEXT, 0.25f));
+    const char *verText = "Armas: 1-4  |  Skins  |  5 hordas + CHEFE na onda 5";
     Vector2 verSize = MeasureTextEx(font, verText, 12.0f, 1.0f);
-    DrawTextEx(font, verText, (Vector2){ 640.0f - verSize.x / 2.0f, 585.0f }, 12.0f, 1.0f, Fade(THEME_COLOR_TEXT, 0.5f));
+    DrawTextEx(font, verText, (Vector2){ 640.0f - verSize.x / 2.0f, 564.0f }, 12.0f, 1.0f, Fade(THEME_COLOR_TEXT, 0.6f));
+
+    // ---- SELETOR DE DIFICULDADE (abaixo do painel) ----
+    DrawTextEx(font, "DIFICULDADE:", (Vector2){ MenuDifficultyRect(0).x, 608.0f }, 16.0f, 1.0f, THEME_COLOR_MAIN);
+    const char *dn[3] = { "FACIL", "MEDIO", "DIFICIL" };
+    const char *dd[3] = { "Inimigos lentos, pouca esquiva", "Equilibrado e padrao", "Rapidos, espertos, mais esquiva" };
+    Color dc[3] = { (Color){ 120, 220, 140, 255 }, (Color){ 0, 229, 255, 255 }, (Color){ 255, 90, 90, 255 } };
+    for (int i = 0; i < 3; i++)
+    {
+        Rectangle r = MenuDifficultyRect(i);
+        bool active = (game->difficulty == i);
+        bool hover = CheckCollisionPointRec(g_virtualMouse, r);
+        DrawRectangleRounded(r, 0.25f, 6, active ? Fade(dc[i], 0.25f) : Fade((Color){ 12, 14, 22, 255 }, 0.85f));
+        DrawRectangleRoundedLines(r, 0.25f, 6, active ? dc[i] : (hover ? YELLOW : THEME_COLOR_BORDER));
+        Vector2 ns = MeasureTextEx(font, dn[i], 20.0f, 1.0f);
+        DrawTextEx(font, dn[i], (Vector2){ r.x + r.width / 2.0f - ns.x / 2.0f, r.y + 4.0f }, 20.0f, 1.0f, active ? dc[i] : WHITE);
+        Vector2 ds = MeasureTextEx(font, dd[i], 11.0f, 1.0f);
+        DrawTextEx(font, dd[i], (Vector2){ r.x + r.width / 2.0f - ds.x / 2.0f, r.y + 28.0f }, 11.0f, 1.0f, Fade(WHITE, 0.7f));
+    }
 
     // Rodapé
-    DrawTextEx(font, "ESC para pausar | Powered by Raylib", (Vector2){ 20, SCREEN_HEIGHT - 35 }, 16.0f, 1.0f, DARKGRAY);
+    DrawTextEx(font, "ESC pausa | Dificuldade ativa: ", (Vector2){ 20, SCREEN_HEIGHT - 24 }, 14.0f, 1.0f, DARKGRAY);
+    DrawTextEx(font, DifficultyName(game->difficulty), (Vector2){ 270, SCREEN_HEIGHT - 24 }, 14.0f, 1.0f, dc[game->difficulty % 3]);
 }
 
 
 
 // ============================================================================
-// 2. TELA: CONTROLES / CRÉDITOS
+// 2. TELA: TUTORIAL (GUIA EM ABAS) — acessível pelo Menu
 // ============================================================================
+#define TUT_TAB_COUNT 7
+static int g_tutTab = 0;
+static const char *g_tutTabNames[TUT_TAB_COUNT] = {
+    "BASICO", "ARMAS", "INIMIGOS", "CHEFE", "SKINS", "XP/UPGRADES", "HORDAS"
+};
+
+static Rectangle TutTabRect(int i)
+{
+    float tabW = 150.0f, gap = 8.0f;
+    float total = TUT_TAB_COUNT * tabW + (TUT_TAB_COUNT - 1) * gap;
+    float startX = (SCREEN_WIDTH - total) / 2.0f;
+    return (Rectangle){ startX + i * (tabW + gap), 116.0f, tabW, 40.0f };
+}
+
+// Linha "rótulo: texto" auxiliar do tutorial
+static void TutLine(Font font, float x, float y, const char *label, Color lc, const char *text)
+{
+    DrawTextEx(font, label, (Vector2){ x, y }, 18.0f, 1.0f, lc);
+    if (text && text[0])
+    {
+        float lw = MeasureTextEx(font, label, 18.0f, 1.0f).x;
+        DrawTextEx(font, text, (Vector2){ x + lw + 10.0f, y }, 18.0f, 1.0f, Fade(WHITE, 0.85f));
+    }
+}
+
+static void DrawTutContent(GameState *game, Font font, Rectangle panel)
+{
+    float x = panel.x + 28.0f;
+    float y = panel.y + 22.0f;
+    float step = 30.0f;
+
+    switch (g_tutTab)
+    {
+        case 0: // BASICO + CONTROLES
+            DrawTextEx(font, "OBJETIVO", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 30.0f;
+            DrawTextEx(font, "Voce e um Anticorpo. Sobreviva a 5 hordas de patogenos, derrote o", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 24.0f;
+            DrawTextEx(font, "chefe da onda 5 e proteja o organismo do Distrito Federal.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 38.0f;
+            DrawTextEx(font, "CONTROLES", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 32.0f;
+            TutLine(font, x, y, "WASD / SETAS", YELLOW, "Mover o Anticorpo"); y += step;
+            TutLine(font, x, y, "CLIQUE ESQ. / ESPACO", YELLOW, "Atacar com a arma equipada"); y += step;
+            TutLine(font, x, y, "1  2  3  4", YELLOW, "Selecionar / trocar de arma"); y += step;
+            TutLine(font, x, y, "E", YELLOW, "Usar pocao de vida (cura 50%)"); y += step;
+            TutLine(font, x, y, "ESC", YELLOW, "Pausar / voltar"); y += step;
+            TutLine(font, x, y, "F5 / F9", YELLOW, "Salvar / carregar rapido (slot 1)"); y += step;
+            TutLine(font, x, y, "POWER-UPS", GOLD, "Cura, Velocidade, Escudo e Dano x2 (brilham no mapa)");
+            break;
+
+        case 1: // ARMAS
+            DrawTextEx(font, "Troque a qualquer momento com 1-4. Cada arma muda a jogabilidade:", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f));
+            y += 36.0f;
+            for (int w = 1; w <= 4; w++)
+            {
+                WeaponInfo wi = GetWeaponInfo(w);
+                DrawTextEx(font, TextFormat("[%d] %s", wi.key, wi.name), (Vector2){ x, y }, 20.0f, 1.0f, wi.color); y += 24.0f;
+                DrawTextEx(font, TextFormat("Dano %d (+ATK) | %s | cooldown %.2fs | %s",
+                           wi.baseDamage, wi.speedTxt, wi.cooldown, wi.special),
+                           (Vector2){ x + 16, y }, 15.0f, 1.0f, Fade(WHITE, 0.8f)); y += 22.0f;
+                DrawTextEx(font, TextFormat("Desbloqueio: Nivel %d  -  %s", wi.unlockLevel, wi.playstyle),
+                           (Vector2){ x + 16, y }, 14.0f, 1.0f, Fade((Color){ 120, 220, 140, 255 }, 0.9f)); y += 28.0f;
+            }
+            break;
+
+        case 2: // INIMIGOS
+        {
+            const char *en[5][3] = {
+                { "SARS-CoV-2 (verde)", "Melee equilibrado, cerca voce em grupo.", "Use a Lamina em 360 e o empurrao." },
+                { "Dengue / Aedes (cinza)", "Rapido, atira em leque e foge se voce chega perto.", "Persiga com o Fuzil; nao deixe atirar a vontade." },
+                { "KPC Superbacteria (vermelha)", "Lenta, MUITA vida, tiro pesado. Vira CHEFE na onda 5.", "Veneno da Granada e a Vacina BFG." },
+                { "Trypanosoma / Chagas (roxa)", "Muito rapida e fragil; foge com pouca vida.", "Um golpe forte resolve; nao a deixe te cercar." },
+                { "Tuberculose / TB (escura)", "Atirador pesado, lento e resistente.", "Mantenha distancia e foque fogo (BFG perfura)." },
+            };
+            for (int i = 0; i < 5; i++)
+            {
+                DrawTextEx(font, en[i][0], (Vector2){ x, y }, 19.0f, 1.0f, THEME_COLOR_MAIN); y += 24.0f;
+                DrawTextEx(font, en[i][1], (Vector2){ x + 16, y }, 15.0f, 1.0f, Fade(WHITE, 0.82f)); y += 21.0f;
+                TutLine(font, x + 16, y, "Dica:", GOLD, en[i][2]); y += 28.0f;
+            }
+            break;
+        }
+
+        case 3: // CHEFE
+            DrawTextEx(font, "CHEFE: SUPERBACTERIA KPC", (Vector2){ x, y }, 24.0f, 1.0f, (Color){ 255, 80, 90, 255 }); y += 34.0f;
+            DrawTextEx(font, "Aparece SEMPRE na onda 5, com o corpo bem maior e milhares de vida.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
+            DrawTextEx(font, "Surge CERCADO por lacaios que o escoltam e te distraem.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
+            DrawTextEx(font, "Tem 3 FASES conforme perde vida:", (Vector2){ x, y }, 18.0f, 1.0f, THEME_COLOR_MAIN); y += 28.0f;
+            TutLine(font, x + 16, y, "Fase 1:", GOLD, "tiros duplos em ritmo normal."); y += 26.0f;
+            TutLine(font, x + 16, y, "Fase 2:", GOLD, "mais rapido e INVOCA lacaios."); y += 26.0f;
+            TutLine(font, x + 16, y, "Fase 3:", GOLD, "enfurecido, dispara rajada em todas as direcoes."); y += 32.0f;
+            DrawTextEx(font, "Prepare-se: suba de nivel antes, leve pocoes e guarde Granada + BFG.", (Vector2){ x, y }, 16.0f, 1.0f, (Color){ 120, 220, 140, 255 });
+            break;
+
+        case 4: // SKINS
+            DrawTextEx(font, "Abra 'SKINS' no menu para escolher (preview ao vivo).", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 34.0f;
+            DrawTextEx(font, "SKINS DO ANTICORPO:", (Vector2){ x, y }, 18.0f, 1.0f, THEME_COLOR_MAIN); y += 28.0f;
+            TutLine(font, x + 16, y, "PADRAO", YELLOW, "cavaleiro imune classico."); y += 26.0f;
+            TutLine(font, x + 16, y, "MEDICA", YELLOW, "jaleco branco com cruz vermelha."); y += 26.0f;
+            TutLine(font, x + 16, y, "INFECTADA", YELLOW, "armadura roxa corrompida."); y += 34.0f;
+            DrawTextEx(font, "SKIN DA ARMA muda a cor dos disparos (Padrao, Plasma, Toxica).", (Vector2){ x, y }, 16.0f, 1.0f, Fade(WHITE, 0.8f)); y += 26.0f;
+            DrawTextEx(font, "As skins sao visuais e nao alteram o balanceamento.", (Vector2){ x, y }, 15.0f, 1.0f, Fade(GRAY, 0.9f));
+            break;
+
+        case 5: // XP / UPGRADES
+            DrawTextEx(font, "PROGRESSAO DE RPG", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 32.0f;
+            TutLine(font, x, y, "XP:", GOLD, "derrotar patogenos enche a barra roxa de XP."); y += 28.0f;
+            TutLine(font, x, y, "NIVEL:", GOLD, "ao subir, ganha +Vida, +Dano, +Velocidade e cura total."); y += 28.0f;
+            TutLine(font, x, y, "ARMAS:", GOLD, "Fuzil (Nv2), Granada (Nv3) e BFG (Nv4) desbloqueiam por nivel."); y += 28.0f;
+            DrawTextEx(font, "PONTOS DO SUS", (Vector2){ x, y }, 20.0f, 1.0f, THEME_COLOR_MAIN); y += 28.0f;
+            TutLine(font, x, y, "QUIZ:", GOLD, "acertar o quiz entre ondas da +50 Pontos do SUS."); y += 26.0f;
+            TutLine(font, x, y, "LOJA:", GOLD, "gaste os pontos em +Vida Max, +Velocidade ou +Dano."); y += 26.0f;
+            DrawTextEx(font, "A tela de Melhorias do SUS aparece automaticamente entre as ondas.", (Vector2){ x, y }, 15.0f, 1.0f, Fade(WHITE, 0.8f));
+            break;
+
+        default: // HORDAS
+            DrawTextEx(font, "SISTEMA DE HORDAS", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 32.0f;
+            DrawTextEx(font, "Sao 5 ondas, cada uma mais dificil: mais inimigos e mais fortes.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
+            DrawTextEx(font, "Elimine todos os patogenos da onda para avancar.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
+            DrawTextEx(font, "Entre as ondas: QUIZ educativo + tela de Melhorias do SUS.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 32.0f;
+            TutLine(font, x, y, "ONDA 5:", (Color){ 255, 90, 90, 255 }, "batalha de CHEFE garantida (veja a aba CHEFE)."); y += 30.0f;
+            DrawTextEx(font, "Um banner no topo avisa cada nova horda e a chegada do chefe.", (Vector2){ x, y }, 15.0f, 1.0f, (Color){ 120, 220, 140, 255 });
+            break;
+    }
+}
+
 void DrawTelaControles(GameState *game, Font font)
 {
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
                            (Color){ 6, 14, 10, 255 }, (Color){ 10, 22, 16, 255 });
 
-    DrawTextEx(font, "CONTROLES & REGRAS", (Vector2){ 430, 60 }, 42.0f, 1.5f, THEME_COLOR_TEXT);
+    DrawTextEx(font, "TUTORIAL", (Vector2){ SCREEN_WIDTH / 2.0f - MeasureTextEx(font, "TUTORIAL", 40.0f, 1.5f).x / 2.0f, 48.0f }, 40.0f, 1.5f, THEME_COLOR_TEXT);
 
-    // Painel de Instruções centralizado
-    DrawRectangleRounded((Rectangle){ 240, 140, 800, 400 }, 0.05f, 6, Fade(BLACK, 0.45f));
-    DrawRectangleRoundedLines((Rectangle){ 240, 140, 800, 400 }, 0.05f, 6, THEME_COLOR_BORDER);
+    // Abas
+    for (int i = 0; i < TUT_TAB_COUNT; i++)
+    {
+        Rectangle tr = TutTabRect(i);
+        bool active = (g_tutTab == i);
+        bool hover = CheckCollisionPointRec(g_virtualMouse, tr);
+        DrawRectangleRounded(tr, 0.25f, 6, active ? Fade(THEME_COLOR_MAIN, 0.22f) : Fade((Color){ 12, 14, 22, 255 }, 0.85f));
+        DrawRectangleRoundedLines(tr, 0.25f, 6, active ? THEME_COLOR_MAIN : (hover ? YELLOW : THEME_COLOR_BORDER));
+        Vector2 nSz = MeasureTextEx(font, g_tutTabNames[i], 14.0f, 1.0f);
+        DrawTextEx(font, g_tutTabNames[i], (Vector2){ tr.x + tr.width / 2.0f - nSz.x / 2.0f, tr.y + 12.0f }, 14.0f, 1.0f,
+                   active ? THEME_COLOR_MAIN : Fade(WHITE, 0.85f));
+    }
 
-    int startY = 170;
-    int spacing = 38;
-    
-    // Atalhos
-    DrawTextEx(font, "W, A, S, D ou SETAS", (Vector2){ 280, (float)startY }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Mova o Anticorpo pelo campo de batalha", (Vector2){ 480, (float)startY }, 22.0f, 1.0f, WHITE);
-    
-    DrawTextEx(font, "ESPAÇO ou CLIQUE ESQUERDO", (Vector2){ 280, (float)(startY + spacing) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Ataque (acerta ao redor com a Lâmina)", (Vector2){ 580, (float)(startY + spacing) }, 22.0f, 1.0f, WHITE);
+    // Painel de conteúdo
+    Rectangle panel = { 120, 176, 1040, 432 };
+    DrawRectangleRounded(panel, 0.04f, 6, Fade(BLACK, 0.5f));
+    DrawRectangleRoundedLines(panel, 0.04f, 6, THEME_COLOR_BORDER);
+    DrawTutContent(game, font, panel);
 
-    DrawTextEx(font, "TECLAS 1, 2, 3 e 4", (Vector2){ 280, (float)(startY + spacing * 2) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Troca de arma (Lâmina, Fuzil, Granada, BFG)", (Vector2){ 580, (float)(startY + spacing * 2) }, 22.0f, 1.0f, WHITE);
-
-    DrawTextEx(font, "E", (Vector2){ 280, (float)(startY + spacing * 3) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Usa uma Poção de Vida (cura 50%)", (Vector2){ 580, (float)(startY + spacing * 3) }, 22.0f, 1.0f, WHITE);
-
-    DrawTextEx(font, "ESC", (Vector2){ 280, (float)(startY + spacing * 4) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Pausar / Voltar ao Menu", (Vector2){ 580, (float)(startY + spacing * 4) }, 22.0f, 1.0f, WHITE);
-
-    DrawTextEx(font, "F5 / F9", (Vector2){ 280, (float)(startY + spacing * 5) }, 22.0f, 1.0f, YELLOW);
-    DrawTextEx(font, "- Quicksave / Quickload (Slot 1)", (Vector2){ 580, (float)(startY + spacing * 5) }, 22.0f, 1.0f, WHITE);
-
-    // Legenda de Itens
-    DrawTextEx(font, "POWER-UPS (BRILHANTES NO MAPA):", (Vector2){ 280, (float)(startY + spacing * 6.3f) }, 20.0f, 1.0f, GOLD);
-    DrawTextEx(font, "Cura (+35 HP) | Velocidade (+60%) | Escudo (invencível) | Dano Duplo (x2)", (Vector2){ 280, (float)(startY + spacing * 7.2f) }, 18.0f, 1.0f, LIGHTGRAY);
+    DrawTextEx(font, "Use as ABAS (clique) ou SETAS <- ->   |   ESC para voltar",
+               (Vector2){ 120, 620 }, 15.0f, 1.0f, Fade(WHITE, 0.6f));
 
     // Botão voltar
     DrawButton(controlsButton, font, true);
+}
+
+// Atualização da tela de tutorial: navegação de abas + voltar
+void UpdateTelaTutorial(GameState *game, Vector2 mouse)
+{
+    for (int i = 0; i < TUT_TAB_COUNT; i++)
+    {
+        if (CheckCollisionPointRec(mouse, TutTabRect(i)) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            g_tutTab = i;
+    }
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) g_tutTab = (g_tutTab + 1) % TUT_TAB_COUNT;
+    if (IsKeyPressed(KEY_LEFT)  || IsKeyPressed(KEY_A)) g_tutTab = (g_tutTab + TUT_TAB_COUNT - 1) % TUT_TAB_COUNT;
+
+    UpdateBtnState(&controlsButton, mouse);
+    if (controlsButton.clicked || IsKeyPressed(KEY_ESCAPE))
+        game->currentScreen = SCREEN_MENU;
 }
 
 
@@ -838,25 +1042,31 @@ void DrawTelaLoading(GameState *game, Font font)
         DrawRectangleRounded((Rectangle){ cx - 160.0f, cy + gap + 4.0f, 320.0f, 22.0f }, 0.5f, 6, wallCol);
         DrawRectangleLinesEx((Rectangle){ cx - 160.0f, cy - gap - 26.0f, 320.0f, gap * 2.0f + 52.0f }, 2.0f, Fade(THEME_COLOR_MAIN, 0.35f));
 
-        // Herói sendo comprimido (squash crescente)
-        float squashY = 1.0f - ease * 0.62f;
-        float squashX = 1.0f + ease * 0.85f;
-        float heroR = 26.0f;
-        Color heroCol = (Color){ 235, 240, 250, 255 };
-        DrawEllipse((int)cx, (int)cy, heroR * squashX, heroR * squashY, heroCol);
-        DrawEllipseLines((int)cx, (int)cy, heroR * squashX, heroR * squashY, THEME_COLOR_MAIN);
-        // Visor do elmo
-        DrawRectangle((int)(cx - 6.0f * squashX), (int)(cy - 3.0f * squashY), (int)(12.0f * squashX), (int)(5.0f * squashY), BLACK);
+        // BUGFIX VISUAL: antes o "heroi" era uma elipse com squash extremo
+        // (1.85 x 0.38), parecendo uma figura estranha esmagada. Agora e uma
+        // CAPSULA/anticorpo que permanece arredondada, apenas pulsando e
+        // descendo suavemente pela agulha — leitura limpa e tematica.
+        float t = (float)GetTime();
+        float pulse = 1.0f + sinf(t * 8.0f) * 0.05f;          // pulsacao sutil
+        float capR = (26.0f - ease * 6.0f) * pulse;            // encolhe pouco ao injetar
+        Color capCol = (Color){ 235, 245, 255, 255 };
+        // Halo de energia
+        DrawCircleV((Vector2){ cx, cy }, capR + 8.0f, Fade(THEME_COLOR_MAIN, 0.18f));
+        // Corpo arredondado do anticorpo
+        DrawCircleV((Vector2){ cx, cy }, capR, capCol);
+        DrawCircleLines((int)cx, (int)cy, capR, THEME_COLOR_MAIN);
+        // Marca em "Y" do anticorpo
+        DrawLineEx((Vector2){ cx, cy + capR * 0.2f }, (Vector2){ cx, cy + capR * 0.6f }, 3.0f, Fade(THEME_COLOR_MAIN, 0.8f));
+        DrawLineEx((Vector2){ cx, cy + capR * 0.2f }, (Vector2){ cx - capR * 0.45f, cy - capR * 0.4f }, 3.0f, Fade(THEME_COLOR_MAIN, 0.8f));
+        DrawLineEx((Vector2){ cx, cy + capR * 0.2f }, (Vector2){ cx + capR * 0.45f, cy - capR * 0.4f }, 3.0f, Fade(THEME_COLOR_MAIN, 0.8f));
 
-        // Linhas de pressão / gotículas escapando conforme aperta
-        if (ease > 0.25f)
+        // Gotículas de energia descendo pela agulha (sentido da injecao)
+        if (ease > 0.2f)
         {
-            float t = (float)GetTime();
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 5; i++)
             {
-                float px = cx + sinf(t * 6.0f + i * 1.7f) * (40.0f + i * 18.0f);
-                float py = cy + ((i % 2 == 0) ? -(gap + 34.0f) : (gap + 30.0f));
-                DrawCircleV((Vector2){ px, py }, 2.0f + (i % 3), Fade((Color){ 0, 200, 255, 255 }, 0.5f * ease));
+                float dy = fmodf(t * 120.0f + i * 40.0f, 120.0f);
+                DrawCircleV((Vector2){ cx, cy + gap + 10.0f + dy }, 2.5f, Fade((Color){ 0, 200, 255, 255 }, 0.5f * ease));
             }
         }
     }

@@ -51,19 +51,22 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
             int i = collIndices[k];
             if (!game->enemies[i].active || game->enemies[i].state == DEATH) continue;
 
-            // Acertou! Causa dano
+            // Acertou! Causa dano (com proteções anti-melt para chefes/escudo)
             int danoTotal = 15 + danoBase;
-            game->enemies[i].hp -= danoTotal;
+            int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[i], danoTotal, false);
+            if (applied <= 0) continue; // bloqueado pelo escudo do chefe
             PlaySound(g_assets.sfxEnemyHurt);
-            SpawnDamageText(game, game->enemies[i].position, danoTotal, skinSec);
+            SpawnDamageText(game, game->enemies[i].position, applied, skinSec);
 
-            // Empurrão (Knockback) na direção oposta ao jogador
+            // Empurrão (Knockback) na direção oposta ao jogador (chefes resistem)
+            float knockMag = (game->enemies[i].tier == TIER_3_BOSS) ? 8.0f
+                           : (game->enemies[i].tier == TIER_MINIBOSS) ? 22.0f : 55.0f;
             Vector2 knockbackDir = Vector2Subtract(game->enemies[i].position, game->player.position);
             if (knockbackDir.x == 0.0f && knockbackDir.y == 0.0f) knockbackDir = (Vector2){ 1.0f, 0.0f };
             knockbackDir = Vector2Normalize(knockbackDir);
 
             // Empurra o inimigo a uma distância segura
-            game->enemies[i].position = Vector2Add(game->enemies[i].position, Vector2Scale(knockbackDir, 55.0f));
+            game->enemies[i].position = Vector2Add(game->enemies[i].position, Vector2Scale(knockbackDir, knockMag));
 
             // Partículas de sangue/dano no local do inimigo
             Color hitColor = (game->enemies[i].type == 2) ? MAROON : RED;
@@ -88,23 +91,10 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                 }
 
                 // --- Lógica normal de jogo (fora do tutorial) ---
-                if (game->enemiesRemaining > 0) game->enemiesRemaining--;
-                game->totalEnemiesKilled++;
-
-                // Aumenta score
-                int xpGanho = 20 * (game->enemies[i].type + 1);
-                int scoreGanho = 100 * (game->enemies[i].type + 1);
-                game->player.score += scoreGanho;
-                game->player.xp += xpGanho;
-
-                // Chance de drop de PowerUp (25%)
-                if (GetRandomValue(0, 100) < 25)
-                {
-                    SpawnPowerUpAt(game, game->enemies[i].position, -1);
-                }
-
-                // A conclusão da onda é verificada de forma centralizada
-                // no fim do UpdateGameplay (vale para todas as armas).
+                // Recompensa centralizada (XP/score/contador/drop) idêntica à das
+                // demais armas. A conclusão da onda é verificada no fim do
+                // UpdateGameplay (vale para todas as armas).
+                RegisterEnemyKill(game, &game->enemies[i]);
             }
             else
             {
@@ -113,6 +103,8 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                 game->enemies[i].cooldownTimer = 0.25f; // flash/stun de 0.25s
             }
         }
+        // O golpe em área também destroi os Núcleos de Infecção do escudo do chefe
+        HitInfectionCores(game, game->player.position, game->slashAnimRadius, 15 + danoBase);
     }
     else if (wpn == 2) {
         game->player.attackCooldown = 0.15f;
@@ -131,4 +123,41 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
         game->screenShake = 0.8f;
         SpawnProjectile(game, game->player.position, worldMousePos, PROJ_PLAYER_BFG, 100 + danoBase);
     }
+}
+
+// ============================================================================
+// DADOS DAS ARMAS (fonte única usada por HUD, Arsenal e Tutorial)
+// ============================================================================
+WeaponInfo GetWeaponInfo(int weapon)
+{
+    switch (weapon)
+    {
+        case 2: return (WeaponInfo){
+            "Fuzil Celula-T", "Disparos rapidos em linha reta.",
+            "Cadencia altissima", "Pressao constante a distancia; otimo contra enxames.",
+            8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 200, 255, 255 } };
+        case 3: return (WeaponInfo){
+            "Granada Macrofago", "Explosao em area que libera enzimas.",
+            "Dano em area + VENENO", "Controle de grupos; veneno derrete alvos tanques.",
+            40, "Lenta", 1.5f, 3, 3, (Color){ 255, 140, 40, 255 } };
+        case 4: return (WeaponInfo){
+            "Vacina BFG", "Projetil pesado que ATRAVESSA inimigos.",
+            "Perfurante (atravessa todos)", "Limpa fileiras inteiras; guarde para hordas e chefe.",
+            100, "Muito lenta", 5.0f, 4, 4, (Color){ 120, 255, 160, 255 } };
+        case 1:
+        default: return (WeaponInfo){
+            "Lamina Imunologica", "Golpe corpo a corpo em 360 graus.",
+            "Acerta tudo ao redor + empurrao", "Defesa pessoal; segura inimigos colados em voce.",
+            15, "Rapida", 0.22f, 1, 1, (Color){ 0, 229, 255, 255 } };
+    }
+}
+
+int WeaponUnlockLevel(int weapon)
+{
+    return GetWeaponInfo(weapon).unlockLevel;
+}
+
+const char *WeaponName(int weapon)
+{
+    return GetWeaponInfo(weapon).name;
 }

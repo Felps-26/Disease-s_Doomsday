@@ -26,6 +26,12 @@ void SpawnParticleExplosion(GameState *game, Vector2 pos, Color col, int count, 
 // Spawna um power-up em uma posição específica (por exemplo, após derrotar um inimigo)
 void SpawnPowerUpAt(GameState *game, Vector2 position, int type);
 
+// Contabiliza a morte de um inimigo de forma centralizada: XP, score, contadores
+// de onda e chance de drop de power-up. Usado por TODAS as armas (lâmina, fuzil,
+// granada, BFG, veneno) para manter recompensas consistentes.
+// O chamador é responsável por colocar o inimigo em estado DEATH.
+void RegisterEnemyKill(GameState *game, Enemy *enemy);
+
 // Salva o progresso do jogo atual em um slot específico (1, 2 ou 3)
 void SalvarJogoSlot(GameState *game, int slot);
 
@@ -60,6 +66,33 @@ void SpawnDamageText(GameState *game, Vector2 pos, int value, Color color);
 // Atualiza (sobe/some) os números de dano ativos
 void UpdateDamageTexts(GameState *game, float delta);
 
+// ---- Banner/Toast de feedback (onda, chefe, troca/desbloqueio de arma) ----
+void ShowBanner(GameState *game, const char *msg, const char *sub, Color color, float duration);
+void UpdateBanner(GameState *game, float delta);
+
+// ---- Armas / progressão ----
+// Informações de uma arma para HUD, Arsenal e Tutorial (fonte única da verdade)
+typedef struct WeaponInfo
+{
+    const char *name;     // Nome da arma
+    const char *desc;     // Descrição curta
+    const char *special;  // Efeito especial
+    const char *playstyle;// Como muda a jogabilidade
+    int         baseDamage; // Dano base (somado aos atributos do jogador)
+    const char *speedTxt; // Velocidade/cadência (qualitativo)
+    float       cooldown; // Cooldown em segundos
+    int         unlockLevel; // Nível mínimo para usar
+    int         key;      // Tecla (1..4)
+    Color       color;    // Cor representativa
+} WeaponInfo;
+
+// Retorna as informações da arma (weapon = 1..4). Fora do intervalo => Lâmina.
+WeaponInfo GetWeaponInfo(int weapon);
+// Nível mínimo do jogador para usar a arma (1=Lâmina ... 4=BFG)
+int  WeaponUnlockLevel(int weapon);
+// Nome curto da arma (1..4)
+const char *WeaponName(int weapon);
+
 // ---- Skins ----
 // Cores da skin de arma atual (primária = projétil/lâmina, secundária = brilho/trail)
 Color WeaponSkinPrimary(int weaponSkinId);
@@ -68,8 +101,26 @@ Color WeaponSkinSecondary(int weaponSkinId);
 const char *PlayerSkinName(int skinId);
 const char *WeaponSkinName(int weaponSkinId);
 
-// ---- Configuração persistente (volume + skins) ----
+// ---- Configuração persistente (volume + skins + dificuldade) ----
 void LoadPlayerConfig(GameState *game);
 void SavePlayerConfig(GameState *game);
+
+// ---- Dificuldade ----
+// Retorna a configuração para uma dificuldade (EASY/MEDIUM/HARD)
+DifficultyConfig MakeDifficultyConfig(int difficulty);
+// Aplica game->difficulty em game->diff (recalcula os multiplicadores)
+void ApplyDifficulty(GameState *game);
+// Nome curto da dificuldade
+const char *DifficultyName(int difficulty);
+
+// ---- Núcleos de Infecção / escudo do chefe (fase 3) ----
+int  CoresAlive(GameState *game);
+void SpawnInfectionCores(GameState *game, Vector2 center);
+// Aplica dano numa área aos núcleos; retorna true se algum núcleo foi atingido.
+bool HitInfectionCores(GameState *game, Vector2 pos, float radius, int dmg);
+
+// ---- Dano do jogador a um inimigo (i-frames de chefe, limite por golpe,
+//      resistência à BFG e escudo do chefe). Retorna o dano efetivo (0=bloqueado).
+int  ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG);
 
 #endif // GAMEPLAY_H

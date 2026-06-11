@@ -29,9 +29,11 @@ void LoadGameAssets(void)
     g_assets.musicB = LoadMusicStream("Assets/Musica/DeepVoid.mp3");
     g_assets.sfxAttack = LoadSound("Assets/Musica/Ataque_Pulse.mp3");
     g_assets.sfxHurt = LoadSound("Assets/Musica/Dano_Heroi.mp3");
-    // mantendo pickup/death apontando pros mesmos (mesmo q falhem ou se existirem dps)
-    g_assets.sfxPickup = LoadSound("Assets/SFX/pickup.wav");
-    g_assets.sfxDeath = LoadSound("Assets/SFX/death.wav");
+    // BUGFIX: Assets/SFX/*.wav nunca existiram, deixando coleta de itens e morte
+    // sem nenhum retorno sonoro. Reaproveitamos SFX existentes para restaurar o
+    // feedback (idealmente substituir por sons dedicados de pickup/morte).
+    g_assets.sfxPickup = LoadSound("Assets/Musica/Ataque_Pulse.mp3");
+    g_assets.sfxDeath = LoadSound("Assets/Musica/Dano_Heroi.mp3");
     
     // Novos efeitos de inimigos
     g_assets.sfxEnemyHurt = LoadSound("Assets/Musica/Dano_enemy.mp3");
