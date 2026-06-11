@@ -101,8 +101,26 @@ Color WeaponSkinSecondary(int weaponSkinId);
 const char *PlayerSkinName(int skinId);
 const char *WeaponSkinName(int weaponSkinId);
 
-// ---- Configuração persistente (volume + skins) ----
+// ---- Configuração persistente (volume + skins + dificuldade) ----
 void LoadPlayerConfig(GameState *game);
 void SavePlayerConfig(GameState *game);
+
+// ---- Dificuldade ----
+// Retorna a configuração para uma dificuldade (EASY/MEDIUM/HARD)
+DifficultyConfig MakeDifficultyConfig(int difficulty);
+// Aplica game->difficulty em game->diff (recalcula os multiplicadores)
+void ApplyDifficulty(GameState *game);
+// Nome curto da dificuldade
+const char *DifficultyName(int difficulty);
+
+// ---- Núcleos de Infecção / escudo do chefe (fase 3) ----
+int  CoresAlive(GameState *game);
+void SpawnInfectionCores(GameState *game, Vector2 center);
+// Aplica dano numa área aos núcleos; retorna true se algum núcleo foi atingido.
+bool HitInfectionCores(GameState *game, Vector2 pos, float radius, int dmg);
+
+// ---- Dano do jogador a um inimigo (i-frames de chefe, limite por golpe,
+//      resistência à BFG e escudo do chefe). Retorna o dano efetivo (0=bloqueado).
+int  ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG);
 
 #endif // GAMEPLAY_H

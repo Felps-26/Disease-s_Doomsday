@@ -6,8 +6,9 @@
 #include <math.h>
 #include <string.h>
 
-extern UIButton menuButtons[7];
+extern UIButton menuButtons[8];
 extern UIButton pauseButtons[5];
+extern Rectangle MenuDifficultyRect(int i);
 extern UIButton controlsButton;
 extern UIButton gameOverButtons[2];
 extern UIButton victoryButtons[2];
@@ -99,7 +100,7 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
     // Evita hover e clique acidentais nos botões do menu durante a digitação
     if (!game->nameInputActive)
     {
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < 8; i++)
         {
             if (i == 1 && !anySaveExists)
             {
@@ -111,17 +112,28 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
                 UpdateBtnState(&menuButtons[i], mouse);
             }
         }
+
+        // Seletor de dificuldade (3 segmentos abaixo do painel)
+        for (int i = 0; i < 3; i++)
+        {
+            if (CheckCollisionPointRec(mouse, MenuDifficultyRect(i)) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            {
+                game->difficulty = i;
+                ApplyDifficulty(game);
+                SavePlayerConfig(game);
+            }
+        }
     }
     else
     {
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < 8; i++)
         {
             menuButtons[i].hover = false;
             menuButtons[i].clicked = false;
         }
     }
 
-    // Ações (índices: 0 Jogar, 1 Carregar, 2 Arsenal, 3 Skins, 4 Tutorial, 5 Config, 6 Sair)
+    // Ações (0 Jogar,1 Carregar,2 Arsenal,3 Skins,4 Tutorial,5 Config,6 Admin,7 Sair)
     if (menuButtons[0].clicked) // JOGAR
     {
         InitGame(game);
@@ -154,8 +166,12 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
     {
         game->currentScreen = SCREEN_SETTINGS;
     }
+    else if (menuButtons[6].clicked) // MODO ADMIN
+    {
+        game->currentScreen = SCREEN_ADMIN;
+    }
 
-    return menuButtons[6].clicked; // Retorna true se clicou em SAIR
+    return menuButtons[7].clicked; // Retorna true se clicou em SAIR
 }
 
 void UpdateButtonsControles(GameState *game, Vector2 mouse)

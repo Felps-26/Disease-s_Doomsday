@@ -183,28 +183,35 @@ const char *WeaponSkinName(int weaponSkinId)
 void LoadPlayerConfig(GameState *game)
 {
     FILE *f = fopen("Saves/config.txt", "r");
-    if (f == NULL) return;
-
-    float vol = 1.0f;
-    int skin = 0, wskin = 0;
-    if (fscanf(f, "%f %d %d", &vol, &skin, &wskin) == 3)
+    if (f != NULL)
     {
-        if (vol < 0.0f) vol = 0.0f;
-        if (vol > 1.0f) vol = 1.0f;
-        if (skin < 0 || skin >= SKIN_COUNT) skin = 0;
-        if (wskin < 0 || wskin >= WEAPON_SKIN_COUNT) wskin = 0;
-        game->masterVolume = vol;
-        game->player.skinId = skin;
-        game->player.weaponSkinId = wskin;
+        float vol = 1.0f;
+        int skin = 0, wskin = 0, diff = DIFFICULTY_MEDIUM;
+        int got = fscanf(f, "%f %d %d %d", &vol, &skin, &wskin, &diff);
+        if (got >= 3)
+        {
+            if (vol < 0.0f) vol = 0.0f;
+            if (vol > 1.0f) vol = 1.0f;
+            if (skin < 0 || skin >= SKIN_COUNT) skin = 0;
+            if (wskin < 0 || wskin >= WEAPON_SKIN_COUNT) wskin = 0;
+            game->masterVolume = vol;
+            game->player.skinId = skin;
+            game->player.weaponSkinId = wskin;
+            if (got >= 4 && diff >= DIFFICULTY_EASY && diff <= DIFFICULTY_HARD)
+                game->difficulty = diff;
+        }
+        fclose(f);
     }
-    fclose(f);
+    // Sempre garante uma configuração de dificuldade válida (mesmo sem arquivo).
+    ApplyDifficulty(game);
 }
 
 void SavePlayerConfig(GameState *game)
 {
     FILE *f = fopen("Saves/config.txt", "w");
     if (f == NULL) return;
-    fprintf(f, "%f %d %d\n", game->masterVolume, game->player.skinId, game->player.weaponSkinId);
+    fprintf(f, "%f %d %d %d\n", game->masterVolume, game->player.skinId,
+            game->player.weaponSkinId, game->difficulty);
     fclose(f);
 }
 
@@ -240,11 +247,168 @@ void RegisterEnemyKill(GameState *game, Enemy *enemy)
     game->totalEnemiesKilled++;
     if (game->enemiesRemaining > 0) game->enemiesRemaining--;
 
-    // Chance de drop de power-up (25%) válida para qualquer arma
-    if (GetRandomValue(0, 100) < 25)
+    // Bônus de recompensa para mini chefes e chefe final
+    if (enemy->tier == TIER_MINIBOSS) { game->player.xp += 60; game->player.score += 300; }
+    else if (enemy->tier == TIER_3_BOSS) { game->player.xp += 200; game->player.score += 1500; }
+
+    // Chance de drop de power-up (25%) válida para qualquer arma; chefes sempre dropam
+    if (enemy->tier == TIER_MINIBOSS || enemy->tier == TIER_3_BOSS || GetRandomValue(0, 100) < 25)
     {
         SpawnPowerUpAt(game, enemy->position, -1);
     }
+}
+
+// ============================================================================
+// DIFICULDADE
+// ============================================================================
+DifficultyConfig MakeDifficultyConfig(int difficulty)
+{
+    DifficultyConfig d;
+    switch (difficulty)
+    {
+        case DIFFICULTY_EASY:
+            d.enemyHealthMul = 0.75f; d.enemyDamageMul = 0.70f; d.enemySpeedMul = 0.85f;
+            d.detectionRange = 380.0f; d.loseSightRange = 650.0f; d.reactionMul = 1.4f;
+            d.dodgeChance = 0.04f; d.flankAmount = 0.25f; d.retreatThreshold = 0.30f;
+            d.summonMul = 0.6f; d.bossAggroMul = 0.85f; d.aggroMemoryTime = 1.2f;
+            break;
+        case DIFFICULTY_HARD:
+            d.enemyHealthMul = 1.25f; d.enemyDamageMul = 1.25f; d.enemySpeedMul = 1.10f;
+            d.detectionRange = 650.0f; d.loseSightRange = 1200.0f; d.reactionMul = 0.7f;
+            d.dodgeChance = 0.40f; d.flankAmount = 0.85f; d.retreatThreshold = 0.20f;
+            d.summonMul = 1.4f; d.bossAggroMul = 1.25f; d.aggroMemoryTime = 4.0f;
+            break;
+        case DIFFICULTY_MEDIUM:
+        default:
+            d.enemyHealthMul = 1.0f; d.enemyDamageMul = 1.0f; d.enemySpeedMul = 1.0f;
+            d.detectionRange = 480.0f; d.loseSightRange = 900.0f; d.reactionMul = 1.0f;
+            d.dodgeChance = 0.18f; d.flankAmount = 0.55f; d.retreatThreshold = 0.25f;
+            d.summonMul = 1.0f; d.bossAggroMul = 1.0f; d.aggroMemoryTime = 2.2f;
+            break;
+    }
+    return d;
+}
+
+void ApplyDifficulty(GameState *game)
+{
+    if (game->difficulty < DIFFICULTY_EASY || game->difficulty > DIFFICULTY_HARD)
+        game->difficulty = DIFFICULTY_MEDIUM;
+    game->diff = MakeDifficultyConfig(game->difficulty);
+}
+
+const char *DifficultyName(int difficulty)
+{
+    switch (difficulty)
+    {
+        case DIFFICULTY_EASY: return "FACIL";
+        case DIFFICULTY_HARD: return "DIFICIL";
+        default:              return "MEDIO";
+    }
+}
+
+// ============================================================================
+// NÚCLEOS DE INFECÇÃO (escudo do chefe na fase 3)
+// ============================================================================
+int CoresAlive(GameState *game)
+{
+    int n = 0;
+    for (int i = 0; i < MAX_CORES; i++)
+        if (game->cores[i].active) n++;
+    return n;
+}
+
+// Cria os Núcleos de Infecção ao redor do chefe e ativa o escudo.
+void SpawnInfectionCores(GameState *game, Vector2 center)
+{
+    for (int i = 0; i < MAX_CORES; i++)
+    {
+        float ang = (float)i / (float)MAX_CORES * 2.0f * PI;
+        Vector2 p = { center.x + cosf(ang) * 360.0f, center.y + sinf(ang) * 360.0f };
+        if (p.x < 120.0f) p.x = 120.0f;
+        if (p.x > MAP_WIDTH - 120.0f) p.x = MAP_WIDTH - 120.0f;
+        if (p.y < 120.0f) p.y = 120.0f;
+        if (p.y > MAP_HEIGHT - 120.0f) p.y = MAP_HEIGHT - 120.0f;
+        game->cores[i].position = p;
+        game->cores[i].maxHp = 120 + game->wave * 20;
+        game->cores[i].hp = game->cores[i].maxHp;
+        game->cores[i].active = true;
+        game->cores[i].hitFlash = 0.0f;
+        game->cores[i].pulse = (float)i;
+        SpawnParticleExplosion(game, p, (Color){ 120, 230, 255, 255 }, 18, 60.0f, 200.0f, 4.0f, 0.7f);
+    }
+    game->bossShieldActive = true;
+    game->bossCoresSpawned = true;
+}
+
+bool HitInfectionCores(GameState *game, Vector2 pos, float radius, int dmg)
+{
+    bool hit = false;
+    for (int i = 0; i < MAX_CORES; i++)
+    {
+        if (!game->cores[i].active) continue;
+        float r = radius + 30.0f;
+        if (Vector2DistanceSqr(pos, game->cores[i].position) <= r * r)
+        {
+            game->cores[i].hp -= dmg;
+            game->cores[i].hitFlash = 0.18f;
+            SpawnParticleExplosion(game, game->cores[i].position, (Color){ 120, 230, 255, 255 }, 8, 50.0f, 150.0f, 3.0f, 0.4f);
+            hit = true;
+            if (game->cores[i].hp <= 0)
+            {
+                game->cores[i].active = false;
+                SpawnParticleExplosion(game, game->cores[i].position, (Color){ 200, 250, 255, 255 }, 26, 80.0f, 260.0f, 5.0f, 0.8f);
+                game->screenShake = 0.5f;
+            }
+        }
+    }
+    if (hit && CoresAlive(game) == 0 && game->bossShieldActive)
+    {
+        game->bossShieldActive = false;
+        ShowBanner(game, "ESCUDO DESTRUIDO!", "O chefe esta vulneravel — ataque agora!",
+                   (Color){ 120, 255, 160, 255 }, 3.0f);
+    }
+    return hit;
+}
+
+// Aplica dano de uma arma do jogador a um inimigo, com proteções anti-melt:
+// - chefe protegido pelo escudo (fase 3) não recebe dano;
+// - chefes/mini chefes têm i-frames contra a BFG perfurante (não derretem);
+// - resistência específica contra a BFG; limite máximo de dano por golpe.
+// Retorna o dano efetivamente aplicado (0 = bloqueado).
+int ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG)
+{
+    bool bossLike = (enemy->tier == TIER_3_BOSS || enemy->tier == TIER_MINIBOSS);
+
+    // Escudo do chefe final (fase 3): invulnerável enquanto houver núcleos.
+    if (enemy->tier == TIER_3_BOSS && game->bossShieldActive && CoresAlive(game) > 0)
+    {
+        if (GetRandomValue(0, 4) == 0)
+            SpawnParticle(game, enemy->position, (Vector2){ 0, -20 }, (Color){ 120, 230, 255, 255 }, 4.0f, 0.3f);
+        return 0;
+    }
+
+    if (bossLike)
+    {
+        // i-frames de acerto: impede que a BFG perfurante aplique dano todo frame.
+        if (isBFG && enemy->hitCooldown > 0.0f) return 0;
+
+        // Resistência à arma perfurante (BFG), que cresce nas ondas finais.
+        if (isBFG)
+        {
+            float resist = (enemy->tier == TIER_3_BOSS) ? 0.35f : 0.5f;
+            dmg = (int)(dmg * resist);
+            enemy->hitCooldown = 0.12f;
+        }
+
+        // Limite máximo de dano por golpe (evita morte instantânea por arma forte).
+        int cap = enemy->maxHp / 12;
+        if (cap < 25) cap = 25;
+        if (dmg > cap) dmg = cap;
+    }
+
+    if (dmg < 1) dmg = 1;
+    enemy->hp -= dmg;
+    return dmg;
 }
 
 // ============================================================================
@@ -252,19 +416,34 @@ void RegisterEnemyKill(GameState *game, Enemy *enemy)
 // ============================================================================
 void InitGame(GameState *game)
 {
-    // Preserva nome, volume e skins escolhidas pelo jogador
+    // Preserva nome, volume, skins, dificuldade e configuração do modo admin
     char tempName[16] = "";
     float tempVol = 1.0f;
     int tempSkin = 0, tempWSkin = 0;
+    int tempDiff = DIFFICULTY_MEDIUM;
+    bool tAdmin = false, tAdminApply = false;
+    int tAdmMaxHp = 0, tAdmDmg = 0, tAdmLevel = 0, tAdmSus = 0;
+    float tAdmSpeed = 0.0f;
     if (game != NULL)
     {
         snprintf(tempName, sizeof(tempName), "%s", game->player.name);
         tempVol = game->masterVolume;
         tempSkin = game->player.skinId;
         tempWSkin = game->player.weaponSkinId;
+        tempDiff = game->difficulty;
+        tAdmin = game->adminMode; tAdminApply = game->adminApply;
+        tAdmMaxHp = game->adminMaxHp; tAdmDmg = game->adminDamage;
+        tAdmLevel = game->adminLevel; tAdmSus = game->adminSus; tAdmSpeed = game->adminSpeed;
     }
 
     memset(game, 0, sizeof(GameState));
+
+    // Restaura dificuldade e modo admin
+    game->difficulty = tempDiff;
+    ApplyDifficulty(game);
+    game->adminMode = tAdmin; game->adminApply = tAdminApply;
+    game->adminMaxHp = tAdmMaxHp; game->adminDamage = tAdmDmg;
+    game->adminLevel = tAdmLevel; game->adminSus = tAdmSus; game->adminSpeed = tAdmSpeed;
 
     if (tempName[0] != '\0')
     {
@@ -323,7 +502,24 @@ void InitGame(GameState *game)
     // Limpa vetores
     for (int i = 0; i < MAX_ENEMIES; i++) game->enemies[i].active = false;
     for (int i = 0; i < MAX_POWERUPS; i++) game->powerUps[i].active = false;
+    for (int i = 0; i < MAX_CORES; i++) game->cores[i].active = false;
+    game->bossShieldActive = false;
+    game->bossCoresSpawned = false;
     InitParticlePool(game);
+
+    // MODO ADMIN: aplica os atributos configurados pelo jogador (se ativo).
+    if (game->adminMode && game->adminApply)
+    {
+        if (game->adminMaxHp > 0)   { game->player.maxHp = game->adminMaxHp; game->player.hp = game->adminMaxHp; }
+        if (game->adminDamage > 0)  game->player.attackPower = game->adminDamage;
+        if (game->adminSpeed > 0)   game->player.speed = game->adminSpeed;
+        if (game->adminLevel > 0)   game->player.level = game->adminLevel;
+        if (game->adminSus > 0)     game->player.susPoints = game->adminSus;
+        // Com nível alto via admin, libera as armas correspondentes.
+        game->maxWeaponUnlocked = 1;
+        for (int w = 2; w <= 4; w++)
+            if (game->player.level >= WeaponUnlockLevel(w)) game->maxWeaponUnlocked = w;
+    }
 
     // Inicia o Tutorial (Seringa de Vacina) em vez de ir diretamente à onda 1
     InitTutorial(game);
@@ -391,6 +587,13 @@ void UpdateTutorial(GameState *game, float delta)
     // ========================================================================
     if (dlg->active)
     {
+        // BUGFIX: durante um diálogo bloqueante o jogador deve PARAR imediatamente.
+        // Antes, se ele estava andando ao abrir o diálogo, a flag isMoving ficava
+        // true e o modelo continuava com a animação de caminhada parado no lugar.
+        game->player.isMoving = false;
+        game->player.squashX = Lerp(game->player.squashX, 1.0f, 12.0f * delta);
+        game->player.squashY = Lerp(game->player.squashY, 1.0f, 12.0f * delta);
+
         // Obtém o texto do diálogo para o passo e página atuais para calcular o comprimento total
         const char *l1, *l2, *l3;
         GetTutorialDialogText(game->tutorialStep, dlg->page, &l1, &l2, &l3);
@@ -844,6 +1047,38 @@ void UpdateGameplay(GameState *game, float delta)
     UpdateGrid(game);
     game->timeElapsed += delta;
 
+    // ------------------------------------------------------------------------
+    // MODO ADMIN: atalhos de teste (só funcionam com o modo admin ATIVO)
+    // ------------------------------------------------------------------------
+    if (game->adminMode)
+    {
+        // "." e "]" : mata todos os inimigos e conclui a fase (fluxo normal segue)
+        if (IsKeyPressed(KEY_PERIOD) || IsKeyPressed(KEY_RIGHT_BRACKET))
+        {
+            for (int i = 0; i < MAX_ENEMIES; i++) game->enemies[i].active = false;
+            for (int i = 0; i < MAX_CORES; i++) game->cores[i].active = false;
+            game->bossShieldActive = false;
+            game->bossCoresSpawned = false;
+            game->enemiesRemaining = 0;
+            ShowBanner(game, "[ADMIN] FASE LIMPA", "Avancando para o proximo passo...",
+                       (Color){ 255, 210, 60, 255 }, 1.2f);
+        }
+        if (IsKeyPressed(KEY_LEFT_BRACKET) && game->wave > 1) game->wave--; // reduz wave
+        if (IsKeyPressed(KEY_H)) game->player.hp = game->player.maxHp;      // cura total
+        if (IsKeyPressed(KEY_L)) game->player.xp = game->player.xpNeeded;   // sobe de nível
+        if (IsKeyPressed(KEY_P)) game->player.susPoints += 50;              // +SUS
+        if (IsKeyPressed(KEY_K)) // mata só comuns, mantém chefe/mini chefe
+        {
+            for (int i = 0; i < MAX_ENEMIES; i++)
+                if (game->enemies[i].active && game->enemies[i].tier != TIER_3_BOSS &&
+                    game->enemies[i].tier != TIER_MINIBOSS)
+                {
+                    game->enemies[i].active = false;
+                    if (game->enemiesRemaining > 0) game->enemiesRemaining--;
+                }
+        }
+    }
+
     // Decaimento do screen shake
     if (game->screenShake > 0.0f)
     {
@@ -1079,7 +1314,65 @@ void UpdateGameplay(GameState *game, float delta)
             continue;
         }
         float distSqrToPlayer = Vector2DistanceSqr(game->player.position, enemy->position);
-        
+
+        // --------------------------------------------------------------------
+        // PERCEPÇÃO (dificuldade): detecta o jogador por distância e guarda a
+        // última posição conhecida, perseguindo-a por um tempo mesmo sem ver.
+        // --------------------------------------------------------------------
+        float detRange = game->diff.detectionRange;
+        if (detRange <= 1.0f) detRange = 480.0f; // segurança
+        bool seesPlayer = (distSqrToPlayer < detRange * detRange);
+        if (seesPlayer)
+        {
+            enemy->lastKnownPlayerPos = game->player.position;
+            enemy->aggroMemory = game->diff.aggroMemoryTime;
+        }
+        else if (enemy->aggroMemory > 0.0f)
+        {
+            enemy->aggroMemory -= delta;
+        }
+        // Alvo de perseguição: o jogador (se visível) ou a última posição conhecida.
+        Vector2 chaseTarget = seesPlayer ? game->player.position : enemy->lastKnownPlayerPos;
+
+        // --------------------------------------------------------------------
+        // ESQUIVA DE PROJÉTEIS (médio/difícil): dash lateral curto se um projétil
+        // do jogador estiver vindo na direção do inimigo. Tanques esquivam pouco;
+        // rápidos esquivam melhor; chefe não esquiva (usa escudo/resistência).
+        // --------------------------------------------------------------------
+        if (enemy->dodgeCooldown > 0.0f) enemy->dodgeCooldown -= delta;
+        if (enemy->tier != TIER_3_BOSS && enemy->dodgeCooldown <= 0.0f &&
+            game->diff.dodgeChance > 0.0f && enemy->state != DEATH)
+        {
+            float chance = game->diff.dodgeChance;
+            if (enemy->type == 2) chance *= 0.30f;              // tanque esquiva pouco
+            if (enemy->type == 1 || enemy->type == 3) chance *= 1.30f; // rápidos esquivam melhor
+            if (enemy->tier == TIER_MINIBOSS) chance *= 0.40f;  // mini chefe esquiva pouco
+            for (int p = 0; p < MAX_PROJECTILES; p++)
+            {
+                if (!game->projectiles[p].active || !game->projectiles[p].isPlayerProjectile) continue;
+                Vector2 toEnemy = Vector2Subtract(enemy->position, game->projectiles[p].position);
+                if (Vector2LengthSqr(toEnemy) > 170.0f * 170.0f) continue;
+                Vector2 pv = game->projectiles[p].velocity;
+                if (pv.x == 0.0f && pv.y == 0.0f) continue;
+                pv = Vector2Normalize(pv);
+                Vector2 te = Vector2Normalize(toEnemy);
+                if (Vector2DotProduct(pv, te) < 0.70f) continue; // não está vindo na direção
+                if (GetRandomValue(0, 100) < (int)(chance * 100.0f))
+                {
+                    Vector2 perp = { -pv.y, pv.x };
+                    float side = (Vector2DotProduct(perp, toEnemy) >= 0.0f) ? 1.0f : -1.0f;
+                    enemy->position = Vector2Add(enemy->position, Vector2Scale(perp, side * 52.0f));
+                    if (enemy->position.x < 30.0f) enemy->position.x = 30.0f;
+                    if (enemy->position.x > MAP_WIDTH - 30.0f) enemy->position.x = MAP_WIDTH - 30.0f;
+                    if (enemy->position.y < 30.0f) enemy->position.y = 30.0f;
+                    if (enemy->position.y > MAP_HEIGHT - 30.0f) enemy->position.y = MAP_HEIGHT - 30.0f;
+                    enemy->dodgeCooldown = 0.8f;
+                    SpawnParticleExplosion(game, enemy->position, (Color){ 200, 220, 255, 255 }, 5, 40.0f, 110.0f, 2.0f, 0.3f);
+                }
+                break;
+            }
+        }
+
         // Status updates
         if (enemy->poisonTimer > 0.0f && enemy->state != DEATH) {
             enemy->poisonTimer -= delta;
@@ -1104,60 +1397,92 @@ void UpdateGameplay(GameState *game, float delta)
             }
         }
         if (enemy->slowTimer > 0.0f) enemy->slowTimer -= delta;
+        if (enemy->hitCooldown > 0.0f) enemy->hitCooldown -= delta;
 
         // --------------------------------------------------------------------
-        // FASES DE COMPORTAMENTO DO CHEFE (muda conforme perde vida)
-        // Fase 0 (>66%): padrão. Fase 1 (33-66%): mais rápido, invoca lacaios.
-        // Fase 2 (<33%): enfurecido, rajada radial de projéteis.
+        // FASES DO CHEFE + INVOCAÇÃO DE LACAIOS (chefe e mini chefe)
+        // Fase 0 (>66%): padrão.  Fase 1 (33-66%): mais agressivo, invoca.
+        // Fase 2 (<33%): ESCUDO com Núcleos de Infecção + rajada radial.
         // --------------------------------------------------------------------
         int bossPhase = 0;
         float bossSpeedMult = 1.0f;
-        if (enemy->tier == TIER_3_BOSS && enemy->state != DEATH)
+        bool isBossUnit = (enemy->tier == TIER_3_BOSS);
+        bool isMiniBoss = (enemy->tier == TIER_MINIBOSS);
+
+        if (isBossUnit && enemy->state != DEATH)
         {
             float pct = (float)enemy->hp / enemy->maxHp;
             bossPhase = (pct > 0.66f) ? 0 : (pct > 0.33f) ? 1 : 2;
-            bossSpeedMult = 1.0f + (float)bossPhase * 0.35f;
+            bossSpeedMult = (1.0f + (float)bossPhase * 0.35f) * game->diff.bossAggroMul;
 
             if (bossPhase != enemy->aiPhase)
             {
                 enemy->aiPhase = bossPhase;
                 game->screenShake = 0.7f;
                 SpawnParticleExplosion(game, enemy->position, (Color){ 255, 60, 80, 255 }, 40, 120.0f, 320.0f, 5.0f, 0.8f);
-                const char *psub = (bossPhase == 1)
-                    ? "FASE 2: enfurecida e invocando lacaios!"
-                    : "FASE FINAL: rajada em todas as direcoes!";
-                ShowBanner(game, "O CHEFE MUDOU DE FASE!", psub, (Color){ 255, 80, 90, 255 }, 3.0f);
-            }
-
-            // Invoca lacaios (escolta) nas fases avançadas
-            if (bossPhase >= 1)
-            {
-                enemy->summonTimer -= delta;
-                if (enemy->summonTimer <= 0.0f)
+                if (bossPhase == 2)
                 {
-                    enemy->summonTimer = (bossPhase == 2) ? 6.0f : 9.0f;
-                    int spawned = 0;
-                    for (int k = 0; k < MAX_ENEMIES && spawned < 2; k++)
+                    if (!game->bossCoresSpawned) SpawnInfectionCores(game, enemy->position);
+                    ShowBanner(game, "FASE 3: ESCUDO ATIVO!",
+                               "Destrua os 4 NUCLEOS DE INFECCAO para baixar o escudo!",
+                               (Color){ 120, 230, 255, 255 }, 4.0f);
+                }
+                else
+                {
+                    ShowBanner(game, "O CHEFE MUDOU DE FASE!",
+                               "FASE 2: enfurecida e invocando mais lacaios!",
+                               (Color){ 255, 80, 90, 255 }, 3.0f);
+                }
+            }
+        }
+
+        // Invocação de lacaios: chefe (fase>=1) e mini chefe, com LIMITE e dificuldade
+        if ((isBossUnit && bossPhase >= 1) || isMiniBoss)
+        {
+            enemy->summonTimer -= delta;
+            if (enemy->summonTimer <= 0.0f)
+            {
+                float baseInterval = isBossUnit ? ((bossPhase == 2) ? 5.0f : 8.0f) : 11.0f;
+                float smul = (game->diff.summonMul <= 0.01f) ? 1.0f : game->diff.summonMul;
+                enemy->summonTimer = baseInterval / smul;
+
+                // Conta lacaios ativos para respeitar o teto (performance + justiça)
+                int minions = 0;
+                for (int k = 0; k < MAX_ENEMIES; k++)
+                    if (game->enemies[k].active && game->enemies[k].isEscort) minions++;
+
+                int want = isBossUnit ? ((bossPhase == 2) ? 3 : 2) : 1;
+                float hmul = (game->diff.enemyHealthMul <= 0.01f) ? 1.0f : game->diff.enemyHealthMul;
+                for (int s = 0; s < want && minions < MAX_BOSS_MINIONS; s++)
+                {
+                    for (int k = 0; k < MAX_ENEMIES; k++)
                     {
-                        if (!game->enemies[k].active)
+                        if (game->enemies[k].active) continue;
+                        Enemy *m = &game->enemies[k];
+                        // Lacaios podem nascer defendendo um Núcleo (se houver escudo)
+                        Vector2 origin = enemy->position;
+                        if (game->bossShieldActive && CoresAlive(game) > 0 && GetRandomValue(0, 1) == 0)
                         {
-                            Enemy *m = &game->enemies[k];
-                            float a = (float)GetRandomValue(0, 360) * DEG2RAD;
-                            m->position = (Vector2){ enemy->position.x + cosf(a) * 120.0f,
-                                                     enemy->position.y + sinf(a) * 120.0f };
-                            m->active = true; m->type = 1; m->tier = TIER_2;
-                            m->maxHp = 20 + game->wave * 5; m->hp = m->maxHp;
-                            m->speed = 220.0f; m->isRanged = true; m->state = IDLE;
-                            m->cooldownTimer = 1.5f; m->chargeTimer = 0.0f;
-                            m->patrolTarget = m->position; m->patrolTimer = 3.0f;
-                            m->poisonTimer = 0.0f; m->poisonAccum = 0.0f; m->slowTimer = 0.0f;
-                            m->isTutorialEnemy = false;
-                            m->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
-                            m->fleeTimer = 0.0f; m->isEscort = true; m->aiPhase = 0; m->summonTimer = 0.0f;
-                            game->enemiesRemaining++;
-                            SpawnParticleExplosion(game, m->position, DARKGRAY, 8, 40.0f, 120.0f, 2.0f, 0.4f);
-                            spawned++;
+                            for (int c = 0; c < MAX_CORES; c++)
+                                if (game->cores[c].active) { origin = game->cores[c].position; break; }
                         }
+                        float a = (float)GetRandomValue(0, 360) * DEG2RAD;
+                        m->position = (Vector2){ origin.x + cosf(a) * 110.0f, origin.y + sinf(a) * 110.0f };
+                        m->active = true; m->type = 1; m->tier = TIER_2;
+                        int mhp = (int)((20 + game->wave * 5) * hmul); if (mhp < 1) mhp = 1;
+                        m->maxHp = mhp; m->hp = mhp;
+                        m->speed = 220.0f; m->isRanged = true; m->state = IDLE;
+                        m->cooldownTimer = 1.5f; m->chargeTimer = 0.0f;
+                        m->patrolTarget = m->position; m->patrolTimer = 3.0f;
+                        m->poisonTimer = 0.0f; m->poisonAccum = 0.0f; m->slowTimer = 0.0f;
+                        m->isTutorialEnemy = false;
+                        m->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
+                        m->fleeTimer = 0.0f; m->isEscort = true; m->aiPhase = 0; m->summonTimer = 0.0f;
+                        m->hitCooldown = 0.0f; m->aggroMemory = 0.0f; m->dodgeCooldown = 0.0f;
+                        game->enemiesRemaining++;
+                        SpawnParticleExplosion(game, m->position, DARKGRAY, 8, 40.0f, 120.0f, 2.0f, 0.4f);
+                        minions++;
+                        break;
                     }
                 }
             }
@@ -1220,18 +1545,22 @@ void UpdateGameplay(GameState *game, float delta)
 
                 enemy->state = IDLE;
                 // Cadência: KPC atira mais devagar; o chefe acelera por fase.
+                // A dificuldade ajusta a reação (difícil reage mais rápido).
+                float react = game->diff.reactionMul;
                 if (enemy->tier == TIER_3_BOSS)
-                    enemy->cooldownTimer = 2.4f - (float)bossPhase * 0.7f; // 2.4 / 1.7 / 1.0
+                    enemy->cooldownTimer = (2.4f - (float)bossPhase * 0.7f) * react; // 2.4/1.7/1.0 * reação
+                else if (enemy->tier == TIER_MINIBOSS)
+                    enemy->cooldownTimer = 1.8f * react;
                 else
-                    enemy->cooldownTimer = (enemy->type == 2) ? 2.5f : 1.5f;
+                    enemy->cooldownTimer = ((enemy->type == 2) ? 2.5f : 1.5f) * react;
             }
         }
-        else if (enemy->isRanged && distSqrToPlayer < 400.0f * 400.0f && enemy->cooldownTimer <= 0.0f) {
+        else if (enemy->isRanged && seesPlayer && enemy->cooldownTimer <= 0.0f) {
             enemy->state = ATTACK;
-            enemy->chargeTimer = 0.6f;
+            enemy->chargeTimer = 0.6f * game->diff.reactionMul; // reage mais rápido no difícil
         }
-        else if (distSqrToPlayer < 450.0f * 450.0f) {
-            enemy->state = AGGRO;
+        else if (seesPlayer || enemy->aggroMemory > 0.0f) {
+            enemy->state = AGGRO; // persegue mesmo a última posição conhecida
         }
         else {
             enemy->state = IDLE;
@@ -1245,20 +1574,23 @@ void UpdateGameplay(GameState *game, float delta)
         // Ações de Movimentação
         if (enemy->state == AGGRO)
         {
-            Vector2 chaseDir = Vector2Subtract(game->player.position, enemy->position);
+            // Persegue o jogador OU a última posição conhecida (perception)
+            Vector2 chaseDir = Vector2Subtract(chaseTarget, enemy->position);
             float distSqrToPlayer = Vector2LengthSqr(chaseDir);
             chaseDir = Vector2Normalize(chaseDir);
-            
-            float currentSpeed = enemy->speed * (enemy->slowTimer > 0.0f ? 0.5f : 1.0f);
+
+            // Velocidade modulada pela dificuldade
+            float currentSpeed = enemy->speed * (enemy->slowTimer > 0.0f ? 0.5f : 1.0f) * game->diff.enemySpeedMul;
 
             if (!enemy->isRanged) {
                 // Inimigo melee (SARS type 0, Chagas type 3): cerco + fuga com pouca vida
                 float chaseMult = (enemy->tier == TIER_2) ? 1.25f : 1.05f;
                 Vector2 perp = { -chaseDir.y, chaseDir.x };
 
-                // Fuga: tipos frágeis recuam quando estão com pouca vida (mas não a escolta)
+                // Fuga: tipos frágeis recuam quando estão com pouca vida (mas não a escolta).
+                // O limiar depende da dificuldade (fácil recua antes, difícil só no limite).
                 bool frail = (enemy->type == 3 || enemy->type == 0);
-                if (frail && !enemy->isEscort && enemy->hp <= enemy->maxHp / 4)
+                if (frail && !enemy->isEscort && enemy->hp <= (int)(enemy->maxHp * game->diff.retreatThreshold))
                     enemy->fleeTimer = 1.0f;
 
                 if (enemy->fleeTimer > 0.0f) {
@@ -1268,9 +1600,9 @@ void UpdateGameplay(GameState *game, float delta)
                                                                Vector2Scale(perp, enemy->flankSign * 0.5f)));
                     enemy->position = Vector2Add(enemy->position, Vector2Scale(flee, currentSpeed * 1.1f * delta));
                 } else {
-                    // Cerco: aproxima-se por um ângulo lateral quando longe, e reto quando perto,
-                    // fazendo o grupo "abraçar"/cercar o jogador em vez de enfileirar.
-                    float flankAmount = (distSqrToPlayer > 130.0f * 130.0f) ? 0.6f : 0.0f;
+                    // Cerco: aproxima-se por um ângulo lateral quando longe, e reto quando perto.
+                    // A intensidade do flanqueamento cresce com a dificuldade.
+                    float flankAmount = (distSqrToPlayer > 130.0f * 130.0f) ? game->diff.flankAmount : 0.0f;
                     Vector2 desired = Vector2Normalize(Vector2Add(chaseDir, Vector2Scale(perp, enemy->flankSign * flankAmount)));
                     enemy->position = Vector2Add(enemy->position, Vector2Scale(desired, currentSpeed * chaseMult * delta));
                 }
@@ -1353,10 +1685,34 @@ void UpdateGameplay(GameState *game, float delta)
         // --------------------------------------------------------------------
         // Aumentado a pedido do usuário para que não entrem no personagem.
         // O chefe (corpo de 140px) usa um alcance maior para que encostar nele doa.
-        float colRange = (enemy->tier == TIER_3_BOSS) ? 110.0f : (enemy->type == 2) ? 65.0f : 45.0f;
+        float colRange = (enemy->tier == TIER_3_BOSS) ? 110.0f
+                       : (enemy->tier == TIER_MINIBOSS) ? 75.0f
+                       : (enemy->type == 2) ? 65.0f : 45.0f;
         if (distSqrToPlayer < colRange * colRange)
         {
             HandlePlayerEnemyCollision(game, enemy);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // NÚCLEOS DE INFECÇÃO (escudo do chefe): animação + gestão do escudo
+    // ------------------------------------------------------------------------
+    for (int i = 0; i < MAX_CORES; i++)
+    {
+        if (!game->cores[i].active) continue;
+        game->cores[i].pulse += delta;
+        if (game->cores[i].hitFlash > 0.0f) game->cores[i].hitFlash -= delta;
+    }
+    // Se o chefe não estiver mais vivo, os núcleos e o escudo somem.
+    {
+        bool bossAlive = false;
+        for (int i = 0; i < MAX_ENEMIES; i++)
+            if (game->enemies[i].active && game->enemies[i].tier == TIER_3_BOSS && game->enemies[i].state != DEATH)
+            { bossAlive = true; break; }
+        if (!bossAlive && (game->bossShieldActive || CoresAlive(game) > 0))
+        {
+            for (int i = 0; i < MAX_CORES; i++) game->cores[i].active = false;
+            game->bossShieldActive = false;
         }
     }
 
@@ -1387,22 +1743,26 @@ void UpdateGameplay(GameState *game, float delta)
                     for (int k = 0; k < collCount; k++) {
                         int eIdx = collIndices[k];
                         if (game->enemies[eIdx].active && game->enemies[eIdx].state != DEATH) {
-                            game->enemies[eIdx].hp -= game->projectiles[i].damage;
-                            SpawnDamageText(game, game->enemies[eIdx].position, game->projectiles[i].damage, ORANGE);
-                            // A Granada Macrófago libera enzimas: aplica veneno (DoT)
-                            // nos sobreviventes, dando-lhe um papel claro contra alvos tanques.
-                            game->enemies[eIdx].poisonTimer = 2.5f;
-                            if (game->enemies[eIdx].hp <= 0) {
-                                game->enemies[eIdx].hp = 0;
-                                game->enemies[eIdx].state = DEATH;
-                                game->enemies[eIdx].cooldownTimer = 0.5f;
-                                RegisterEnemyKill(game, &game->enemies[eIdx]);
-                            } else {
-                                game->enemies[eIdx].state = HURT;
-                                game->enemies[eIdx].cooldownTimer = 0.25f;
+                            int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[eIdx], game->projectiles[i].damage, false);
+                            if (applied > 0) {
+                                SpawnDamageText(game, game->enemies[eIdx].position, applied, ORANGE);
+                                // A Granada Macrófago libera enzimas: aplica veneno (DoT)
+                                // nos sobreviventes, dando-lhe um papel claro contra alvos tanques.
+                                game->enemies[eIdx].poisonTimer = 2.5f;
+                                if (game->enemies[eIdx].hp <= 0) {
+                                    game->enemies[eIdx].hp = 0;
+                                    game->enemies[eIdx].state = DEATH;
+                                    game->enemies[eIdx].cooldownTimer = 0.5f;
+                                    RegisterEnemyKill(game, &game->enemies[eIdx]);
+                                } else {
+                                    game->enemies[eIdx].state = HURT;
+                                    game->enemies[eIdx].cooldownTimer = 0.25f;
+                                }
                             }
                         }
                     }
+                    // A explosão também danifica os Núcleos de Infecção do escudo
+                    HitInfectionCores(game, game->projectiles[i].position, 180.0f, game->projectiles[i].damage);
                 }
                 else {
                     // Colisão normal de projéteis do player (exceto granada que explode no timer)
@@ -1422,33 +1782,45 @@ void UpdateGameplay(GameState *game, float delta)
                                 // Hitbox proporcional ao tamanho do inimigo. O chefe é
                                 // enorme (140px) — com raio fixo de 45 os projéteis
                                 // atravessavam o corpo dele sem registrar acerto.
-                                float eRadius = (game->enemies[j].tier == TIER_3_BOSS) ? 100.0f : 45.0f;
+                                float eRadius = (game->enemies[j].tier == TIER_3_BOSS) ? 100.0f
+                                              : (game->enemies[j].tier == TIER_MINIBOSS) ? 60.0f : 45.0f;
                                 Rectangle eRect = { game->enemies[j].position.x - eRadius, game->enemies[j].position.y - eRadius, eRadius * 2, eRadius * 2 };
                                 if (CheckCollisionRecs(game->projectiles[i].hitbox, eRect)) {
-                                    // BFG não é desativado no primeiro hit
-                                    if (game->projectiles[i].type != PROJ_PLAYER_BFG) {
+                                    bool isBFG = (game->projectiles[i].type == PROJ_PLAYER_BFG);
+                                    // BFG não é desativado no primeiro hit (perfurante)
+                                    if (!isBFG) {
                                         game->projectiles[i].active = false;
                                     }
 
-                                    game->enemies[j].hp -= game->projectiles[i].damage;
-                                    PlaySound(g_assets.sfxEnemyHurt);
-                                    SpawnParticleExplosion(game, game->enemies[j].position, WeaponSkinPrimary(game->player.weaponSkinId), 10, 50.0f, 150.0f, 3.0f, 0.4f);
-                                    SpawnDamageText(game, game->enemies[j].position, game->projectiles[i].damage, WeaponSkinSecondary(game->player.weaponSkinId));
+                                    int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[j], game->projectiles[i].damage, isBFG);
+                                    if (applied > 0) {
+                                        PlaySound(g_assets.sfxEnemyHurt);
+                                        SpawnParticleExplosion(game, game->enemies[j].position, WeaponSkinPrimary(game->player.weaponSkinId), 10, 50.0f, 150.0f, 3.0f, 0.4f);
+                                        SpawnDamageText(game, game->enemies[j].position, applied, WeaponSkinSecondary(game->player.weaponSkinId));
 
-                                    if (game->enemies[j].hp <= 0) {
-                                        game->enemies[j].hp = 0;
-                                        game->enemies[j].state = DEATH;
-                                        game->enemies[j].cooldownTimer = 0.5f;
-                                        RegisterEnemyKill(game, &game->enemies[j]);
-                                    } else {
-                                        game->enemies[j].state = HURT;
-                                        game->enemies[j].cooldownTimer = 0.25f;
+                                        if (game->enemies[j].hp <= 0) {
+                                            game->enemies[j].hp = 0;
+                                            game->enemies[j].state = DEATH;
+                                            game->enemies[j].cooldownTimer = 0.5f;
+                                            RegisterEnemyKill(game, &game->enemies[j]);
+                                        } else {
+                                            game->enemies[j].state = HURT;
+                                            game->enemies[j].cooldownTimer = 0.25f;
+                                        }
                                     }
 
                                     // Se não é BFG, sai do loop (1 hit por projétil)
-                                    if (game->projectiles[i].type != PROJ_PLAYER_BFG) break;
+                                    if (!isBFG) break;
                                 }
                             }
+                        }
+
+                        // Projéteis diretos também destroem os Núcleos de Infecção
+                        if (game->projectiles[i].active)
+                        {
+                            bool isBFG2 = (game->projectiles[i].type == PROJ_PLAYER_BFG);
+                            if (HitInfectionCores(game, game->projectiles[i].position, 14.0f, game->projectiles[i].damage) && !isBFG2)
+                                game->projectiles[i].active = false;
                         }
                     }
                 }
@@ -1651,12 +2023,13 @@ THREAD_RETURN SaveGameThread(void *lpParam)
         }
 
         // 4. Bloco extra (versão 2): poções, pontos do SUS, arma e skins
-        fprintf(arquivo, "EXTRA %d %d %d %d %d\n",
+        fprintf(arquivo, "EXTRA %d %d %d %d %d %d\n",
                 game->player.healthPotions,
                 game->player.susPoints,
                 game->player.equippedWeapon,
                 game->player.skinId,
-                game->player.weaponSkinId);
+                game->player.weaponSkinId,
+                game->difficulty);
 
         fclose(arquivo);
     }
@@ -1793,15 +2166,17 @@ void CarregarJogoSlot(GameState *game, int slot)
 
         // 4. Bloco extra (versão 2) — opcional para compatibilidade com saves antigos
         int potions = 3, sus = 0, weapon = 1, skin = game->player.skinId, wskin = game->player.weaponSkinId;
+        int diffSaved = game->difficulty;
         char extraTag[8] = { 0 };
         if (fscanf(arquivo, "%7s", extraTag) == 1 && strcmp(extraTag, "EXTRA") == 0)
         {
-            // Se o bloco extra estiver incompleto, os valores padrão acima são mantidos.
-            if (fscanf(arquivo, "%d %d %d %d %d", &potions, &sus, &weapon, &skin, &wskin) != 5)
-            {
-                potions = 3; sus = 0; weapon = 1;
-            }
+            // Tenta ler 6 valores (com dificuldade); tolera saves antigos com 5.
+            int rd = fscanf(arquivo, "%d %d %d %d %d %d", &potions, &sus, &weapon, &skin, &wskin, &diffSaved);
+            if (rd < 5) { potions = 3; sus = 0; weapon = 1; }
         }
+        if (diffSaved >= DIFFICULTY_EASY && diffSaved <= DIFFICULTY_HARD)
+            game->difficulty = diffSaved;
+        ApplyDifficulty(game);
         game->player.healthPotions = (potions >= 0 && potions <= 99) ? potions : 3;
         game->player.susPoints = (sus >= 0) ? sus : 0;
         // BUGFIX: após carregar um save, equippedWeapon ficava 0 e o ataque não fazia nada
@@ -1909,6 +2284,10 @@ void RequestLoadingScreen(GameState *game, LoadTarget target, float duration)
     InitParticlePool(game);
     for (int i = 0; i < MAX_PROJECTILES; i++) game->projectiles[i].active = false;
     for (int i = 0; i < MAX_DAMAGE_TEXTS; i++) game->damageTexts[i].active = false;
+    // Limpa o escudo/núcleos do chefe ao trocar de cena
+    for (int i = 0; i < MAX_CORES; i++) game->cores[i].active = false;
+    game->bossShieldActive = false;
+    game->bossCoresSpawned = false;
 
     // Efeito especial de "injeção": ativo apenas na transição tutorial -> gameplay
     game->syringeTransitionFX = (game->inTutorial && target == LOAD_TO_GAMEPLAY);

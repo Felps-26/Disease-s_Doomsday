@@ -43,6 +43,63 @@ static void ConfigureBoss(GameState *game, int idx)
     b->isEscort = false;
     b->aiPhase = 0;
     b->summonTimer = 6.0f;
+    b->hitCooldown = 0.0f;
+}
+
+// Configura um MINI CHEFE da onda (entre o elite e o chefe final), escalando
+// proceduralmente conforme a fase aumenta. NÃO morre num tiro de arma forte.
+static void ConfigureMiniBoss(GameState *game, int idx)
+{
+    Enemy *m = &game->enemies[idx];
+    m->position = PickSpawnFarFromPlayer(game);
+    m->active = true;
+    m->type = 2;                 // visual de superbactéria (tanque atirador)
+    m->tier = TIER_MINIBOSS;
+    m->maxHp = 300 + game->wave * 220;   // wave1=520 ... wave4=1180
+    m->hp = m->maxHp;
+    m->speed = 90.0f + game->wave * 6.0f;
+    m->isRanged = true;
+    m->state = IDLE;
+    m->patrolTarget = m->position;
+    m->patrolTimer = 3.0f;
+    m->cooldownTimer = 1.2f;
+    m->chargeTimer = 0.0f;
+    m->poisonTimer = 0.0f; m->poisonAccum = 0.0f; m->slowTimer = 0.0f;
+    m->isTutorialEnemy = false;
+    m->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
+    m->fleeTimer = 0.0f; m->isEscort = false; m->aiPhase = 0;
+    m->summonTimer = 8.0f;        // invoca lacaios ocasionalmente
+    m->hitCooldown = 0.0f;
+}
+
+// Spawna um lacaio de escolta numa posição (perto do mini chefe/chefe).
+static void SpawnEscortMinion(GameState *game, Vector2 pos)
+{
+    for (int k = 0; k < MAX_ENEMIES; k++)
+    {
+        if (game->enemies[k].active) continue;
+        Enemy *e = &game->enemies[k];
+        e->position = pos;
+        e->active = true;
+        e->type = (GetRandomValue(0, 1) ? 1 : 3);   // Dengue ou Chagas
+        e->tier = TIER_2;
+        e->isRanged = (e->type == 1);
+        e->maxHp = 18 + game->wave * 5;
+        e->hp = e->maxHp;
+        e->speed = (e->type == 1) ? 220.0f : 270.0f;
+        e->state = IDLE;
+        e->patrolTarget = pos;
+        e->patrolTimer = 3.0f;
+        e->cooldownTimer = 1.5f;
+        e->chargeTimer = 0.0f;
+        e->poisonTimer = 0.0f; e->poisonAccum = 0.0f; e->slowTimer = 0.0f;
+        e->isTutorialEnemy = false;
+        e->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
+        e->fleeTimer = 0.0f; e->isEscort = true; e->aiPhase = 0; e->summonTimer = 0.0f;
+        e->hitCooldown = 0.0f;
+        game->enemiesRemaining++;
+        return;
+    }
 }
 
 void StartNextWave(GameState *game)
@@ -168,6 +225,38 @@ void StartNextWave(GameState *game)
         game->enemies[i].poisonTimer = 0.0f;
         game->enemies[i].slowTimer = 0.0f;
         game->enemies[i].isTutorialEnemy = false;
+        game->enemies[i].hitCooldown = 0.0f;
+    }
+
+    // ------------------------------------------------------------------
+    // MINI CHEFE: cada onda comum (1-4) ganha um mini chefe como evento
+    // principal, acompanhado de uma pequena escolta. A onda 5 já tem o
+    // CHEFE final, então não recebe mini chefe.
+    // ------------------------------------------------------------------
+    if (!bossWave)
+    {
+        for (int k = 0; k < MAX_ENEMIES; k++)
+        {
+            if (!game->enemies[k].active)
+            {
+                ConfigureMiniBoss(game, k);
+                game->enemiesRemaining++;
+                // Escolta ao redor do mini chefe (aumenta por onda)
+                int escorts = 2 + game->wave / 2;
+                for (int e = 0; e < escorts; e++)
+                {
+                    float ang = (float)e / (float)escorts * 2.0f * PI;
+                    Vector2 ep = { game->enemies[k].position.x + cosf(ang) * 140.0f,
+                                   game->enemies[k].position.y + sinf(ang) * 140.0f };
+                    if (ep.x < 80.0f) ep.x = 80.0f;
+                    if (ep.x > MAP_WIDTH - 80.0f) ep.x = MAP_WIDTH - 80.0f;
+                    if (ep.y < 80.0f) ep.y = 80.0f;
+                    if (ep.y > MAP_HEIGHT - 80.0f) ep.y = MAP_HEIGHT - 80.0f;
+                    SpawnEscortMinion(game, ep);
+                }
+                break;
+            }
+        }
     }
 
     // Garante que existam alguns power-ups espalhados no mapa no início da onda
@@ -180,6 +269,23 @@ void StartNextWave(GameState *game)
             (float)GetRandomValue(200, MAP_HEIGHT - 200)
         };
         SpawnPowerUpAt(game, itemPos, -1); // Tipo aleatório
+    }
+
+    // ------------------------------------------------------------------
+    // DIFICULDADE: escala a vida de TODOS os inimigos recém-spawnados.
+    // (dano e velocidade são aplicados em tempo real na IA/combate.)
+    // ------------------------------------------------------------------
+    float hmul = game->diff.enemyHealthMul;
+    if (hmul <= 0.01f) hmul = 1.0f; // segurança caso a dificuldade não tenha sido aplicada
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (game->enemies[i].active && !game->enemies[i].isTutorialEnemy)
+        {
+            int hp = (int)(game->enemies[i].maxHp * hmul);
+            if (hp < 1) hp = 1;
+            game->enemies[i].maxHp = hp;
+            game->enemies[i].hp = hp;
+        }
     }
 
     // Partículas azuis de invocação de nova onda
@@ -200,9 +306,9 @@ void StartNextWave(GameState *game)
     else
     {
         const char *sub = (game->wave == 4)
-            ? "ALERTA: a proxima horda traz o CHEFE!"
-            : "Elimine todos os patogenos para avancar.";
+            ? "MINI CHEFE presente! E a proxima horda traz o CHEFE final!"
+            : "Um MINI CHEFE lidera esta horda. Elimine todos para avancar.";
         ShowBanner(game, TextFormat("HORDA %d / 5", game->wave), sub,
-                   (Color){ 0, 229, 255, 255 }, 3.0f);
+                   (Color){ 0, 229, 255, 255 }, 3.4f);
     }
 }

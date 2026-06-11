@@ -35,6 +35,8 @@
 #define MAX_PARTICLES 250
 #define MAX_PROJECTILES 100
 #define MAX_DAMAGE_TEXTS 32
+#define MAX_CORES 4          // Núcleos de Infecção do escudo do chefe (fase 3)
+#define MAX_BOSS_MINIONS 8   // Limite de lacaios invocados ativos do chefe
 
 // Skins disponíveis (player e armas)
 #define SKIN_COUNT 3
@@ -59,8 +61,37 @@ typedef enum GameScreen
     SCREEN_QUIZ,       // Tela de quiz educacional (DF)
     SCREEN_UPGRADE,    // Tela de upgrade do SUS
     SCREEN_ARSENAL,    // Tela de arsenal: detalhes de todas as armas
-    SCREEN_SKINS       // Tela de seleção de skins com preview
+    SCREEN_SKINS,      // Tela de seleção de skins com preview
+    SCREEN_ADMIN       // Modo Administrador / Dev (protegido por senha)
 } GameScreen;
+
+// ============================================================================
+// DIFICULDADE
+// ============================================================================
+typedef enum Difficulty
+{
+    DIFFICULTY_EASY,
+    DIFFICULTY_MEDIUM,
+    DIFFICULTY_HARD
+} Difficulty;
+
+// Configuração central de dificuldade. A IA consulta estes valores em vez de
+// usar números mágicos espalhados pelo código.
+typedef struct DifficultyConfig
+{
+    float enemyHealthMul;   // multiplicador de vida dos inimigos
+    float enemyDamageMul;   // multiplicador de dano dos inimigos
+    float enemySpeedMul;    // multiplicador de velocidade de movimento
+    float detectionRange;   // distância para perceber o jogador (entrar em AGGRO)
+    float loseSightRange;   // distância para começar a perder o jogador de vista
+    float reactionMul;      // multiplica tempos de carga/cooldown (menor = reage mais rápido)
+    float dodgeChance;      // 0..1 chance de esquivar de um projétil próximo
+    float flankAmount;      // intensidade do flanqueamento (cerco) do melee
+    float retreatThreshold; // fração de HP em que inimigos frágeis recuam
+    float summonMul;        // frequência de invocação de lacaios (chefe/mini chefe)
+    float bossAggroMul;     // agressividade/cadência do chefe
+    float aggroMemoryTime;  // segundos perseguindo a última posição conhecida
+} DifficultyConfig;
 
 // Destino após a tela de carregamento completar
 typedef enum LoadTarget
@@ -131,6 +162,17 @@ typedef struct DamageText
 } DamageText;
 
 
+
+// Núcleo de Infecção: estrutura destrutível que alimenta o escudo do chefe (fase 3)
+typedef struct InfectionCore
+{
+    Vector2 position;
+    int   hp;
+    int   maxHp;
+    bool  active;
+    float hitFlash;   // brilho ao receber dano
+    float pulse;      // animação
+} InfectionCore;
 
 // ============================================================================
 // ESTRUTURAS DE UI
@@ -226,8 +268,8 @@ typedef struct GameState
 
     // ---- Banner/Toast de feedback (onda, chefe, troca/desbloqueio de arma) ----
     // Transitório, não é salvo/carregado.
-    char  bannerMsg[40];
-    char  bannerSub[48];
+    char  bannerMsg[48];
+    char  bannerSub[64];
     float bannerTimer;   // tempo restante visível
     float bannerMax;     // duração total
     Color bannerColor;
@@ -235,6 +277,24 @@ typedef struct GameState
     // Maior arma já desbloqueada nesta partida (progressão de RPG).
     // 1=Lâmina, 2=Fuzil, 3=Granada, 4=BFG.
     int   maxWeaponUnlocked;
+
+    // ---- Escudo do Chefe (Fase 3): Núcleos de Infecção ----
+    InfectionCore cores[MAX_CORES];
+    bool  bossShieldActive;   // true = chefe protegido até destruir os núcleos
+    bool  bossCoresSpawned;   // garante que os núcleos surjam uma única vez por luta
+
+    // ---- Modo Administrador / Dev (NÃO é salvo no progresso) ----
+    bool  adminMode;          // true = modo admin ativo
+    int   adminMaxHp;         // valores configurados para aplicar ao iniciar
+    int   adminDamage;
+    float adminSpeed;
+    int   adminLevel;
+    int   adminSus;
+    bool  adminApply;         // true = aplicar os valores configurados ao começar
+
+    // ---- Dificuldade ----
+    int   difficulty;         // Difficulty (EASY/MEDIUM/HARD)
+    DifficultyConfig diff;    // configuração derivada da dificuldade selecionada
 } GameState;
 
 #endif // GAME_H

@@ -8,6 +8,9 @@
 // Desenha um botão UIButton com o estilo Premium da interface
 void DrawButton(UIButton botao, Font font, bool enabled);
 
+// Desenha texto centralizado que reduz a fonte para caber na largura da área.
+void DrawTextFitCentered(Font font, const char *text, Rectangle area, float maxFont, Color color, bool shadow);
+
 // Verifica (com cache de ~1s) se existe algum arquivo de save nos 3 slots.
 // Evita abrir arquivos do disco a cada frame no menu.
 bool AnySaveExistsCached(void);
@@ -62,5 +65,9 @@ void UpdateTelaArsenal(GameState *game, Vector2 mouse);
 // Tela dedicada de seleção de Skins (com preview)
 void DrawTelaSkins(GameState *game, Font font);
 void UpdateTelaSkins(GameState *game, Vector2 mouse);
+
+// Tela do Modo Administrador / Dev (senha + configuração)
+void DrawTelaAdmin(GameState *game, Font font);
+void UpdateTelaAdmin(GameState *game, Vector2 mouse);
 
 #endif // TELAS_H

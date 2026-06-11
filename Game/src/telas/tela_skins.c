@@ -45,13 +45,24 @@ void DrawTelaSkins(GameState *game, Font font)
     DrawRectangleRoundedLines(preview, 0.05f, 8, THEME_COLOR_MAIN);
     DrawTextEx(font, "PREVIEW", (Vector2){ preview.x + 16, preview.y + 12 }, 16.0f, 1.0f, Fade(THEME_COLOR_MAIN, 0.8f));
 
+    // BUGFIX: no menu o GameState está zerado, então squashX/squashY = 0 e o
+    // modelo era escalado para 0 (invisível). Forçamos valores neutros para que
+    // o preview apareça e reflita a skin/arma selecionada em tempo real.
     Player tmp = game->player;
     tmp.position = (Vector2){ preview.x + preview.width / 2.0f, preview.y + preview.height / 2.0f + 20.0f };
     tmp.isMoving = false;
+    tmp.facingDir = 1;
+    tmp.squashX = 1.0f;
+    tmp.squashY = 1.0f;
+    tmp.attackBoostTimer = 0.0f;
     DrawPlayerModel(&tmp, 95.0f, THEME_COLOR_MAIN, (float)GetTime(), 0.0f);
 
     DrawTextEx(font, PlayerSkinName(game->player.skinId),
-               (Vector2){ preview.x + 16, preview.y + preview.height - 36 }, 22.0f, 1.0f, GOLD);
+               (Vector2){ preview.x + 16, preview.y + preview.height - 60 }, 22.0f, 1.0f, GOLD);
+    // Indica a skin de arma ativa (a lâmina do preview já usa a cor selecionada)
+    DrawTextEx(font, TextFormat("Arma: %s", WeaponSkinName(game->player.weaponSkinId)),
+               (Vector2){ preview.x + 16, preview.y + preview.height - 32 }, 16.0f, 1.0f,
+               WeaponSkinPrimary(game->player.weaponSkinId));
 
     // ---- Cards de SKIN do jogador (à direita) ----
     DrawTextEx(font, "SKIN DO ANTICORPO", (Vector2){ 560, 150 }, 20.0f, 1.0f, THEME_COLOR_MAIN);

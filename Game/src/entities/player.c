@@ -51,19 +51,22 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
             int i = collIndices[k];
             if (!game->enemies[i].active || game->enemies[i].state == DEATH) continue;
 
-            // Acertou! Causa dano
+            // Acertou! Causa dano (com proteções anti-melt para chefes/escudo)
             int danoTotal = 15 + danoBase;
-            game->enemies[i].hp -= danoTotal;
+            int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[i], danoTotal, false);
+            if (applied <= 0) continue; // bloqueado pelo escudo do chefe
             PlaySound(g_assets.sfxEnemyHurt);
-            SpawnDamageText(game, game->enemies[i].position, danoTotal, skinSec);
+            SpawnDamageText(game, game->enemies[i].position, applied, skinSec);
 
-            // Empurrão (Knockback) na direção oposta ao jogador
+            // Empurrão (Knockback) na direção oposta ao jogador (chefes resistem)
+            float knockMag = (game->enemies[i].tier == TIER_3_BOSS) ? 8.0f
+                           : (game->enemies[i].tier == TIER_MINIBOSS) ? 22.0f : 55.0f;
             Vector2 knockbackDir = Vector2Subtract(game->enemies[i].position, game->player.position);
             if (knockbackDir.x == 0.0f && knockbackDir.y == 0.0f) knockbackDir = (Vector2){ 1.0f, 0.0f };
             knockbackDir = Vector2Normalize(knockbackDir);
 
             // Empurra o inimigo a uma distância segura
-            game->enemies[i].position = Vector2Add(game->enemies[i].position, Vector2Scale(knockbackDir, 55.0f));
+            game->enemies[i].position = Vector2Add(game->enemies[i].position, Vector2Scale(knockbackDir, knockMag));
 
             // Partículas de sangue/dano no local do inimigo
             Color hitColor = (game->enemies[i].type == 2) ? MAROON : RED;
@@ -100,6 +103,8 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                 game->enemies[i].cooldownTimer = 0.25f; // flash/stun de 0.25s
             }
         }
+        // O golpe em área também destroi os Núcleos de Infecção do escudo do chefe
+        HitInfectionCores(game, game->player.position, game->slashAnimRadius, 15 + danoBase);
     }
     else if (wpn == 2) {
         game->player.attackCooldown = 0.15f;

@@ -77,8 +77,10 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
     Color colorDetail = pal.detail;        // Detalhes (fivela, cruz, espinhos)
     Color colorBlueTip = pal.earTip;       // Ponta da orelha
 
-    // Líquido da espada-seringa segue a skin da arma equipada
+    // Cores da skin da arma (aplicadas a TODOS os modelos de arma segurada)
     Color swordLiquid = WeaponSkinPrimary(player->weaponSkinId);
+    Color swordGlow   = WeaponSkinSecondary(player->weaponSkinId);
+    int   heldWeapon  = (player->equippedWeapon >= 1 && player->equippedWeapon <= 4) ? player->equippedWeapon : 1;
 
     if (!player->isMoving) {
         // ========================================================
@@ -116,7 +118,7 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
 
         DrawLineEx(armLStart, armLHand, size*0.12f, colorArmorDark);
         DrawCircleV(armLStart, size*0.15f, colorArmorDark); // Ombro
-        DrawSyringeSword(armLHand, size*0.5f, swordAngle, swordLiquid); // Espada na frente do ombro
+        DrawHeldWeapon(heldWeapon, armLHand, size*0.5f, swordAngle, swordLiquid, swordGlow); // Arma segurada (varia por tipo)
         DrawCircleV(armLHand, size*0.08f, colorArmor); // Mão segura a espada
         
         // Braço Dir (mão esquerda do personagem, lado direito da tela)
@@ -279,7 +281,7 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
         DrawLineEx(armFrontStart, armFrontElbow, size*0.12f, colorArmorDark);
         DrawLineEx(armFrontElbow, armFrontHand, size*0.1f, colorArmorDark);
         DrawCircleV(armFrontStart, size*0.15f, colorArmorDark); // Ombro
-        DrawSyringeSword(armFrontHand, size*0.5f, swordAngle, swordLiquid);
+        DrawHeldWeapon(heldWeapon, armFrontHand, size*0.5f, swordAngle, swordLiquid, swordGlow);
         DrawCircleV(armFrontHand, size*0.08f, colorArmor); // Mão da frente
         
         // Ombro frente

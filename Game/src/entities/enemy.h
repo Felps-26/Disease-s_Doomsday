@@ -18,7 +18,8 @@ typedef enum EnemyTier
     TIER_1,
     TIER_2,
     TIER_3,
-    TIER_3_BOSS
+    TIER_3_BOSS,
+    TIER_MINIBOSS   // Mini chefe de cada onda (entre o elite e o chefe final)
 } EnemyTier;
 
 typedef struct Enemy
@@ -57,6 +58,12 @@ typedef struct Enemy
     bool  isEscort;    // true = lacaio escolta do chefe (protege/orbita o boss)
     int   aiPhase;     // fase de comportamento do CHEFE (0,1,2) p/ detectar transições
     float summonTimer; // cronômetro do chefe para invocar lacaios
+    float hitCooldown; // i-frames de acerto p/ chefes/minichefes (evita melt por arma perfurante)
+
+    // ---- Percepção e esquiva (sistema de dificuldade) ----
+    Vector2 lastKnownPlayerPos; // última posição vista do jogador
+    float aggroMemory;          // tempo restante perseguindo a última posição conhecida
+    float dodgeCooldown;        // cooldown entre esquivas de projétil
 } Enemy;
 
 #endif // ENEMY_H
