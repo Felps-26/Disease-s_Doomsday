@@ -35,10 +35,12 @@ SRCS = \
   src/telas/tela_skins.c \
   src/telas/tela_admin.c \
   src/assets/asset_manager.c \
+  src/assets/sprite_manager.c \
   Assets/@models/player_model.c \
   Assets/@models/enemy_model.c \
   Assets/@models/weapons_model.c \
-  Assets/Maps/map_seringa.c
+  Assets/Maps/map_seringa.c \
+  Assets/Maps/map_body.c
 
 # ---------------------------------------------------------------------------
 # Detecção de plataforma e flags de link da Raylib

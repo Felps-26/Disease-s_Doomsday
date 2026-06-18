@@ -153,6 +153,10 @@ void UpdateStateMachine(GameState *game)
         case SCREEN_VICTORY:
             UpdateButtonsVitoria(game, g_virtualMouse);
             break;
+
+        case SCREEN_WORLD_TRANSITION:
+            UpdateTelaTransicao(game);
+            break;
     }
 }
 
@@ -225,6 +229,10 @@ void DrawStateMachine(GameState *game)
 
         case SCREEN_VICTORY:
             DrawTelaVitoria(game, g_gameFont);
+            break;
+
+        case SCREEN_WORLD_TRANSITION:
+            DrawTelaTransicao(game, g_gameFont);
             break;
 
         default: break;

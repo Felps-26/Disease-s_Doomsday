@@ -74,16 +74,67 @@ void DrawSyringeSword(Vector2 handPos, float size, float rotationDeg, Color liqu
 }
 
 // ============================================================================
-// MODELO: ARMA SEGURADA POR TIPO (1=Lâmina, 2=Fuzil, 3=Granada, 4=BFG)
+// MODELO: ESCALPELIZADOR ESTÁTICO (arma melee anti-escudo do Mundo 2)
+// Bisturi/lâmina larga eletrificada que desestabiliza o capsídeo viral.
+// ============================================================================
+void DrawScalpel(Vector2 handPos, float size, float rotationDeg, Color primary, Color secondary)
+{
+    rlPushMatrix();
+    rlTranslatef(handPos.x, handPos.y, 0.0f);
+    rlRotatef(rotationDeg, 0.0f, 0.0f, 1.0f);
+    float s = size;
+
+    Color metal = (Color){ 210, 220, 232, 255 };
+    Color metalDk = (Color){ 120, 130, 145, 255 };
+    Color handle = (Color){ 40, 44, 54, 255 };
+
+    // Cabo
+    DrawRectangleRounded((Rectangle){ -s*0.13f, -s*0.2f, s*0.26f, s*0.9f }, 0.5f, 6, handle);
+    DrawRectangleRoundedLines((Rectangle){ -s*0.13f, -s*0.2f, s*0.26f, s*0.9f }, 0.5f, 6, metalDk);
+    // Guarda com emissores estáticos (cores da skin)
+    DrawRectangle((int)(-s*0.4f), (int)(-s*0.3f), (int)(s*0.8f), (int)(s*0.12f), metalDk);
+    DrawCircleV((Vector2){ -s*0.4f, -s*0.24f }, s*0.1f, primary);
+    DrawCircleV((Vector2){  s*0.4f, -s*0.24f }, s*0.1f, primary);
+    // Lâmina larga (bisturi) apontando para cima (-Y)
+    DrawTriangle(
+        (Vector2){ -s*0.22f, -s*0.30f },
+        (Vector2){ 0.0f,    -s*1.85f },
+        (Vector2){  s*0.22f, -s*0.30f },
+        metal);
+    DrawTriangleLines(
+        (Vector2){ -s*0.22f, -s*0.30f },
+        (Vector2){ 0.0f,    -s*1.85f },
+        (Vector2){  s*0.22f, -s*0.30f },
+        metalDk);
+    // Fio de corte (gume) brilhante
+    DrawLineEx((Vector2){ 0.0f, -s*0.3f }, (Vector2){ 0.0f, -s*1.85f }, s*0.04f, secondary);
+    // Arcos elétricos estáticos ao longo da lâmina (cores da skin)
+    for (int i = 0; i < 3; i++)
+    {
+        float y = -s*0.6f - i * s*0.4f;
+        float w = s*0.16f - i * s*0.03f;
+        DrawLineEx((Vector2){ -w, y }, (Vector2){ w, y - s*0.1f }, s*0.03f, primary);
+        DrawLineEx((Vector2){ w, y - s*0.1f }, (Vector2){ -w*0.6f, y - s*0.22f }, s*0.03f, secondary);
+    }
+    rlPopMatrix();
+}
+
+// Mundo atual para a arma melee segurada (slot 1).
+static int s_modelWorld = 0; // 0 = WORLD_BACTERIA
+void SetWeaponModelWorld(int world) { s_modelWorld = (world == 1) ? 1 : 0; }
+
+// ============================================================================
+// MODELO: ARMA SEGURADA POR TIPO (1=melee, 2=projétil, 3=granada, 4=BFG)
 // As cores da skin (primary/secondary) sao aplicadas em TODOS os modelos.
 // Desenhado no frame local: origem na mao, "para cima" = -Y.
 // ============================================================================
 void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, Color primary, Color secondary)
 {
-    // Arma 1: a Espada-Seringa ja existente (o liquido segue a skin).
+    // Arma 1 (melee): Espada-Seringa (Mundo 1) ou Escalpelizador (Mundo 2).
     if (weapon <= 1)
     {
-        DrawSyringeSword(handPos, size, rotationDeg, primary);
+        if (s_modelWorld == 1) DrawScalpel(handPos, size, rotationDeg, primary, secondary);
+        else                   DrawSyringeSword(handPos, size, rotationDeg, primary);
         return;
     }
 

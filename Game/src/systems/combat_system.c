@@ -38,6 +38,8 @@ void HandlePlayerEnemyCollision(GameState *game, Enemy *enemy)
         // Dificuldade: multiplica o dano recebido
         float dmul = (game->diff.enemyDamageMul <= 0.01f) ? 1.0f : game->diff.enemyDamageMul;
         dmgBase = (int)(dmgBase * dmul);
+        // Máscara Hospitalar: reduz o dano recebido em 40% enquanto ativa.
+        if (game->player.maskTimer > 0.0f) dmgBase = (int)(dmgBase * 0.6f);
         if (dmgBase < 1) dmgBase = 1;
 
         game->player.hp -= dmgBase;
@@ -84,6 +86,8 @@ void HandleProjectileCollision(GameState *game, Projectile *proj)
         // Dano escala levemente com a onda e com a dificuldade
         float dmul = (game->diff.enemyDamageMul <= 0.01f) ? 1.0f : game->diff.enemyDamageMul;
         int dmg = (int)((proj->damage + game->wave) * dmul);
+        // Máscara Hospitalar: reduz o dano recebido em 40% enquanto ativa.
+        if (game->player.maskTimer > 0.0f) dmg = (int)(dmg * 0.6f);
         if (dmg < 1) dmg = 1;
         game->player.hp -= dmg;
         game->player.squashX = 1.3f;

@@ -10,9 +10,11 @@ typedef enum ProjectileType
     PROJ_BULLET_SPREAD,     // Picada espalhada do Aedes aegypti (Tier 2)
     PROJ_VOID_BOLT,         // Toxina viral concentrada (Tier 3 / Elite)
     PROJ_BOSS_BULLET,       // Projétil da Superbactéria Resistente (Boss)
-    PROJ_PLAYER_RIFLE,      // Fuzil de Células T
+    PROJ_PLAYER_RIFLE,      // Fuzil de Células T (legado / genérico)
     PROJ_PLAYER_GRENADE,    // Granada Macrófago
-    PROJ_PLAYER_BFG         // Vacina BFG
+    PROJ_PLAYER_BFG,        // Vacina BFG
+    PROJ_PLAYER_PHAGE,      // Rifle de Bacteriófagos (Mundo 1): bônus vs. bactérias
+    PROJ_PLAYER_VACCINE     // Rifle de Vacina (Mundo 2): bônus vs. vírus / escudo
 } ProjectileType;
 
 typedef struct Projectile

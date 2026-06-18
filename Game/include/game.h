@@ -38,6 +38,20 @@
 #define MAX_CORES 4          // Núcleos de Infecção do escudo do chefe (fase 3)
 #define MAX_BOSS_MINIONS 8   // Limite de lacaios invocados ativos do chefe
 
+// ----------------------------------------------------------------------------
+// MUNDOS (expansão: campanha em 2 Mundos temáticos)
+// O jogo é dividido em dois Mundos: Bactérias e Vírus. Cada Mundo tem o mesmo
+// número de ondas e termina com um chefe na última onda. Concluir o Mundo das
+// Bactérias leva (via cutscene de transição) ao Mundo dos Vírus; concluir o
+// Mundo dos Vírus leva à Vitória final.
+// ----------------------------------------------------------------------------
+#define WAVES_PER_WORLD 5    // Ondas em cada Mundo (a 5ª é sempre o chefe)
+#define WORLD_COUNT 2        // Total de Mundos da campanha
+
+// Quantidade de dicas educativas exibidas na tela de carregamento (mantenha em
+// sincronia com o array loadingTips[] em telas.c).
+#define LOADING_TIP_COUNT 12
+
 // Skins disponíveis (player e armas)
 #define SKIN_COUNT 3
 #define WEAPON_SKIN_COUNT 3
@@ -62,8 +76,18 @@ typedef enum GameScreen
     SCREEN_UPGRADE,    // Tela de upgrade do SUS
     SCREEN_ARSENAL,    // Tela de arsenal: detalhes de todas as armas
     SCREEN_SKINS,      // Tela de seleção de skins com preview
-    SCREEN_ADMIN       // Modo Administrador / Dev (protegido por senha)
+    SCREEN_ADMIN,      // Modo Administrador / Dev (protegido por senha)
+    SCREEN_WORLD_TRANSITION // Cutscene/tela educativa entre Mundo 1 (Bactérias) e Mundo 2 (Vírus)
 } GameScreen;
+
+// ============================================================================
+// MUNDOS (expansão da campanha)
+// ============================================================================
+typedef enum WorldType
+{
+    WORLD_BACTERIA = 0, // Mundo 1: bactérias (pneumonia, superbactéria KPC)
+    WORLD_VIRUS    = 1  // Mundo 2: vírus de RNA com escudo de capsídeo (dengue, influenza)
+} WorldType;
 
 // ============================================================================
 // DIFICULDADE
@@ -123,8 +147,18 @@ typedef enum PowerUpType
     HP_RECOVERY,
     SPEED_BOOST,
     SHIELD,
-    ATTACK_BOOST
+    ATTACK_BOOST,
+    // ---- Itens da expansão (drops) ----
+    POWERUP_MASK,        // Máscara Hospitalar (Mundo 1): reduz dano recebido
+    POWERUP_DISTANCING,  // Distanciamento Social (Mundo 1): aura que repele inimigos
+    POWERUP_RNA_GRENADE, // Desestabilizador de Ácidos Ribonucleicos (ambos): dano em área
+    POWERUP_CYTOKINE,    // Citocina de Estabilização (ambos): regenera vida
+    POWERUP_TYPE_COUNT
 } PowerUpType;
+
+// Quantidade de tipos de power-up "genéricos" sorteados nos drops do mapa
+// (os 4 primeiros). Os itens da expansão são dropados por lógica própria.
+#define BASE_POWERUP_TYPES 4
 
 // ============================================================================
 // ESTRUTURAS DE ENTIDADES
@@ -295,6 +329,12 @@ typedef struct GameState
     // ---- Dificuldade ----
     int   difficulty;         // Difficulty (EASY/MEDIUM/HARD)
     DifficultyConfig diff;    // configuração derivada da dificuldade selecionada
+
+    // ---- Mundo atual (expansão: campanha em 2 Mundos) ----
+    // WORLD_BACTERIA (0) por padrão — saves antigos, que não gravam este campo,
+    // assumem o Mundo das Bactérias graças ao memset(0) no carregamento.
+    int   currentWorld;       // WorldType: WORLD_BACTERIA ou WORLD_VIRUS
+    bool  worldCompleted;     // true = chefe do Mundo atual derrotado (gatilho de transição)
 } GameState;
 
 #endif // GAME_H

@@ -156,7 +156,21 @@ static QuizQuestion quizDB[] = {
       "Boa APS resolve ate ~80% das demandas de saude da populacao." },
     { "Educacao em saude na comunidade serve para:",
       {"Nada", "Empoderar as pessoas a cuidarem da propria saude e prevenir doencas", "Vender remedio", "Aumentar filas"}, 1,
-      "Informacao e participacao melhoram desfechos de saude coletiva." }
+      "Informacao e participacao melhoram desfechos de saude coletiva." },
+
+    // ---- Microbiologia / conceitos do jogo (expansao 2 Mundos) ----
+    { "O que sao BACTERIOFAGOS?",
+      {"Antibioticos naturais", "Virus que infectam e destroem BACTERIAS", "Um tipo de vacina", "Celulas de defesa"}, 1,
+      "Bacteriofagos sao virus que infectam bacterias — nao confundir com antibiotico." },
+    { "Para que servem as VACINAS?",
+      {"Curar qualquer doenca na hora", "Treinar o sistema imune a reconhecer o patogeno e prevenir doencas", "Substituir a higiene", "Matar bacterias resistentes"}, 1,
+      "Vacinas preparam a imunidade contra doencas, sobretudo virais (ex.: influenza)." },
+    { "O CAPSIDEO de um virus e:",
+      {"O nucleo de RNA", "A capa proteica que protege o material genetico", "Um antibiotico", "Um tipo de celula"}, 1,
+      "Neutralizar/romper o capsideo ajuda o sistema imune a conter o virus." },
+    { "Dengue e influenza sao causadas por:",
+      {"Bacterias", "Virus de RNA", "Fungos", "Protozoarios"}, 1,
+      "Sao virus de RNA; a dengue e transmitida pelo Aedes aegypti." }
 };
 
 #define QUIZ_COUNT ((int)(sizeof(quizDB) / sizeof(quizDB[0])))

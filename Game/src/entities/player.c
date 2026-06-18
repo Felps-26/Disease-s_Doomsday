@@ -4,6 +4,7 @@
 #include "../../include/spatial_grid.h"
 #include "../../include/asset_manager.h"
 #include "../../src/entities/projectiles.h"
+#include "../../Assets/@models/weapons_model.h"
 #include "raymath.h"
 
 void PlayerAttack(GameState *game, Vector2 worldMousePos)
@@ -53,6 +54,11 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
 
             // Acertou! Causa dano (com proteções anti-melt para chefes/escudo)
             int danoTotal = 15 + danoBase;
+            // Escalpelizador Estático (arma melee do Mundo 2): desestabiliza o
+            // capsídeo — dano muito maior contra o ESCUDO viral, quebrando-o bem
+            // mais rápido que o Rifle de Vacina.
+            if (game->currentWorld == WORLD_VIRUS && game->enemies[i].shieldActive && game->enemies[i].shieldHp > 0)
+                danoTotal *= 3;
             int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[i], danoTotal, false);
             if (applied <= 0) continue; // bloqueado pelo escudo do chefe
             PlaySound(g_assets.sfxEnemyHurt);
@@ -110,7 +116,10 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
         game->player.attackCooldown = 0.15f;
         PlaySound(g_assets.sfxAttack);
         game->screenShake = 0.1f;
-        SpawnProjectile(game, game->player.position, worldMousePos, PROJ_PLAYER_RIFLE, 8 + danoBase);
+        // Arma de projétil do Mundo atual: Rifle de Bacteriófagos (Mundo 1, bônus
+        // vs. bactérias) ou Rifle de Vacina (Mundo 2, bônus vs. vírus).
+        ProjectileType rt = (game->currentWorld == WORLD_VIRUS) ? PROJ_PLAYER_VACCINE : PROJ_PLAYER_PHAGE;
+        SpawnProjectile(game, game->player.position, worldMousePos, rt, 8 + danoBase);
     }
     else if (wpn == 3) {
         game->player.attackCooldown = 1.5f;
@@ -128,27 +137,48 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
 // ============================================================================
 // DADOS DAS ARMAS (fonte única usada por HUD, Arsenal e Tutorial)
 // ============================================================================
+// Mundo atual para nomear as armas temáticas (definido por SetWeaponWorld).
+static int s_weaponWorld = WORLD_BACTERIA;
+void SetWeaponWorld(int world)
+{
+    s_weaponWorld = (world == WORLD_VIRUS) ? WORLD_VIRUS : WORLD_BACTERIA;
+    SetWeaponModelWorld(s_weaponWorld); // mantém o modelo melee (espada/escalpelo) em sincronia
+}
+
 WeaponInfo GetWeaponInfo(int weapon)
 {
+    bool virus = (s_weaponWorld == WORLD_VIRUS);
     switch (weapon)
     {
-        case 2: return (WeaponInfo){
-            "Fuzil Celula-T", "Disparos rapidos em linha reta.",
-            "Cadencia altissima", "Pressao constante a distancia; otimo contra enxames.",
-            8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 200, 255, 255 } };
+        case 2:
+            // Arma de projétil temática por Mundo (mesmas estatísticas-base).
+            if (virus) return (WeaponInfo){
+                "Rifle de Vacina", "Doses de imunizacao em linha reta.",
+                "+60% de dano contra VIRUS", "Imuniza: eficaz contra virus (vacinas treinam o sistema imune).",
+                8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 200, 255, 255 } };
+            return (WeaponInfo){
+                "Rifle de Bacteriofagos", "Dispara bacteriofagos em linha reta.",
+                "+60% de dano contra BACTERIAS", "Bacteriofagos sao virus que infectam bacterias; otimo no Mundo 1.",
+                8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 255, 160, 255 } };
         case 3: return (WeaponInfo){
-            "Granada Macrofago", "Explosao em area que libera enzimas.",
-            "Dano em area + VENENO", "Controle de grupos; veneno derrete alvos tanques.",
+            "Desestabilizador de RNA", "Granada que ataca o RNA em area.",
+            "Dano em area + VENENO (ignora capsideo)", "Controle de grupos; forte vs. bacterias e virus.",
             40, "Lenta", 1.5f, 3, 3, (Color){ 255, 140, 40, 255 } };
         case 4: return (WeaponInfo){
-            "Vacina BFG", "Projetil pesado que ATRAVESSA inimigos.",
+            "BFG Imunologico", "Projetil pesado que ATRAVESSA inimigos.",
             "Perfurante (atravessa todos)", "Limpa fileiras inteiras; guarde para hordas e chefe.",
             100, "Muito lenta", 5.0f, 4, 4, (Color){ 120, 255, 160, 255 } };
         case 1:
-        default: return (WeaponInfo){
-            "Lamina Imunologica", "Golpe corpo a corpo em 360 graus.",
-            "Acerta tudo ao redor + empurrao", "Defesa pessoal; segura inimigos colados em voce.",
-            15, "Rapida", 0.22f, 1, 1, (Color){ 0, 229, 255, 255 } };
+        default:
+            // Arma corpo a corpo temática por Mundo.
+            if (virus) return (WeaponInfo){
+                "Escalpelizador Estatico", "Golpe em 360 graus que desestabiliza o capsideo.",
+                "Quebra o ESCUDO viral muito mais rapido", "Ferramenta-chave anti-escudo do Mundo 2.",
+                15, "Rapida", 0.22f, 1, 1, (Color){ 180, 120, 255, 255 } };
+            return (WeaponInfo){
+                "Espada-Seringa", "Golpe corpo a corpo em 360 graus.",
+                "Acerta tudo ao redor + empurrao", "Defesa pessoal; segura inimigos colados em voce.",
+                15, "Rapida", 0.22f, 1, 1, (Color){ 0, 229, 255, 255 } };
     }
 }
 

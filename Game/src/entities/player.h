@@ -24,6 +24,12 @@ typedef struct Player
     float attackBoostTimer;
     float poisonTimer; // Dano ao longo do tempo
     float slowTimer;   // Redução de velocidade
+
+    // ---- Buffs da expansão (itens dropáveis) ----
+    float maskTimer;       // Máscara Hospitalar (Mundo 1): reduz dano recebido
+    float distancingTimer; // Distanciamento Social (Mundo 1): aura que repele inimigos
+    float regenTimer;      // Citocina de Estabilização: regeneração de vida ao longo do tempo
+    float regenAccum;      // acumulador fracionário da regeneração (hp é int)
     
     // Combate
     float attackCooldown;  // Tempo até o próximo ataque

@@ -976,7 +976,12 @@ static const char *loadingTips[] = {
     "DICA DE SAUDE: Para combater a Dengue, permita a entrada dos agentes da Vigilancia Ambiental em sua residencia para inspecao.",
     "DICA DE SAUDE: O Distrito Federal possui diversas Unidades Basicas de Saude (UBS) que oferecem atendimento e vacinacao gratuitos.",
     "DICA DE SAUDE: Lavar as maos frequentemente com agua e sabao e uma das maneiras mais eficazes de prevenir a transmissao de patogenos.",
-    "DICA DE SAUDE: Informe a Vigilancia Ambiental sobre lotes vagos com acumulo de lixo ou agua parada na sua regiao administrativa."
+    "DICA DE SAUDE: Informe a Vigilancia Ambiental sobre lotes vagos com acumulo de lixo ou agua parada na sua regiao administrativa.",
+    "DICA DE SAUDE: Nao se automedique com antibioticos. O uso incorreto cria superbacterias resistentes, como a KPC, comuns em hospitais.",
+    "DICA DE SAUDE: Use antibioticos apenas com prescricao e complete todo o tratamento, mesmo que os sintomas melhorem antes.",
+    "DICA DE SAUDE: Mascaras e distanciamento reduzem a transmissao de doencas respiratorias como a gripe (Influenza).",
+    "CURIOSIDADE: Bacteriofagos sao virus que infectam bacterias. Vacinas treinam o sistema imune contra virus de RNA, como dengue e influenza.",
+    "CURIOSIDADE: O capsideo e a capa proteica que protege o material genetico do virus. Neutraliza-lo e essencial para conter a infeccao."
 };
 
 void DrawTelaLoading(GameState *game, Font font)
@@ -1102,7 +1107,7 @@ void DrawTelaLoading(GameState *game, Font font)
 
     // Texto da dica (com wrapping em 2 linhas)
     int tipIndex = game->loadingTip;
-    if (tipIndex < 0 || tipIndex >= 5) tipIndex = 0;
+    if (tipIndex < 0 || tipIndex >= LOADING_TIP_COUNT) tipIndex = 0;
     const char *tipText = loadingTips[tipIndex];
     
     char line1[256] = {0};

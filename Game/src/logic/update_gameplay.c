@@ -1,6 +1,7 @@
 #include "../../include/gameplay.h"
 #include "../../include/spatial_grid.h"
 #include "../../Assets/Maps/map_seringa.h"
+#include "../../Assets/Maps/map_body.h"
 #include "../systems/combat_system.h"
 #include "../systems/wave_manager.h"
 #include "raymath.h"
@@ -225,7 +226,7 @@ void SpawnPowerUpAt(GameState *game, Vector2 position, int forcedType)
         if (!game->powerUps[i].active)
         {
             game->powerUps[i].position = position;
-            game->powerUps[i].type = (forcedType >= 0) ? (PowerUpType)forcedType : (PowerUpType)GetRandomValue(0, 3);
+            game->powerUps[i].type = (forcedType >= 0) ? (PowerUpType)forcedType : (PowerUpType)GetRandomValue(0, BASE_POWERUP_TYPES - 1);
             game->powerUps[i].active = true;
             game->powerUps[i].pulseTimer = 0.0f;
             break;
@@ -255,6 +256,31 @@ void RegisterEnemyKill(GameState *game, Enemy *enemy)
     if (enemy->tier == TIER_MINIBOSS || enemy->tier == TIER_3_BOSS || GetRandomValue(0, 100) < 25)
     {
         SpawnPowerUpAt(game, enemy->position, -1);
+    }
+
+    // ------------------------------------------------------------------
+    // DROPS DE ITENS DA EXPANSÃO (chance ~12% ao matar). Itens variam por
+    // Mundo: Máscara e Distanciamento são exclusivos do Mundo 1 (Bactérias);
+    // o Desestabilizador de RNA e a Citocina são compartilhados.
+    // ------------------------------------------------------------------
+    if (!game->inTutorial && GetRandomValue(0, 99) < 12)
+    {
+        int itemType;
+        if (game->currentWorld == WORLD_BACTERIA)
+        {
+            switch (GetRandomValue(0, 3))
+            {
+                case 0:  itemType = POWERUP_MASK; break;
+                case 1:  itemType = POWERUP_DISTANCING; break;
+                case 2:  itemType = POWERUP_RNA_GRENADE; break;
+                default: itemType = POWERUP_CYTOKINE; break;
+            }
+        }
+        else // WORLD_VIRUS: apenas itens compartilhados
+        {
+            itemType = (GetRandomValue(0, 1) == 0) ? POWERUP_RNA_GRENADE : POWERUP_CYTOKINE;
+        }
+        SpawnPowerUpAt(game, enemy->position, itemType);
     }
 }
 
@@ -370,6 +396,28 @@ bool HitInfectionCores(GameState *game, Vector2 pos, float radius, int dmg)
     return hit;
 }
 
+// Classificação biológica do patógeno (para afinidade das armas).
+bool EnemyIsBacterial(int type)
+{
+    return (type == ETYPE_KPC || type == ETYPE_TB ||
+            type == ETYPE_BACT_MELEE || type == ETYPE_BACT_RANGED);
+}
+bool EnemyIsViral(int type)
+{
+    return (type == ETYPE_SARS || type == ETYPE_DENGUE_OLD ||
+            type == ETYPE_VIRUS_MELEE || type == ETYPE_VIRUS_RANGED || type == ETYPE_VIRUS_BOSS);
+}
+
+// Aplica a afinidade da arma ao dano: o Rifle de Bacteriófagos é muito eficaz
+// contra BACTÉRIAS (bacteriófagos infectam bactérias) e o Rifle de Vacina é
+// muito eficaz contra VÍRUS (imunização). +60% de dano contra o alvo certo.
+int ScaleAffinityDamage(int dmg, ProjectileType pt, int enemyType)
+{
+    if (pt == PROJ_PLAYER_PHAGE && EnemyIsBacterial(enemyType)) return (int)(dmg * 1.6f);
+    if (pt == PROJ_PLAYER_VACCINE && EnemyIsViral(enemyType))   return (int)(dmg * 1.6f);
+    return dmg;
+}
+
 // Aplica dano de uma arma do jogador a um inimigo, com proteções anti-melt:
 // - chefe protegido pelo escudo (fase 3) não recebe dano;
 // - chefes/mini chefes têm i-frames contra a BFG perfurante (não derretem);
@@ -385,6 +433,26 @@ int ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG)
         if (GetRandomValue(0, 4) == 0)
             SpawnParticle(game, enemy->position, (Vector2){ 0, -20 }, (Color){ 120, 230, 255, 255 }, 4.0f, 0.3f);
         return 0;
+    }
+
+    // Escudo de capsídeo (Mundo 2 — Vírus): enquanto ativo, o dano é absorvido
+    // pelo escudo e NÃO atinge a vida. Só após quebrar o capsídeo o vírus fica
+    // vulnerável. (Inimigos sem escudo têm shieldActive=false e ignoram isto.)
+    if (enemy->shieldActive && enemy->shieldHp > 0)
+    {
+        enemy->shieldHp -= dmg;
+        enemy->shieldHitFlash = 0.18f;
+        SpawnParticle(game, enemy->position, (Vector2){ 0, -20 }, (Color){ 150, 220, 255, 255 }, 4.0f, 0.25f);
+        if (enemy->shieldHp <= 0)
+        {
+            enemy->shieldHp = 0;
+            enemy->shieldActive = false;
+            // "estilhaço" do capsídeo ao quebrar (+ som)
+            SpawnParticleExplosion(game, enemy->position, (Color){ 150, 220, 255, 255 }, 18, 80.0f, 220.0f, 4.0f, 0.6f);
+            game->screenShake = 0.3f;
+            PlaySound(g_assets.sfxEnemyHurt);
+        }
+        return dmg; // dano aplicado ao ESCUDO (não à vida)
     }
 
     if (bossLike)
@@ -409,6 +477,117 @@ int ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG)
     if (dmg < 1) dmg = 1;
     enemy->hp -= dmg;
     return dmg;
+}
+
+// ============================================================================
+// DETONAÇÃO DO DESESTABILIZADOR DE ÁCIDOS RIBONUCLEICOS (granada — item)
+// Dano em área que ATACA O RNA do patógeno: thematicamente atravessa o capsídeo,
+// então quebra o escudo viral e ainda fere a vida. Forte vs. bactéria e vírus.
+// ============================================================================
+static void DetonateRNAGrenade(GameState *game, Vector2 center)
+{
+    const float radius = 240.0f;
+    int dmg = 60 + game->player.level * 4;
+
+    // Feedback visual/sonoro da explosão
+    SpawnParticleExplosion(game, center, (Color){ 120, 255, 160, 255 }, 26, 90.0f, 280.0f, 5.0f, 0.7f);
+    SpawnParticleExplosion(game, center, ORANGE, 18, 60.0f, 200.0f, 4.0f, 0.5f);
+    game->screenShake = 0.5f;
+    PlaySound(g_assets.sfxAttack);
+
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        Enemy *e = &game->enemies[i];
+        if (!e->active || e->state == DEATH || e->isTutorialEnemy) continue;
+        if (Vector2DistanceSqr(center, e->position) > radius * radius) continue;
+
+        // Desestabiliza o RNA: dissolve o capsídeo (escudo) antes de ferir a vida.
+        if (e->shieldActive)
+        {
+            e->shieldActive = false;
+            e->shieldHp = 0;
+            SpawnParticleExplosion(game, e->position, (Color){ 150, 220, 255, 255 }, 12, 70.0f, 200.0f, 4.0f, 0.5f);
+        }
+
+        int applied = ApplyPlayerDamageToEnemy(game, e, dmg, false);
+        if (applied <= 0) continue;
+        SpawnDamageText(game, e->position, applied, (Color){ 120, 255, 160, 255 });
+        if (e->hp <= 0)
+        {
+            e->hp = 0;
+            e->state = DEATH;
+            e->cooldownTimer = 0.5f;
+            SpawnParticleExplosion(game, e->position, GOLD, 18, 50.0f, 150.0f, 4.0f, 0.7f);
+            if (!game->inTutorial) RegisterEnemyKill(game, e);
+        }
+        else
+        {
+            e->state = HURT;
+            e->cooldownTimer = 0.25f;
+        }
+    }
+    // Também danifica os Núcleos de Infecção do escudo do chefe.
+    HitInfectionCores(game, center, radius, dmg);
+}
+
+// ============================================================================
+// APLICA O EFEITO DE UM POWER-UP / ITEM COLETADO (fonte única)
+// Centraliza os efeitos para os dois pontos de coleta (gameplay e tutorial),
+// evitando duplicação e tratando todos os tipos do enum PowerUpType.
+// ============================================================================
+void ApplyPowerUpEffect(GameState *game, PowerUpType type)
+{
+    switch (type)
+    {
+        case HP_RECOVERY:
+            game->player.hp += 35;
+            if (game->player.hp > game->player.maxHp) game->player.hp = game->player.maxHp;
+            SpawnParticleExplosion(game, game->player.position, GREEN, 15, 40.0f, 100.0f, 4.0f, 0.8f);
+            break;
+        case SPEED_BOOST:
+            game->player.speedTimer = 8.0f;
+            break;
+        case SHIELD:
+            game->player.shieldTimer = 7.0f;
+            break;
+        case ATTACK_BOOST:
+            game->player.attackBoostTimer = 8.0f;
+            break;
+        case POWERUP_MASK:
+            // Máscara Hospitalar: reduz o dano recebido por um tempo (prevenção
+            // de transmissão / proteção respiratória).
+            game->player.maskTimer = 12.0f;
+            ShowBanner(game, "MASCARA HOSPITALAR", "Dano recebido reduzido — protecao respiratoria!",
+                       (Color){ 120, 220, 255, 255 }, 2.5f);
+            break;
+        case POWERUP_DISTANCING:
+            // Distanciamento Social: aura que repele os patógenos por um tempo.
+            game->player.distancingTimer = 10.0f;
+            ShowBanner(game, "DISTANCIAMENTO SOCIAL", "Aura de protecao afasta os patogenos!",
+                       (Color){ 120, 255, 200, 255 }, 2.5f);
+            break;
+        case POWERUP_RNA_GRENADE:
+            // Desestabilizador de RNA: explosão imediata em área ao redor do herói.
+            DetonateRNAGrenade(game, game->player.position);
+            ShowBanner(game, "DESESTABILIZADOR DE RNA", "Explosao desfaz o RNA dos patogenos!",
+                       (Color){ 120, 255, 160, 255 }, 2.2f);
+            break;
+        case POWERUP_CYTOKINE:
+            // Citocina de Estabilização: cura imediata + regeneração ao longo do
+            // tempo. (Citocinas reais sinalizam o sistema imune; em excesso causam
+            // "tempestade de citocinas" — aqui é simplificação lúdica de cura.)
+            game->player.hp += 20;
+            if (game->player.hp > game->player.maxHp) game->player.hp = game->player.maxHp;
+            game->player.regenTimer = 6.0f;
+            game->player.regenAccum = 0.0f;
+            SpawnParticleExplosion(game, game->player.position, (Color){ 80, 230, 140, 255 }, 16, 40.0f, 120.0f, 4.0f, 0.8f);
+            ShowBanner(game, "CITOCINA DE ESTABILIZACAO", "Vida regenerando...",
+                       (Color){ 80, 230, 140, 255 }, 2.2f);
+            break;
+        case POWERUP_TYPE_COUNT:
+        default:
+            break;
+    }
 }
 
 // ============================================================================
@@ -492,6 +671,10 @@ void InitGame(GameState *game)
     game->timeElapsed = 0.0f;
     game->screenShake = 0.0f;
     game->slashAnimTimer = 0.0f;
+
+    // Campanha começa sempre no Mundo das Bactérias
+    game->currentWorld = WORLD_BACTERIA;
+    game->worldCompleted = false;
 
     // Câmera
     game->camera.target = game->player.position;
@@ -990,23 +1173,7 @@ void UpdateTutorial(GameState *game, float delta)
 
                 SpawnParticleExplosion(game, game->powerUps[i].position, YELLOW, 15, 60.0f, 160.0f, 4.5f, 0.6f);
 
-                switch (game->powerUps[i].type)
-                {
-                    case HP_RECOVERY:
-                        game->player.hp += 35;
-                        if (game->player.hp > game->player.maxHp) game->player.hp = game->player.maxHp;
-                        SpawnParticleExplosion(game, game->player.position, GREEN, 15, 40.0f, 100.0f, 4.0f, 0.8f);
-                        break;
-                    case SPEED_BOOST:
-                        game->player.speedTimer = 8.0f;
-                        break;
-                    case SHIELD:
-                        game->player.shieldTimer = 7.0f;
-                        break;
-                    case ATTACK_BOOST:
-                        game->player.attackBoostTimer = 8.0f;
-                        break;
-                }
+                ApplyPowerUpEffect(game, game->powerUps[i].type);
             }
         }
     }
@@ -1046,6 +1213,8 @@ void UpdateGameplay(GameState *game, float delta)
 {
     UpdateGrid(game);
     game->timeElapsed += delta;
+    // Mantém os nomes/descrições das armas temáticas em sincronia com o Mundo.
+    SetWeaponWorld(game->currentWorld);
 
     // ------------------------------------------------------------------------
     // MODO ADMIN: atalhos de teste (só funcionam com o modo admin ATIVO)
@@ -1123,6 +1292,26 @@ void UpdateGameplay(GameState *game, float delta)
         }
     }
     if (game->player.slowTimer > 0.0f) game->player.slowTimer -= delta;
+
+    // ---- Buffs da expansão (itens) ----
+    if (game->player.maskTimer > 0.0f) game->player.maskTimer -= delta;
+    if (game->player.distancingTimer > 0.0f) game->player.distancingTimer -= delta;
+    if (game->player.regenTimer > 0.0f)
+    {
+        game->player.regenTimer -= delta;
+        // Citocina: regenera ~12 HP/s (acumula fração porque hp é int).
+        game->player.regenAccum += 12.0f * delta;
+        if (game->player.regenAccum >= 1.0f)
+        {
+            int heal = (int)game->player.regenAccum;
+            game->player.regenAccum -= (float)heal;
+            game->player.hp += heal;
+            if (game->player.hp > game->player.maxHp) game->player.hp = game->player.maxHp;
+        }
+        if (GetRandomValue(0, 20) == 0)
+            SpawnParticle(game, game->player.position, (Vector2){ 0, -25 }, (Color){ 80, 230, 140, 255 }, 4.0f, 0.5f);
+    }
+
     UpdateDamageTexts(game, delta);
     UpdateBanner(game, delta);
 
@@ -1174,12 +1363,8 @@ void UpdateGameplay(GameState *game, float delta)
     game->player.squashX = Lerp(game->player.squashX, 1.0f, 10.0f * delta);
     game->player.squashY = Lerp(game->player.squashY, 1.0f, 10.0f * delta);
 
-    // Limites do mapa para o jogador
-    float playerRadius = 20.0f;
-    if (game->player.position.x < playerRadius) game->player.position.x = playerRadius;
-    if (game->player.position.x > MAP_WIDTH - playerRadius) game->player.position.x = MAP_WIDTH - playerRadius;
-    if (game->player.position.y < playerRadius) game->player.position.y = playerRadius;
-    if (game->player.position.y > MAP_HEIGHT - playerRadius) game->player.position.y = MAP_HEIGHT - playerRadius;
+    // O herói fica confinado DENTRO do corpo (a silhueta é a arena).
+    MapBody_ApplyCollision(&game->player.position, 20.0f);
 
     // ------------------------------------------------------------------------
     // 3. ENTRADA DE COMBATE E ARMAS
@@ -1272,25 +1457,8 @@ void UpdateGameplay(GameState *game, float delta)
                 // Efeito radial de coleta
                 SpawnParticleExplosion(game, game->powerUps[i].position, YELLOW, 15, 60.0f, 160.0f, 4.5f, 0.6f);
 
-                // Aplica efeitos baseados no tipo do Power-up
-                switch (game->powerUps[i].type)
-                {
-                    case HP_RECOVERY:
-                        game->player.hp += 35;
-                        if (game->player.hp > game->player.maxHp) game->player.hp = game->player.maxHp;
-                        // Partículas verdes para cura
-                        SpawnParticleExplosion(game, game->player.position, GREEN, 15, 40.0f, 100.0f, 4.0f, 0.8f);
-                        break;
-                    case SPEED_BOOST:
-                        game->player.speedTimer = 8.0f; // 8 segundos
-                        break;
-                    case SHIELD:
-                        game->player.shieldTimer = 7.0f; // 7 segundos
-                        break;
-                    case ATTACK_BOOST:
-                        game->player.attackBoostTimer = 8.0f; // 8 segundos
-                        break;
-                }
+                // Aplica efeitos baseados no tipo do Power-up / item
+                ApplyPowerUpEffect(game, game->powerUps[i].type);
             }
         }
     }
@@ -1313,6 +1481,24 @@ void UpdateGameplay(GameState *game, float delta)
             }
             continue;
         }
+
+        // Decai o brilho do escudo de capsídeo (feedback ao tomar dano no escudo)
+        if (enemy->shieldHitFlash > 0.0f) enemy->shieldHitFlash -= delta;
+
+        // DISTANCIAMENTO SOCIAL (item): aura ao redor do herói empurra os
+        // patógenos que entram no raio, impedindo a aproximação por um tempo.
+        if (game->player.distancingTimer > 0.0f)
+        {
+            const float auraR = 175.0f;
+            Vector2 away = Vector2Subtract(enemy->position, game->player.position);
+            float d = Vector2Length(away);
+            if (d < auraR && d > 0.01f)
+            {
+                float push = (auraR - d) * 0.5f; // empurra mais quanto mais perto
+                enemy->position = Vector2Add(enemy->position, Vector2Scale(Vector2Normalize(away), push));
+            }
+        }
+
         float distSqrToPlayer = Vector2DistanceSqr(game->player.position, enemy->position);
 
         // --------------------------------------------------------------------
@@ -1468,9 +1654,16 @@ void UpdateGameplay(GameState *game, float delta)
                         }
                         float a = (float)GetRandomValue(0, 360) * DEG2RAD;
                         m->position = (Vector2){ origin.x + cosf(a) * 110.0f, origin.y + sinf(a) * 110.0f };
-                        m->active = true; m->type = 1; m->tier = TIER_2;
+                        m->active = true;
+                        // Lacaio invocado conforme o Mundo (bactéria ou vírus c/ escudo)
+                        bool virusW = (game->currentWorld == WORLD_VIRUS);
+                        m->type = virusW ? ETYPE_VIRUS_RANGED : ETYPE_BACT_RANGED;
+                        m->tier = TIER_2;
                         int mhp = (int)((20 + game->wave * 5) * hmul); if (mhp < 1) mhp = 1;
                         m->maxHp = mhp; m->hp = mhp;
+                        if (virusW) { m->shieldMaxHp = 25 + game->wave * 6; m->shieldHp = m->shieldMaxHp; m->shieldActive = true; }
+                        else        { m->shieldMaxHp = 0; m->shieldHp = 0; m->shieldActive = false; }
+                        m->shieldHitFlash = 0.0f;
                         m->speed = 220.0f; m->isRanged = true; m->state = IDLE;
                         m->cooldownTimer = 1.5f; m->chargeTimer = 0.0f;
                         m->patrolTarget = m->position; m->patrolTimer = 3.0f;
@@ -1500,7 +1693,7 @@ void UpdateGameplay(GameState *game, float delta)
                 ProjectileType ptype = PROJ_ACID_ARC;
                 int dmg = 8;
                 
-                if (enemy->type == 1) { // Dengue: picada espalhada
+                if (enemy->type == 1) { // Dengue (legado): picada espalhada
                     ptype = PROJ_BULLET_SPREAD;
                     dmg = 10;
                 } else if (enemy->type == 2) { // KPC: tiro pesado
@@ -1508,6 +1701,12 @@ void UpdateGameplay(GameState *game, float delta)
                     dmg = 20;
                 } else if (enemy->type == 4) { // TB: ácido moderado
                     ptype = PROJ_ACID_ARC;
+                    dmg = 12;
+                } else if (enemy->type == ETYPE_BACT_RANGED) { // Bactéria atiradora (bacilo)
+                    ptype = PROJ_ACID_ARC;
+                    dmg = 11;
+                } else if (enemy->type == ETYPE_VIRUS_RANGED || enemy->type == ETYPE_VIRUS_BOSS) { // Vírus atirador
+                    ptype = PROJ_BULLET_SPREAD;
                     dmg = 12;
                 }
                 
@@ -1674,11 +1873,8 @@ void UpdateGameplay(GameState *game, float delta)
             }
         }
 
-        // Mantém inimigos nos limites do mapa
-        if (enemy->position.x < enemyRadius) enemy->position.x = enemyRadius;
-        if (enemy->position.x > MAP_WIDTH - enemyRadius) enemy->position.x = MAP_WIDTH - enemyRadius;
-        if (enemy->position.y < enemyRadius) enemy->position.y = enemyRadius;
-        if (enemy->position.y > MAP_HEIGHT - enemyRadius) enemy->position.y = MAP_HEIGHT - enemyRadius;
+        // Mantém os patógenos DENTRO do corpo (mesma arena do herói).
+        MapBody_ApplyCollision(&enemy->position, enemyRadius);
 
         // --------------------------------------------------------------------
         // COLISÃO: DANO NO JOGADOR
@@ -1792,7 +1988,8 @@ void UpdateGameplay(GameState *game, float delta)
                                         game->projectiles[i].active = false;
                                     }
 
-                                    int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[j], game->projectiles[i].damage, isBFG);
+                                    int effDmg = ScaleAffinityDamage(game->projectiles[i].damage, game->projectiles[i].type, game->enemies[j].type);
+                                    int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[j], effDmg, isBFG);
                                     if (applied > 0) {
                                         PlaySound(g_assets.sfxEnemyHurt);
                                         SpawnParticleExplosion(game, game->enemies[j].position, WeaponSkinPrimary(game->player.weaponSkinId), 10, 50.0f, 150.0f, 3.0f, 0.4f);
@@ -1911,9 +2108,21 @@ void UpdateGameplay(GameState *game, float delta)
         if (!anyAlive)
         {
             game->wave++;
-            if (game->wave > 5)
+            if (game->wave > WAVES_PER_WORLD)
             {
-                RequestLoadingScreen(game, LOAD_TO_VICTORY, 2.5f);
+                if (game->currentWorld == WORLD_BACTERIA)
+                {
+                    // Concluiu o Mundo das Bactérias: cutscene educativa de
+                    // transição que leva ao Mundo dos Vírus (Fase 6).
+                    game->worldCompleted = true;
+                    game->currentScreen = SCREEN_WORLD_TRANSITION;
+                    game->uiAnimTimer = 0.0f;
+                }
+                else
+                {
+                    // Concluiu o Mundo dos Vírus: Vitória final.
+                    RequestLoadingScreen(game, LOAD_TO_VICTORY, 2.5f);
+                }
             }
             else
             {
@@ -2022,14 +2231,16 @@ THREAD_RETURN SaveGameThread(void *lpParam)
             }
         }
 
-        // 4. Bloco extra (versão 2): poções, pontos do SUS, arma e skins
-        fprintf(arquivo, "EXTRA %d %d %d %d %d %d\n",
+        // 4. Bloco extra (versão 2+): poções, pontos do SUS, arma, skins,
+        //    dificuldade e (versão 3) o Mundo atual da campanha.
+        fprintf(arquivo, "EXTRA %d %d %d %d %d %d %d\n",
                 game->player.healthPotions,
                 game->player.susPoints,
                 game->player.equippedWeapon,
                 game->player.skinId,
                 game->player.weaponSkinId,
-                game->difficulty);
+                game->difficulty,
+                game->currentWorld);
 
         fclose(arquivo);
     }
@@ -2164,18 +2375,39 @@ void CarregarJogoSlot(GameState *game, int slot)
             game->enemies[i].patrolTimer = 3.0f;
         }
 
-        // 4. Bloco extra (versão 2) — opcional para compatibilidade com saves antigos
+        // 4. Bloco extra (versão 2+) — opcional para compatibilidade com saves antigos
         int potions = 3, sus = 0, weapon = 1, skin = game->player.skinId, wskin = game->player.weaponSkinId;
         int diffSaved = game->difficulty;
+        int worldSaved = WORLD_BACTERIA; // saves antigos (sem este campo) começam no Mundo das Bactérias
         char extraTag[8] = { 0 };
         if (fscanf(arquivo, "%7s", extraTag) == 1 && strcmp(extraTag, "EXTRA") == 0)
         {
-            // Tenta ler 6 valores (com dificuldade); tolera saves antigos com 5.
-            int rd = fscanf(arquivo, "%d %d %d %d %d %d", &potions, &sus, &weapon, &skin, &wskin, &diffSaved);
+            // Tenta ler 7 valores (com dificuldade e Mundo); tolera saves antigos com 5 ou 6.
+            int rd = fscanf(arquivo, "%d %d %d %d %d %d %d", &potions, &sus, &weapon, &skin, &wskin, &diffSaved, &worldSaved);
             if (rd < 5) { potions = 3; sus = 0; weapon = 1; }
         }
         if (diffSaved >= DIFFICULTY_EASY && diffSaved <= DIFFICULTY_HARD)
             game->difficulty = diffSaved;
+        // Sanitiza o Mundo carregado (retrocompatível: vale WORLD_BACTERIA por padrão)
+        game->currentWorld = (worldSaved == WORLD_VIRUS) ? WORLD_VIRUS : WORLD_BACTERIA;
+
+        // Reconstrói o escudo de capsídeo dos inimigos virais carregados (o
+        // escudo não é gravado no arquivo; é derivado do tipo/vida no Mundo 2).
+        if (game->currentWorld == WORLD_VIRUS)
+        {
+            for (int i = 0; i < game->enemiesRemaining && i < MAX_ENEMIES; i++)
+            {
+                Enemy *e = &game->enemies[i];
+                if (!e->active) continue;
+                if (e->type == ETYPE_VIRUS_MELEE || e->type == ETYPE_VIRUS_RANGED || e->type == ETYPE_VIRUS_BOSS)
+                {
+                    e->shieldMaxHp = (e->maxHp / 3) + 20;
+                    e->shieldHp = e->shieldMaxHp;
+                    e->shieldActive = true;
+                    e->shieldHitFlash = 0.0f;
+                }
+            }
+        }
         ApplyDifficulty(game);
         game->player.healthPotions = (potions >= 0 && potions <= 99) ? potions : 3;
         game->player.susPoints = (sus >= 0) ? sus : 0;
@@ -2302,7 +2534,7 @@ void RequestLoadingScreen(GameState *game, LoadTarget target, float duration)
     game->loadTarget = target;
     game->loadingTimer = 0.0f;
     game->loadingDuration = duration;
-    game->loadingTip = GetRandomValue(0, 4);
+    game->loadingTip = GetRandomValue(0, LOADING_TIP_COUNT - 1);
     game->screenShake = 0.0f;
 }
 
@@ -2465,5 +2697,95 @@ void GetTutorialDialogText(int step, int page, const char **line1, const char **
             *line2 = "Ao entrar, voce sera injetado na corrente sanguinea do paciente.";
             *line3 = "Boa sorte, Anticorpo. O Distrito Federal conta com voce!";
         }
+    }
+}
+
+// ============================================================================
+// TRANSIÇÃO ENTRE MUNDOS (Fase 6): Bactérias -> Vírus
+// ============================================================================
+void UpdateTelaTransicao(GameState *game)
+{
+    game->uiAnimTimer += GetFrameTime();
+
+    // Avança após um curto tempo de leitura, ao confirmar.
+    if (game->uiAnimTimer > 0.6f &&
+        (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_Q) ||
+         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)))
+    {
+        // Inicia o Mundo dos Vírus mantendo nível, armas e skins do jogador.
+        game->currentWorld = WORLD_VIRUS;
+        game->worldCompleted = false;
+        game->wave = 1;
+
+        // Limpa o estado de combate do mundo anterior.
+        for (int i = 0; i < MAX_ENEMIES; i++)    game->enemies[i].active = false;
+        for (int i = 0; i < MAX_POWERUPS; i++)   game->powerUps[i].active = false;
+        for (int i = 0; i < MAX_PROJECTILES; i++) game->projectiles[i].active = false;
+        for (int i = 0; i < MAX_CORES; i++)      game->cores[i].active = false;
+        game->bossShieldActive = false;
+        game->bossCoresSpawned = false;
+        game->enemiesRemaining = 0;
+
+        // Restaura o herói e remove debuffs/itens temporários.
+        game->player.hp = game->player.maxHp;
+        game->player.poisonTimer = 0.0f; game->player.slowTimer = 0.0f;
+        game->player.damageCooldown = 0.0f; game->poisonTickAccum = 0.0f;
+        game->player.maskTimer = 0.0f; game->player.distancingTimer = 0.0f;
+        game->player.regenTimer = 0.0f; game->player.regenAccum = 0.0f;
+        game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
+
+        SetWeaponWorld(game->currentWorld);
+        StartNextWave(game);
+        game->currentScreen = SCREEN_GAMEPLAY;
+    }
+}
+
+void DrawTelaTransicao(GameState *game, Font font)
+{
+    // Fundo escuro com leve gradiente azulado (entrada no "mundo viral").
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, (Color){ 6, 10, 22, 255 });
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+                           Fade((Color){ 20, 40, 80, 255 }, 0.5f), Fade(BLACK, 0.9f));
+
+    const char *title = "MUNDO 1 CONCLUIDO: BACTERIAS DERROTADAS";
+    Vector2 ts = MeasureTextEx(font, title, 30.0f, 2.0f);
+    DrawTextEx(font, title, (Vector2){ SCREEN_WIDTH / 2.0f - ts.x / 2.0f, 70.0f }, 30.0f, 2.0f, GOLD);
+
+    // Texto educativo em camadas: o que aconteceu, o que vem, e cuidados reais.
+    const char *lines[] = {
+        "Voce conteve a pneumonia bacteriana e a Superbacteria KPC.",
+        "A KPC e resistente a antibioticos e se espalha em hospitais:",
+        "   - Nao se automedique com antibioticos.",
+        "   - Use antibioticos so com prescricao e ate o fim do tratamento.",
+        "   - Higiene das maos reduz infeccoes hospitalares.",
+        "",
+        "AGORA: o paciente enfrenta VIRUS DE RNA (dengue e influenza).",
+        "Os virus tem um CAPSIDEO (capa proteica) que protege o material genetico.",
+        "Como combater no jogo:",
+        "   - Quebre o ESCUDO (capsideo) antes de ferir o virus.",
+        "   - Escalpelizador Estatico quebra o capsideo rapido (corpo a corpo).",
+        "   - Rifle de Vacina e eficaz contra virus (imunizacao).",
+        "Na vida real: vacine-se (influenza), elimine criadouros do Aedes aegypti",
+        "(agua parada) contra a dengue, e procure atendimento ao ter sintomas.",
+    };
+    int n = (int)(sizeof(lines) / sizeof(lines[0]));
+    float y = 130.0f;
+    for (int i = 0; i < n; i++)
+    {
+        Color c = WHITE;
+        if (lines[i][0] == 'A' && lines[i][1] == 'G') c = (Color){ 120, 200, 255, 255 }; // "AGORA:"
+        if (lines[i][0] == 'C' && lines[i][1] == 'o' && lines[i][2] == 'm') c = (Color){ 120, 255, 160, 255 };
+        DrawTextEx(font, lines[i], (Vector2){ 120.0f, y }, 20.0f, 1.5f, c);
+        y += 30.0f;
+    }
+
+    // Prompt pulsante para continuar.
+    if (game->uiAnimTimer > 0.6f)
+    {
+        const char *prompt = "[ESPACO / ENTER / clique] Avancar para o Mundo dos Virus";
+        float a = 0.6f + 0.4f * sinf((float)GetTime() * 4.0f);
+        Vector2 ps = MeasureTextEx(font, prompt, 22.0f, 1.5f);
+        DrawTextEx(font, prompt, (Vector2){ SCREEN_WIDTH / 2.0f - ps.x / 2.0f, SCREEN_HEIGHT - 70.0f },
+                   22.0f, 1.5f, Fade((Color){ 120, 255, 200, 255 }, a));
     }
 }

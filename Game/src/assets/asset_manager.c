@@ -1,4 +1,5 @@
 #include "../../include/asset_manager.h"
+#include "../../include/sprite_manager.h"
 #include <stdio.h>
 
 GameAssets g_assets = {0};
@@ -47,6 +48,10 @@ void LoadGameAssets(void)
         g_assets.shdLowHPTimeLoc = GetShaderLocation(g_assets.shdLowHP, "time");
         g_assets.shdLowHPResLoc = GetShaderLocation(g_assets.shdLowHP, "resolution");
     }
+
+    // Pipeline de sprites: carrega os PNGs que existirem (fallback procedural
+    // automático para os que faltarem). A janela/contexto GL já existe aqui.
+    LoadSprites();
 }
 
 void UnloadGameAssets(void)
@@ -69,6 +74,9 @@ void UnloadGameAssets(void)
         UnloadShader(g_assets.biologicalShader);
         UnloadShader(g_assets.shdLowHP);
     }
+
+    // Descarrega as texturas da pipeline de sprites (antes de fechar a janela).
+    UnloadSprites();
 
     CloseAudioDevice();
 }

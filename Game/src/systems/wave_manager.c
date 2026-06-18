@@ -1,20 +1,13 @@
 #include "wave_manager.h"
 #include "../../include/gameplay.h"
+#include "../../Assets/Maps/map_body.h"
 #include "raymath.h"
 #include <math.h>
 
-// Posiciona um ponto de spawn longe do jogador (distância mínima de 450 px)
+// Posiciona um ponto de spawn DENTRO do corpo, longe do jogador (>= 450 px).
 static Vector2 PickSpawnFarFromPlayer(GameState *game)
 {
-    Vector2 spawnPos;
-    int tries = 0;
-    do
-    {
-        spawnPos.x = (float)GetRandomValue(100, MAP_WIDTH - 100);
-        spawnPos.y = (float)GetRandomValue(100, MAP_HEIGHT - 100);
-        tries++;
-    } while (Vector2DistanceSqr(game->player.position, spawnPos) < 450.0f * 450.0f && tries < 32);
-    return spawnPos;
+    return MapBody_RandomPointInside(game->player.position, 450.0f);
 }
 
 // Configura o chefe final (Superbactéria KPC) num índice específico
@@ -23,7 +16,10 @@ static void ConfigureBoss(GameState *game, int idx)
     Enemy *b = &game->enemies[idx];
     b->position = PickSpawnFarFromPlayer(game);
     b->active = true;
-    b->type = 2;            // KPC / Superbactéria
+    // Visual do chefe conforme o Mundo: Superbactéria KPC (Mundo 1) ou chefe
+    // viral de capsídeo reforçado (Mundo 2). O "escudo do chefe" usa o sistema
+    // de Núcleos de Infecção (InfectionCore) já existente para ambos.
+    b->type = (game->currentWorld == WORLD_VIRUS) ? ETYPE_VIRUS_BOSS : ETYPE_KPC;
     b->tier = TIER_3_BOSS;
     b->maxHp = 1400 + game->wave * 100;
     b->hp = b->maxHp;
@@ -44,6 +40,7 @@ static void ConfigureBoss(GameState *game, int idx)
     b->aiPhase = 0;
     b->summonTimer = 6.0f;
     b->hitCooldown = 0.0f;
+    b->shieldActive = false; b->shieldHp = 0; b->shieldMaxHp = 0; b->shieldHitFlash = 0.0f;
 }
 
 // Configura um MINI CHEFE da onda (entre o elite e o chefe final), escalando
@@ -53,7 +50,10 @@ static void ConfigureMiniBoss(GameState *game, int idx)
     Enemy *m = &game->enemies[idx];
     m->position = PickSpawnFarFromPlayer(game);
     m->active = true;
-    m->type = 2;                 // visual de superbactéria (tanque atirador)
+    // Mini chefe temático por Mundo: superbactéria tanque (Mundo 1) ou vírus
+    // atirador reforçado com escudo de capsídeo (Mundo 2).
+    bool virus = (game->currentWorld == WORLD_VIRUS);
+    m->type = virus ? ETYPE_VIRUS_RANGED : ETYPE_KPC;
     m->tier = TIER_MINIBOSS;
     m->maxHp = 300 + game->wave * 220;   // wave1=520 ... wave4=1180
     m->hp = m->maxHp;
@@ -70,6 +70,10 @@ static void ConfigureMiniBoss(GameState *game, int idx)
     m->fleeTimer = 0.0f; m->isEscort = false; m->aiPhase = 0;
     m->summonTimer = 8.0f;        // invoca lacaios ocasionalmente
     m->hitCooldown = 0.0f;
+    // Escudo de capsídeo no Mundo dos Vírus (reforçado para o mini chefe).
+    if (virus) { m->shieldMaxHp = 120 + game->wave * 30; m->shieldHp = m->shieldMaxHp; m->shieldActive = true; }
+    else       { m->shieldMaxHp = 0; m->shieldHp = 0; m->shieldActive = false; }
+    m->shieldHitFlash = 0.0f;
 }
 
 // Spawna um lacaio de escolta numa posição (perto do mini chefe/chefe).
@@ -81,12 +85,17 @@ static void SpawnEscortMinion(GameState *game, Vector2 pos)
         Enemy *e = &game->enemies[k];
         e->position = pos;
         e->active = true;
-        e->type = (GetRandomValue(0, 1) ? 1 : 3);   // Dengue ou Chagas
+        // Escolta temática por Mundo: bactérias (Mundo 1) ou vírus com escudo
+        // (Mundo 2). Mantém um misto de corpo a corpo e atirador.
+        bool virus = (game->currentWorld == WORLD_VIRUS);
+        bool ranged = (GetRandomValue(0, 1) == 1);
+        if (virus) e->type = ranged ? ETYPE_VIRUS_RANGED : ETYPE_VIRUS_MELEE;
+        else       e->type = ranged ? ETYPE_BACT_RANGED  : ETYPE_BACT_MELEE;
         e->tier = TIER_2;
-        e->isRanged = (e->type == 1);
+        e->isRanged = ranged;
         e->maxHp = 18 + game->wave * 5;
         e->hp = e->maxHp;
-        e->speed = (e->type == 1) ? 220.0f : 270.0f;
+        e->speed = ranged ? 200.0f : 250.0f;
         e->state = IDLE;
         e->patrolTarget = pos;
         e->patrolTimer = 3.0f;
@@ -97,6 +106,10 @@ static void SpawnEscortMinion(GameState *game, Vector2 pos)
         e->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
         e->fleeTimer = 0.0f; e->isEscort = true; e->aiPhase = 0; e->summonTimer = 0.0f;
         e->hitCooldown = 0.0f;
+        // Escudo de capsídeo apenas no Mundo dos Vírus.
+        if (virus) { e->shieldMaxHp = 25 + game->wave * 6; e->shieldHp = e->shieldMaxHp; e->shieldActive = true; }
+        else       { e->shieldMaxHp = 0; e->shieldHp = 0; e->shieldActive = false; }
+        e->shieldHitFlash = 0.0f;
         game->enemiesRemaining++;
         return;
     }
@@ -138,11 +151,8 @@ void StartNextWave(GameState *game)
             float ring = 170.0f + (float)((i - startIdx) % 3) * 55.0f;
             spawnPos.x = bossPos.x + cosf(ang) * ring;
             spawnPos.y = bossPos.y + sinf(ang) * ring;
-            // Mantém dentro do mapa
-            if (spawnPos.x < 80.0f) spawnPos.x = 80.0f;
-            if (spawnPos.x > MAP_WIDTH - 80.0f) spawnPos.x = MAP_WIDTH - 80.0f;
-            if (spawnPos.y < 80.0f) spawnPos.y = 80.0f;
-            if (spawnPos.y > MAP_HEIGHT - 80.0f) spawnPos.y = MAP_HEIGHT - 80.0f;
+            // Mantém o anel de escolta dentro do corpo.
+            MapBody_ApplyCollision(&spawnPos, 30.0f);
             escort = true;
         }
         else
@@ -160,61 +170,75 @@ void StartNextWave(GameState *game)
         game->enemies[i].aiPhase = 0;
         game->enemies[i].summonTimer = 0.0f;
 
-        // Determina tipo e dificuldade do inimigo.
-        // Na onda do chefe, os lacaios pulam o tipo KPC pesado (já há o chefe).
-        int randVal = GetRandomValue(0, bossWave ? 89 : 100);
+        // -----------------------------------------------------------------
+        // TIPO DO INIMIGO conforme o MUNDO atual (expansão em 2 Mundos):
+        //  - WORLD_BACTERIA: só bactérias (melee/ranged) + elite KPC (onda >=3).
+        //  - WORLD_VIRUS:    só vírus com escudo de capsídeo (melee/ranged).
+        // Nenhum tipo legado (SARS/Dengue/Chagas) é spawnado aqui.
+        // -----------------------------------------------------------------
+        Enemy *e = &game->enemies[i];
+        int randVal = GetRandomValue(0, 99);
+        // Por padrão sem escudo; o Mundo dos Vírus ativa abaixo.
+        e->shieldActive = false; e->shieldHp = 0; e->shieldMaxHp = 0; e->shieldHitFlash = 0.0f;
 
-        if (randVal < 40 || game->wave == 1)
+        if (game->currentWorld == WORLD_VIRUS)
         {
-            // Tipo 0: SARS-CoV-2 (Equilibrado, Melee)
-            game->enemies[i].type = 0;
-            game->enemies[i].tier = TIER_1;
-            game->enemies[i].maxHp = 30 + game->wave * 10;
-            game->enemies[i].hp = game->enemies[i].maxHp;
-            game->enemies[i].speed = 140.0f + GetRandomValue(-10, 10);
-            game->enemies[i].isRanged = false;
+            bool ranged = (randVal < 45);
+            if (ranged)
+            {
+                // Vírus à distância com escudo (tema influenza)
+                e->type = ETYPE_VIRUS_RANGED;
+                e->tier = TIER_2;
+                e->isRanged = true;
+                e->maxHp = 22 + game->wave * 6;
+                e->speed = 200.0f + GetRandomValue(-15, 15);
+            }
+            else
+            {
+                // Vírus corpo a corpo com escudo (tema dengue)
+                e->type = ETYPE_VIRUS_MELEE;
+                e->tier = TIER_1;
+                e->isRanged = false;
+                e->maxHp = 30 + game->wave * 9;
+                e->speed = 160.0f + GetRandomValue(-10, 10);
+            }
+            e->hp = e->maxHp;
+            // Capsídeo: precisa ser quebrado antes de ferir a vida.
+            e->shieldMaxHp = 28 + game->wave * 8;
+            e->shieldHp = e->shieldMaxHp;
+            e->shieldActive = true;
         }
-        else if (randVal < 60)
+        else // WORLD_BACTERIA
         {
-            // Tipo 1: Vírus da Dengue (Rápido, Atirador)
-            game->enemies[i].type = 1;
-            game->enemies[i].tier = TIER_2;
-            game->enemies[i].isRanged = true;
-            game->enemies[i].maxHp = 20 + game->wave * 5;
-            game->enemies[i].hp = game->enemies[i].maxHp;
-            game->enemies[i].speed = 220.0f + GetRandomValue(-15, 15);
-        }
-        else if (randVal < 75)
-        {
-            // Tipo 3: Trypanosoma cruzi (Chagas) (Muito rápido, Melee, Frágil)
-            game->enemies[i].type = 3;
-            game->enemies[i].tier = TIER_2;
-            game->enemies[i].maxHp = 15 + game->wave * 5;
-            game->enemies[i].hp = game->enemies[i].maxHp;
-            game->enemies[i].speed = 280.0f + GetRandomValue(-20, 20);
-            game->enemies[i].isRanged = false;
-        }
-        else if (randVal < 90)
-        {
-            // Tipo 4: Mycobacterium tuberculosis (Atirador Pesado)
-            game->enemies[i].type = 4;
-            game->enemies[i].tier = TIER_3;
-            game->enemies[i].maxHp = 100 + game->wave * 20;
-            game->enemies[i].hp = game->enemies[i].maxHp;
-            game->enemies[i].speed = 80.0f + GetRandomValue(-5, 5);
-            game->enemies[i].isRanged = true;
-        }
-        else
-        {
-            // Tipo 2: KPC (Superbactéria, Elite, Lento e Tank).
-            // O chefe propriamente dito é criado por ConfigureBoss(); aqui é
-            // apenas uma versão elite que aparece a partir da onda 3.
-            game->enemies[i].type = 2;
-            game->enemies[i].tier = TIER_3;
-            game->enemies[i].maxHp = 200 + game->wave * 40;
-            game->enemies[i].hp = game->enemies[i].maxHp;
-            game->enemies[i].speed = 60.0f + GetRandomValue(-5, 5);
-            game->enemies[i].isRanged = true;
+            if (randVal < 50 || game->wave == 1)
+            {
+                // Bactéria corpo a corpo (cocos / pneumonia)
+                e->type = ETYPE_BACT_MELEE;
+                e->tier = TIER_1;
+                e->isRanged = false;
+                e->maxHp = 32 + game->wave * 10;
+                e->speed = 150.0f + GetRandomValue(-10, 10);
+            }
+            else if (randVal < 85 || game->wave < 3)
+            {
+                // Bactéria à distância (bacilo atirador)
+                e->type = ETYPE_BACT_RANGED;
+                e->tier = TIER_2;
+                e->isRanged = true;
+                e->maxHp = 24 + game->wave * 6;
+                e->speed = 110.0f + GetRandomValue(-10, 10);
+            }
+            else
+            {
+                // Elite KPC (tanque atirador) a partir da onda 3. O chefe em si
+                // é criado por ConfigureBoss().
+                e->type = ETYPE_KPC;
+                e->tier = TIER_3;
+                e->isRanged = true;
+                e->maxHp = 200 + game->wave * 40;
+                e->speed = 60.0f + GetRandomValue(-5, 5);
+            }
+            e->hp = e->maxHp;
         }
 
         game->enemies[i].state = IDLE;
@@ -248,10 +272,7 @@ void StartNextWave(GameState *game)
                     float ang = (float)e / (float)escorts * 2.0f * PI;
                     Vector2 ep = { game->enemies[k].position.x + cosf(ang) * 140.0f,
                                    game->enemies[k].position.y + sinf(ang) * 140.0f };
-                    if (ep.x < 80.0f) ep.x = 80.0f;
-                    if (ep.x > MAP_WIDTH - 80.0f) ep.x = MAP_WIDTH - 80.0f;
-                    if (ep.y < 80.0f) ep.y = 80.0f;
-                    if (ep.y > MAP_HEIGHT - 80.0f) ep.y = MAP_HEIGHT - 80.0f;
+                    MapBody_ApplyCollision(&ep, 30.0f); // dentro do corpo
                     SpawnEscortMinion(game, ep);
                 }
                 break;
@@ -264,11 +285,8 @@ void StartNextWave(GameState *game)
     if (powerUpsCount > 10) powerUpsCount = 10;
     for (int i = 0; i < powerUpsCount; i++)
     {
-        Vector2 itemPos = {
-            (float)GetRandomValue(200, MAP_WIDTH - 200),
-            (float)GetRandomValue(200, MAP_HEIGHT - 200)
-        };
-        SpawnPowerUpAt(game, itemPos, -1); // Tipo aleatório
+        Vector2 itemPos = MapBody_RandomPointInside(game->player.position, 0.0f);
+        SpawnPowerUpAt(game, itemPos, -1); // Tipo aleatório, dentro do corpo
     }
 
     // ------------------------------------------------------------------
@@ -295,19 +313,31 @@ void StartNextWave(GameState *game)
         SpawnParticle(game, game->player.position, vel, SKYBLUE, 6.0f, 1.2f);
     }
 
-    // Banner de aviso da nova horda / chefe.
+    // Banner de aviso da nova horda / chefe (texto por Mundo).
+    bool virusWorld = (game->currentWorld == WORLD_VIRUS);
     if (bossWave)
     {
-        ShowBanner(game, "CHEFE: SUPERBACTERIA KPC",
-                   "Cercada por lacaios! Use a Granada e a Vacina BFG.",
-                   (Color){ 255, 70, 90, 255 }, 4.0f);
+        if (virusWorld)
+            ShowBanner(game, "CHEFE VIRAL: CAPSIDEO REFORCADO",
+                       "Quebre o escudo (capsideo) antes de atacar a vida!",
+                       (Color){ 120, 200, 255, 255 }, 4.0f);
+        else
+            ShowBanner(game, "CHEFE: SUPERBACTERIA KPC",
+                       "Resistente a antibioticos! Use a Granada e a BFG.",
+                       (Color){ 255, 70, 90, 255 }, 4.0f);
         game->screenShake = 0.8f;
     }
     else
     {
-        const char *sub = (game->wave == 4)
-            ? "MINI CHEFE presente! E a proxima horda traz o CHEFE final!"
-            : "Um MINI CHEFE lidera esta horda. Elimine todos para avancar.";
+        const char *sub;
+        if (virusWorld)
+            sub = (game->wave == 4)
+                ? "Virus com escudo! Quebre o capsideo. O CHEFE viral se aproxima!"
+                : "Virus com capsideo: quebre o escudo para eliminar.";
+        else
+            sub = (game->wave == 4)
+                ? "MINI CHEFE presente! E a proxima horda traz o CHEFE final!"
+                : "Um MINI CHEFE lidera esta horda. Elimine todos para avancar.";
         ShowBanner(game, TextFormat("HORDA %d / 5", game->wave), sub,
                    (Color){ 0, 229, 255, 255 }, 3.4f);
     }

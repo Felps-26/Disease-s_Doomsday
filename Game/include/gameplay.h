@@ -92,6 +92,10 @@ WeaponInfo GetWeaponInfo(int weapon);
 int  WeaponUnlockLevel(int weapon);
 // Nome curto da arma (1..4)
 const char *WeaponName(int weapon);
+// Define o Mundo atual usado por GetWeaponInfo para nomear/descrever as armas
+// temáticas (Espada-Seringa/Rifle de Bacteriófagos no Mundo 1; Escalpelizador/
+// Rifle de Vacina no Mundo 2). Chamado a cada frame pela gameplay.
+void SetWeaponWorld(int world);
 
 // ---- Skins ----
 // Cores da skin de arma atual (primária = projétil/lâmina, secundária = brilho/trail)
@@ -122,5 +126,14 @@ bool HitInfectionCores(GameState *game, Vector2 pos, float radius, int dmg);
 // ---- Dano do jogador a um inimigo (i-frames de chefe, limite por golpe,
 //      resistência à BFG e escudo do chefe). Retorna o dano efetivo (0=bloqueado).
 int  ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG);
+// Classificação biológica do patógeno (afinidade das armas).
+bool EnemyIsBacterial(int type);
+bool EnemyIsViral(int type);
+
+// ---- Transição entre Mundos (Fase 6) ----
+// Cutscene/tela educativa exibida ao concluir o Mundo das Bactérias, levando
+// ao Mundo dos Vírus. Update trata o avanço; Draw desenha o texto educativo.
+void UpdateTelaTransicao(GameState *game);
+void DrawTelaTransicao(GameState *game, Font font);
 
 #endif // GAMEPLAY_H
