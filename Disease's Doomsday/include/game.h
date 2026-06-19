@@ -77,7 +77,8 @@ typedef enum GameScreen
     SCREEN_ARSENAL,    // Tela de arsenal: detalhes de todas as armas
     SCREEN_SKINS,      // Tela de seleção de skins com preview
     SCREEN_ADMIN,      // Modo Administrador / Dev (protegido por senha)
-    SCREEN_WORLD_TRANSITION // Cutscene/tela educativa entre Mundo 1 (Bactérias) e Mundo 2 (Vírus)
+    SCREEN_WORLD_TRANSITION, // Cutscene/tela educativa entre Mundo 1 (Bactérias) e Mundo 2 (Vírus)
+    SCREEN_DIFFICULTY_SELECT // Seleção de dificuldade (cards) ao iniciar/reiniciar um jogo
 } GameScreen;
 
 // ============================================================================
@@ -257,6 +258,16 @@ typedef struct GameState
     float timeElapsed;
     float screenShake;
     float uiAnimTimer;
+    // ---- Estado de UI (transitório; NÃO é salvo) ----
+    // Tempo (s) desde que a tela atual foi aberta — alimenta animações de entrada
+    // (fade/slide), morph de fundo e transições.
+    float screenAnim;
+    GameScreen highlightScreen; // tela "destacada" p/ morph de fundo (item do menu)
+    int   menuHighlight;        // índice do item de menu sob o cursor (-1 = nenhum)
+    // Tela de seleção de dificuldade: opção tentativa (só vira game->difficulty ao
+    // confirmar) e tela para onde "VOLTAR" retorna.
+    int   pendingDifficulty;
+    int   diffReturnScreen;     // GameScreen de retorno ao cancelar a seleção
     
     // Controle de Input do Nome
     bool nameInputActive;
@@ -329,6 +340,12 @@ typedef struct GameState
     // ---- Dificuldade ----
     int   difficulty;         // Difficulty (EASY/MEDIUM/HARD)
     DifficultyConfig diff;    // configuração derivada da dificuldade selecionada
+
+    // ---- Percepção do jogador pela IA (transitório; NÃO é salvo) ----
+    // Velocidade suavizada do herói, usada para antecipação LIMITADA de mira dos
+    // inimigos ranged (eles "lideram" um pouco o tiro conforme a dificuldade).
+    Vector2 playerVelSmooth;
+    Vector2 playerPrevPos;
 
     // ---- Mundo atual (expansão: campanha em 2 Mundos) ----
     // WORLD_BACTERIA (0) por padrão — saves antigos, que não gravam este campo,

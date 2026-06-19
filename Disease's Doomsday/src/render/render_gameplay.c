@@ -619,32 +619,55 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
             float destSize = (enemy->tier == TIER_3_BOSS) ? 140.0f
                            : (enemy->tier == TIER_MINIBOSS) ? 90.0f : 45.0f;
             Vector2 renderPos = enemy->position;
-            
+
+            // ANIMAÇÃO PROCEDURAL (Etapa 5) — squash/stretch, bobbing, inclinação,
+            // antecipação/recuo, flash de dano e morte. Tudo baseado em TEMPO/ESTADO
+            // (velSmooth/animTime/attackAnim/spawnAnim), nunca em random por frame.
+            float t = (float)GetTime();
+            float spd = Vector2Length(enemy->velSmooth);
+            float spdN = spd / (enemy->speed + 1.0f);
+            if (spdN > 1.0f) spdN = 1.0f;
+
             float squashFactor = 1.0f;
             float scale = 1.0f;
             float rotation = 0.0f;
             float alpha = 1.0f;
-            
-            if (enemy->state == HURT)
-            {
-                float intensity = (enemy->cooldownTimer / 0.25f) * 6.0f;
-                renderPos.x += GetRandomValue(-intensity, intensity);
-                renderPos.y += GetRandomValue(-intensity, intensity);
-                
-                float t = enemy->cooldownTimer / 0.25f;
-                squashFactor = 1.0f + sinf(t * PI * 4.0f) * 0.18f;
-            }
-            else if (enemy->state == DEATH)
+
+            if (enemy->state == DEATH)
             {
                 float deathPct = enemy->cooldownTimer / 0.5f;
                 if (deathPct < 0.0f) deathPct = 0.0f;
                 if (deathPct > 1.0f) deathPct = 1.0f;
-                
-                scale = deathPct;
-                rotation = (1.0f - deathPct) * 360.0f;
-                alpha = deathPct;
+                scale = deathPct;                       // encolhe
+                rotation = (1.0f - deathPct) * 360.0f;  // gira ao dissolver
+                alpha = deathPct;                       // some
+                squashFactor = 0.7f + deathPct * 0.3f;
             }
-            
+            else
+            {
+                // "Pop-in" ao surgir.
+                scale = 0.45f + 0.55f * enemy->spawnAnim;
+                // Respiração + stretch ao mover + antecipação(+)/recuo(-) do ataque.
+                squashFactor = 1.0f + sinf(enemy->animTime * 4.0f) * 0.04f
+                             + spdN * 0.10f + enemy->attackAnim * 0.16f;
+                // Bobbing vertical (mais intenso em movimento).
+                renderPos.y += sinf(enemy->animTime * (6.0f + spdN * 8.0f)) * (2.0f + spdN * 6.0f);
+                // Inclinação na direção do movimento horizontal.
+                rotation += Clamp(enemy->velSmooth.x * 0.02f, -14.0f, 14.0f);
+                // Flash/tremor de dano DETERMINÍSTICO (senoidal, não aleatório).
+                if (enemy->state == HURT)
+                {
+                    float k = enemy->cooldownTimer / 0.25f;
+                    k = Clamp(k, 0.0f, 1.0f);
+                    renderPos.x += sinf(t * 60.0f) * 6.0f * k;
+                    renderPos.y += cosf(t * 70.0f) * 4.0f * k;
+                    squashFactor += sinf(k * PI * 4.0f) * 0.18f; // pop de impacto
+                }
+                // Pulso de fase do chefe (mais "raivoso" nas fases finais).
+                if (enemy->tier == TIER_3_BOSS)
+                    scale *= 1.0f + 0.05f * (float)enemy->aiPhase * (0.5f + 0.5f * sinf(t * (3.0f + enemy->aiPhase)));
+            }
+
             float currentDestSize = destSize * scale;
 
             DrawEnemyModel(enemy, renderPos, currentDestSize, rotation, squashFactor, alpha);
@@ -753,7 +776,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
 
             if (p->type == PROJ_PLAYER_BFG) {
                 srcSize = 30.0f;
-                DrawCircleGradient((Vector2){ p->position.x, p->position.y }, srcSize, pCol, BLANK);
+                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize, pCol, BLANK);
                 DrawCircleLines(p->position.x, p->position.y, srcSize, wpnSec);
             } else if (p->type == PROJ_PLAYER_GRENADE) {
                 srcSize = 15.0f;

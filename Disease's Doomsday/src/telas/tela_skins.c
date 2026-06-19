@@ -28,16 +28,19 @@ static const char *WeaponSkinDesc(int id)
     }
 }
 
+// Geometria ÚNICA (desenho == hitbox) dos cards/swatches.
+static Rectangle SkinCardRect(int i)     { return (Rectangle){ 560.0f, 184.0f + i * 86.0f, 600.0f, 74.0f }; }
+static Rectangle WeaponSwatchRect(int i) { return (Rectangle){ 560.0f + i * 200.0f, 500.0f, 188.0f, 76.0f }; }
+
 void DrawTelaSkins(GameState *game, Font font)
 {
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, THEME_COLOR_BG_DARK, THEME_COLOR_BG_LIGHT);
+    DrawThemedBackground(SCREEN_SKINS, (float)GetTime(), game->screenAnim / 0.4f);
 
-    const char *title = "SELECAO DE SKINS";
-    Vector2 tSz = MeasureTextEx(font, title, 40.0f, 1.5f);
-    DrawTextEx(font, title, (Vector2){ SCREEN_WIDTH / 2.0f - tSz.x / 2.0f, 36.0f }, 40.0f, 1.5f, THEME_COLOR_TEXT);
+    float entry = UIEase(game->screenAnim / 0.4f);
+    DrawUIScreenTitle(font, "SELECAO DE SKINS", (Color){ 200, 110, 255, 255 }, entry);
     const char *sub = "Todas as skins estao liberadas. Sua escolha vale na proxima partida.";
     Vector2 sSz = MeasureTextEx(font, sub, 16.0f, 1.0f);
-    DrawTextEx(font, sub, (Vector2){ SCREEN_WIDTH / 2.0f - sSz.x / 2.0f, 86.0f }, 16.0f, 1.0f, Fade(WHITE, 0.8f));
+    DrawTextEx(font, sub, (Vector2){ SCREEN_WIDTH / 2.0f - sSz.x / 2.0f, 96.0f }, 16.0f, 1.0f, Fade(WHITE, 0.8f));
 
     // ---- PREVIEW grande do herói (à esquerda) ----
     Rectangle preview = { 110, 150, 380, 380 };
@@ -68,31 +71,35 @@ void DrawTelaSkins(GameState *game, Font font)
     DrawTextEx(font, "SKIN DO ANTICORPO", (Vector2){ 560, 150 }, 20.0f, 1.0f, THEME_COLOR_MAIN);
     for (int i = 0; i < SKIN_COUNT; i++)
     {
-        Rectangle card = { 560, 184.0f + i * 86.0f, 600, 74 };
+        Rectangle card = SkinCardRect(i);
         bool active = (game->player.skinId == i);
         DrawRectangleRounded(card, 0.15f, 6, active ? Fade(THEME_COLOR_MAIN, 0.18f) : Fade((Color){ 12, 12, 22, 255 }, 0.8f));
         DrawRectangleRoundedLines(card, 0.15f, 6, active ? THEME_COLOR_MAIN : THEME_COLOR_BORDER);
 
-        DrawTextEx(font, PlayerSkinName(i), (Vector2){ card.x + 18, card.y + 12 }, 22.0f, 1.0f, active ? THEME_COLOR_MAIN : WHITE);
-        DrawTextEx(font, PlayerSkinDesc(i), (Vector2){ card.x + 18, card.y + 42 }, 14.0f, 1.0f, Fade(WHITE, 0.7f));
+        DrawTextEx(font, PlayerSkinName(i), (Vector2){ card.x + 18, card.y + 10 }, 22.0f, 1.0f, active ? THEME_COLOR_MAIN : WHITE);
+        // estado (ATIVA/Clique) à direita; descrição com WRAP na região restante.
         if (active)
-            DrawTextEx(font, "ATIVA", (Vector2){ card.x + card.width - 80, card.y + 26 }, 18.0f, 1.0f, GOLD);
+            DrawTextEx(font, "ATIVA", (Vector2){ card.x + card.width - 78, card.y + 12 }, 18.0f, 1.0f, GOLD);
         else
-            DrawTextEx(font, "Clique", (Vector2){ card.x + card.width - 84, card.y + 28 }, 14.0f, 1.0f, Fade(WHITE, 0.5f));
+            DrawTextEx(font, "Clique", (Vector2){ card.x + card.width - 80, card.y + 14 }, 14.0f, 1.0f, Fade(WHITE, 0.5f));
+        DrawTextWrapped(font, PlayerSkinDesc(i),
+                        (Rectangle){ card.x + 18, card.y + 38, card.width - 110, 30 }, 14.0f, 1.0f, Fade(WHITE, 0.72f));
     }
 
     // ---- Skin da ARMA (linha de swatches) ----
     DrawTextEx(font, "SKIN DA ARMA (cor dos disparos):", (Vector2){ 560, 470 }, 18.0f, 1.0f, THEME_COLOR_MAIN);
     for (int i = 0; i < WEAPON_SKIN_COUNT; i++)
     {
-        Rectangle sw = { 560.0f + i * 200.0f, 502, 188, 56 };
+        Rectangle sw = WeaponSwatchRect(i);
         bool active = (game->player.weaponSkinId == i);
         DrawRectangleRounded(sw, 0.2f, 6, active ? Fade(WeaponSkinPrimary(i), 0.25f) : Fade((Color){ 12, 12, 22, 255 }, 0.8f));
         DrawRectangleRoundedLines(sw, 0.2f, 6, active ? WeaponSkinPrimary(i) : THEME_COLOR_BORDER);
-        DrawCircleV((Vector2){ sw.x + 26, sw.y + 28 }, 12.0f, WeaponSkinPrimary(i));
-        DrawCircleLines((int)(sw.x + 26), (int)(sw.y + 28), 12.0f, WeaponSkinSecondary(i));
-        DrawTextEx(font, WeaponSkinName(i), (Vector2){ sw.x + 48, sw.y + 8 }, 16.0f, 1.0f, active ? WeaponSkinPrimary(i) : WHITE);
-        DrawTextEx(font, WeaponSkinDesc(i), (Vector2){ sw.x + 48, sw.y + 30 }, 11.0f, 1.0f, Fade(WHITE, 0.65f));
+        DrawCircleV((Vector2){ sw.x + 24, sw.y + 22 }, 11.0f, WeaponSkinPrimary(i));
+        DrawCircleLines((int)(sw.x + 24), (int)(sw.y + 22), 11.0f, WeaponSkinSecondary(i));
+        DrawTextEx(font, WeaponSkinName(i), (Vector2){ sw.x + 44, sw.y + 10 }, 16.0f, 1.0f, active ? WeaponSkinPrimary(i) : WHITE);
+        // descrição com WRAP, contida no swatch (nunca ultrapassa o card).
+        DrawTextWrapped(font, WeaponSkinDesc(i),
+                        (Rectangle){ sw.x + 10, sw.y + 36, sw.width - 20, 34 }, 12.0f, 1.0f, Fade(WHITE, 0.68f));
     }
 
     DrawButton(skinsBack, font, true);
@@ -101,22 +108,20 @@ void DrawTelaSkins(GameState *game, Font font)
 
 void UpdateTelaSkins(GameState *game, Vector2 mouse)
 {
-    // Seleção de skin do jogador
+    // Seleção de skin do jogador (mesma geometria do desenho)
     for (int i = 0; i < SKIN_COUNT; i++)
     {
-        Rectangle card = { 560, 184.0f + i * 86.0f, 600, 74 };
-        if (CheckCollisionPointRec(mouse, card) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        if (CheckCollisionPointRec(mouse, SkinCardRect(i)) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
         {
             game->player.skinId = i;
             SavePlayerConfig(game);
         }
     }
 
-    // Seleção de skin da arma
+    // Seleção de skin da arma (mesma geometria do desenho)
     for (int i = 0; i < WEAPON_SKIN_COUNT; i++)
     {
-        Rectangle sw = { 560.0f + i * 200.0f, 502, 188, 56 };
-        if (CheckCollisionPointRec(mouse, sw) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        if (CheckCollisionPointRec(mouse, WeaponSwatchRect(i)) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
         {
             game->player.weaponSkinId = i;
             SavePlayerConfig(game);

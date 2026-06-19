@@ -4,6 +4,9 @@
 #include "../../include/gameplay.h"
 #include "../../include/input_controller.h"
 #include "../../include/asset_manager.h"
+#include "../../include/sprite_manager.h"
+#include "../../Assets/@models/menu_title_glyphs.h"
+#include "../../Assets/@models/menu_organisms.h"
 #include "raymath.h"
 #include "../../Assets/Maps/map_seringa.h"
 #include "../../Assets/@models/player_model.h"
@@ -57,27 +60,20 @@ bool AnySaveExistsCached(void)
 // ============================================================================
 // DEFINIÇÃO DOS BOTÕES DAS TELAS (GLOBAIS DA UI)
 // ============================================================================
-// Menu principal: opções claras para todos os sistemas do jogo.
+// Menu principal: coluna única, centralizada, com espaçamento uniforme. As
+// bounds são a ÚNICA fonte de verdade (desenho e hitbox usam o mesmo retângulo).
+// "JOGAR" abre a seleção de dificuldade; o seletor antigo foi removido.
 UIButton menuButtons[] = {
-    { { 500, 248, 280, 34 }, "JOGAR", false, false },
-    { { 500, 286, 280, 34 }, "CARREGAR JOGO", false, false },
-    { { 500, 324, 280, 34 }, "ARSENAL (ARMAS)", false, false },
-    { { 500, 362, 280, 34 }, "SKINS", false, false },
-    { { 500, 400, 280, 34 }, "TUTORIAL", false, false },
-    { { 500, 438, 280, 34 }, "CONFIG", false, false },
-    { { 500, 476, 280, 34 }, "MODO ADMIN", false, false },
-    { { 500, 514, 280, 34 }, "SAIR", false, false }
+    { { 470, 362, 340, 36 }, "JOGAR", false, false },
+    { { 470, 404, 340, 36 }, "CARREGAR JOGO", false, false },
+    { { 470, 446, 340, 36 }, "ARSENAL (ARMAS)", false, false },
+    { { 470, 488, 340, 36 }, "SKINS", false, false },
+    { { 470, 530, 340, 36 }, "TUTORIAL", false, false },
+    { { 470, 572, 340, 36 }, "CONFIG", false, false },
+    { { 470, 614, 340, 36 }, "MODO ADMIN", false, false },
+    { { 470, 656, 340, 36 }, "SAIR", false, false }
 };
 #define MENU_BTN_COUNT ((int)(sizeof(menuButtons) / sizeof(menuButtons[0])))
-
-// Retângulos do seletor de dificuldade no menu (3 segmentos), abaixo do painel.
-Rectangle MenuDifficultyRect(int i)
-{
-    float segW = 200.0f, gap = 12.0f;
-    float total = 3 * segW + 2 * gap;
-    float startX = (SCREEN_WIDTH - total) / 2.0f;
-    return (Rectangle){ startX + i * (segW + gap), 632.0f, segW, 46.0f };
-}
 
 UIButton pauseButtons[] = {
     { { 500, 210, 280, 40 }, "RESUME GAME", false, false },
@@ -87,7 +83,7 @@ UIButton pauseButtons[] = {
     { { 500, 410, 280, 40 }, "MAIN MENU", false, false }
 };
 
-UIButton controlsButton = { { 490, 580, 300, 50 }, "BACK", false, false };
+UIButton controlsButton = { { 490, 660, 300, 42 }, "VOLTAR", false, false };
 
 UIButton gameOverButtons[] = {
     { { 490, 390, 300, 50 }, "TRY AGAIN", false, false },
@@ -180,20 +176,887 @@ void DrawButton(UIButton botao, Font font, bool enabled)
 }
 
 // ============================================================================
-// AUXILIAR: HOVER/CLICK GENÉRICO
+// COMPONENTES REUTILIZÁVEIS DE UI
 // ============================================================================
+float UIEase(float t)
+{
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return EaseOutCubic(t);
+}
 
+static Color ColLerp(Color a, Color b, float t)
+{
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return (Color){ (unsigned char)(a.r + (b.r - a.r) * t),
+                    (unsigned char)(a.g + (b.g - a.g) * t),
+                    (unsigned char)(a.b + (b.b - a.b) * t),
+                    (unsigned char)(a.a + (b.a - a.a) * t) };
+}
+
+// Paleta temática por tela: top/bottom do gradiente + cor de acento.
+static void ScreenPalette(int screen, Color *top, Color *bot, Color *accent)
+{
+    switch (screen)
+    {
+        case SCREEN_ARSENAL:  *top=(Color){14,16,22,255};  *bot=(Color){8,12,16,255};  *accent=(Color){255,200,80,255};  break;
+        case SCREEN_SKINS:    *top=(Color){20,10,28,255};  *bot=(Color){10,6,18,255};   *accent=(Color){200,110,255,255}; break;
+        case SCREEN_TUTORIAL:
+        case SCREEN_CONTROLS: *top=(Color){8,18,28,255};   *bot=(Color){5,10,18,255};   *accent=(Color){0,200,255,255};   break;
+        case SCREEN_SETTINGS: *top=(Color){10,18,20,255};  *bot=(Color){6,10,12,255};   *accent=(Color){0,229,200,255};   break;
+        case SCREEN_ADMIN:    *top=(Color){22,8,8,255};    *bot=(Color){10,4,5,255};    *accent=(Color){255,80,80,255};   break;
+        case SCREEN_GAMEOVER: *top=(Color){22,6,12,255};   *bot=(Color){8,3,6,255};     *accent=(Color){230,60,70,255};   break;
+        case SCREEN_VICTORY:  *top=(Color){10,16,36,255};  *bot=(Color){6,8,20,255};    *accent=(Color){255,210,90,255};  break;
+        default:              *top=THEME_COLOR_BG_DARK;     *bot=THEME_COLOR_BG_LIGHT;   *accent=THEME_COLOR_MAIN;         break;
+    }
+}
+
+void DrawThemedBackground(int screen, float time, float entry)
+{
+    // Morph suave entre temas (lerp do estado atual para o alvo da tela).
+    static Color cTop = {6,18,10,255}, cBot = {10,28,18,255}, cAcc = {0,229,255,255};
+    static int inited = 0;
+    Color tTop, tBot, tAcc; ScreenPalette(screen, &tTop, &tBot, &tAcc);
+    if (!inited) { cTop=tTop; cBot=tBot; cAcc=tAcc; inited=1; }
+    float k = 6.0f * GetFrameTime(); if (k > 1.0f) k = 1.0f;
+    cTop = ColLerp(cTop, tTop, k); cBot = ColLerp(cBot, tBot, k); cAcc = ColLerp(cAcc, tAcc, k);
+
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, cTop, cBot);
+
+    // Células biológicas flutuando (posições determinísticas por índice + tempo).
+    float fade = UIEase(entry);
+    for (int i = 0; i < 26; i++)
+    {
+        float seedx = fmodf(i * 137.0f, (float)SCREEN_WIDTH);
+        float baseY = fmodf(i * 89.0f, (float)SCREEN_HEIGHT);
+        float y = baseY - fmodf(time * (12.0f + (i % 5) * 6.0f), (float)SCREEN_HEIGHT + 60.0f);
+        if (y < -30.0f) y += SCREEN_HEIGHT + 60.0f;
+        float x = seedx + sinf(time * 0.6f + i) * 18.0f;
+        float r = 6.0f + (i % 4) * 5.0f;
+        float a = (0.05f + 0.05f * sinf(time * 1.4f + i)) * fade;
+        DrawCircleV((Vector2){ x, y }, r, Fade(cAcc, a));
+        DrawCircleLines((int)x, (int)y, r, Fade(cAcc, a * 1.4f));
+    }
+    // Vinheta suave nas bordas para focar o conteúdo central.
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, 90, Fade(BLACK, 0.35f), Fade(BLACK, 0.0f));
+    DrawRectangleGradientV(0, SCREEN_HEIGHT - 90, SCREEN_WIDTH, 90, Fade(BLACK, 0.0f), Fade(BLACK, 0.35f));
+}
+
+void DrawPanel(Rectangle r, Color accent, float bgAlpha)
+{
+    DrawRectangleRounded(r, 0.06f, 10, Fade((Color){ 8, 10, 16, 255 }, bgAlpha));
+    DrawRectangleRoundedLines(r, 0.06f, 10, Fade(accent, 0.55f));
+    float len = 16.0f, th = 2.0f;
+    DrawLineEx((Vector2){ r.x, r.y }, (Vector2){ r.x + len, r.y }, th, accent);
+    DrawLineEx((Vector2){ r.x, r.y }, (Vector2){ r.x, r.y + len }, th, accent);
+    DrawLineEx((Vector2){ r.x + r.width, r.y }, (Vector2){ r.x + r.width - len, r.y }, th, accent);
+    DrawLineEx((Vector2){ r.x + r.width, r.y }, (Vector2){ r.x + r.width, r.y + len }, th, accent);
+    DrawLineEx((Vector2){ r.x, r.y + r.height }, (Vector2){ r.x + len, r.y + r.height }, th, accent);
+    DrawLineEx((Vector2){ r.x, r.y + r.height }, (Vector2){ r.x, r.y + r.height - len }, th, accent);
+    DrawLineEx((Vector2){ r.x + r.width, r.y + r.height }, (Vector2){ r.x + r.width - len, r.y + r.height }, th, accent);
+    DrawLineEx((Vector2){ r.x + r.width, r.y + r.height }, (Vector2){ r.x + r.width, r.y + r.height - len }, th, accent);
+}
+
+void DrawTitleText(Font font, const char *text, float centerX, float y, float fontSize, Color color)
+{
+    Vector2 sz = MeasureTextEx(font, text, fontSize, 2.0f);
+    Vector2 pos = { centerX - sz.x * 0.5f, y };
+    float glow = 0.30f + 0.12f * sinf((float)GetTime() * 3.0f);
+    for (int gx = -2; gx <= 2; gx++)
+        for (int gy = -2; gy <= 2; gy++)
+            if (gx || gy)
+                DrawTextEx(font, text, (Vector2){ pos.x + gx * 2.0f, pos.y + gy * 2.0f }, fontSize, 2.0f, Fade(color, 0.05f * glow));
+    DrawTextEx(font, text, (Vector2){ pos.x + 3, pos.y + 3 }, fontSize, 2.0f, Fade(BLACK, 0.5f));
+    DrawTextEx(font, text, pos, fontSize, 2.0f, color);
+}
+
+float DrawTextWrapped(Font font, const char *text, Rectangle area, float fontSize, float spacing, Color color)
+{
+    int n = 0; char buf[1024];
+    for (const char *p = text; *p && n < 1023; p++) buf[n++] = *p;
+    buf[n] = '\0';
+
+    for (float fs = fontSize; fs >= 9.0f; fs -= 1.0f)
+    {
+        float lineH = fs * 1.25f;
+        float spaceW = MeasureTextEx(font, " ", fs, spacing).x;
+        // 1) Mede quantas linhas o wrap usa (sem desenhar).
+        char copy[1024]; for (int i = 0; i <= n; i++) copy[i] = buf[i];
+        float x = area.x, y = area.y; char *s = copy;
+        for (char *q = copy; ; q++)
+        {
+            if (*q == ' ' || *q == '\0')
+            {
+                char saved = *q; *q = '\0';
+                Vector2 ws = MeasureTextEx(font, s, fs, spacing);
+                if (x > area.x && x + ws.x > area.x + area.width) { x = area.x; y += lineH; }
+                x += ws.x + spaceW;
+                *q = saved; s = q + 1;
+                if (saved == '\0') break;
+            }
+        }
+        if (y + lineH > area.y + area.height && fs > 9.0f) continue; // não coube: encolhe
+
+        // 2) Desenha de fato.
+        char draw[1024]; for (int i = 0; i <= n; i++) draw[i] = buf[i];
+        float dx = area.x, dy = area.y; char *d = draw;
+        for (char *q = draw; ; q++)
+        {
+            if (*q == ' ' || *q == '\0')
+            {
+                char saved = *q; *q = '\0';
+                Vector2 ws = MeasureTextEx(font, d, fs, spacing);
+                if (dx > area.x && dx + ws.x > area.x + area.width) { dx = area.x; dy += lineH; }
+                DrawTextEx(font, d, (Vector2){ dx, dy }, fs, spacing, color);
+                dx += ws.x + spaceW;
+                *q = saved; d = q + 1;
+                if (saved == '\0') break;
+            }
+        }
+        return (dy + lineH) - area.y;
+    }
+    return 0.0f;
+}
+
+void DrawTooltip(Font font, const char *text, Vector2 anchor)
+{
+    float fs = 15.0f, pad = 8.0f;
+    Vector2 sz = MeasureTextEx(font, text, fs, 1.0f);
+    Rectangle r = { anchor.x + 14.0f, anchor.y + 14.0f, sz.x + pad * 2.0f, sz.y + pad * 2.0f };
+    if (r.x + r.width > SCREEN_WIDTH - 6.0f) r.x = anchor.x - r.width - 14.0f;
+    if (r.y + r.height > SCREEN_HEIGHT - 6.0f) r.y = SCREEN_HEIGHT - r.height - 6.0f;
+    DrawRectangleRounded(r, 0.3f, 6, Fade((Color){ 8, 10, 16, 255 }, 0.92f));
+    DrawRectangleRoundedLines(r, 0.3f, 6, Fade(THEME_COLOR_MAIN, 0.8f));
+    DrawTextEx(font, text, (Vector2){ r.x + pad, r.y + pad }, fs, 1.0f, WHITE);
+}
+
+// ============================================================================
+// SISTEMA VISUAL COMPARTILHADO (padrão Arsenal) — implementação
+// ============================================================================
+void DrawUICard(Rectangle r, Color accent, bool hover, bool selected, float entry)
+{
+    float a = (selected ? 0.95f : 0.80f) * entry;
+    DrawRectangleRounded(r, 0.07f, 10, Fade((Color){ 10, 13, 20, 255 }, a));
+    if (selected)
+    {
+        float gp = 0.5f + 0.5f * sinf((float)GetTime() * 5.0f);
+        DrawRectangleRoundedLines((Rectangle){ r.x - 3, r.y - 3, r.width + 6, r.height + 6 }, 0.07f, 10, Fade(accent, (0.35f + 0.45f * gp) * entry));
+        DrawRectangleRoundedLines(r, 0.07f, 10, Fade(accent, entry));
+    }
+    else
+    {
+        DrawRectangleRoundedLines(r, 0.07f, 10, Fade(accent, (hover ? 0.9f : 0.5f) * entry));
+    }
+    // Faixa de acento no topo.
+    DrawRectangleRounded((Rectangle){ r.x + 12, r.y + 10, r.width - 24, 5 }, 0.8f, 4, Fade(accent, entry));
+}
+
+void DrawUITab(Font font, Rectangle r, const char *text, Color accent, bool active, bool hover)
+{
+    Color bg = active ? Fade(accent, 0.22f) : Fade((Color){ 12, 14, 22, 255 }, 0.85f);
+    Color br = active ? accent : (hover ? Fade(accent, 0.8f) : THEME_COLOR_BORDER);
+    DrawRectangleRounded(r, 0.3f, 6, bg);
+    DrawRectangleRoundedLines(r, 0.3f, 6, br);
+    DrawTextFitCentered(font, text, r, 18.0f, active ? accent : (hover ? WHITE : Fade(WHITE, 0.8f)), true);
+    if (active)
+        DrawRectangleRounded((Rectangle){ r.x + r.width * 0.2f, r.y + r.height - 4, r.width * 0.6f, 3 }, 0.8f, 4, accent);
+}
+
+void DrawUIScreenTitle(Font font, const char *text, Color accent, float entry)
+{
+    float y = 36.0f - (1.0f - entry) * 16.0f;
+    DrawTitleText(font, text, SCREEN_WIDTH / 2.0f, y, 40.0f, Fade(accent, entry));
+    Vector2 sz = MeasureTextEx(font, text, 40.0f, 2.0f);
+    float lw = sz.x * 0.6f;
+    DrawRectangleRounded((Rectangle){ SCREEN_WIDTH / 2.0f - lw / 2.0f, y + 50.0f, lw, 3.0f }, 0.8f, 4, Fade(accent, 0.7f * entry));
+}
+
+bool DrawUIBackButton(Font font, Vector2 mouse, const char *text)
+{
+    Rectangle r = { 40.0f, SCREEN_HEIGHT - 64.0f, 200.0f, 46.0f };
+    UIButton b = { r, text, CheckCollisionPointRec(mouse, r), false };
+    DrawButton(b, font, true);
+    return b.hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+void DrawUIStatBar(Font font, float x, float y, float w, const char *label, float v, const char *valueTxt, Color col)
+{
+    v = Clamp(v, 0.0f, 1.0f);
+    DrawTextEx(font, label, (Vector2){ x, y }, 15.0f, 1.0f, Fade(WHITE, 0.85f));
+    float by = y + 20.0f, bh = 12.0f;
+    DrawRectangleRounded((Rectangle){ x, by, w, bh }, 0.7f, 6, Fade(BLACK, 0.5f));
+    DrawRectangleRounded((Rectangle){ x, by, w * v, bh }, 0.7f, 6, col);
+    DrawRectangleRoundedLines((Rectangle){ x, by, w, bh }, 0.7f, 6, Fade(col, 0.7f));
+    if (valueTxt)
+    {
+        Vector2 vs = MeasureTextEx(font, valueTxt, 14.0f, 1.0f);
+        DrawTextEx(font, valueTxt, (Vector2){ x + w - vs.x, y }, 14.0f, 1.0f, col);
+    }
+}
+
+void DrawUIInput(Font font, Rectangle r, const char *text, const char *placeholder, bool active, bool hover, bool showCursor)
+{
+    Color br = active ? THEME_COLOR_MAIN : (hover ? YELLOW : THEME_COLOR_BORDER);
+    DrawRectangleRounded(r, 0.2f, 6, Fade(THEME_COLOR_PANEL, 0.9f));
+    DrawRectangleRoundedLines(r, 0.2f, 6, br);
+    bool empty = (text == NULL || text[0] == '\0');
+    const char *shown = empty ? (placeholder ? placeholder : "") : text;
+    float fs = 20.0f;
+    Vector2 ts = MeasureTextEx(font, shown, fs, 1.0f);
+    // encolhe se passar da caixa
+    while (ts.x > r.width - 24.0f && fs > 10.0f) { fs -= 1.0f; ts = MeasureTextEx(font, shown, fs, 1.0f); }
+    Vector2 pos = { r.x + r.width / 2.0f - ts.x / 2.0f, r.y + r.height / 2.0f - ts.y / 2.0f };
+    DrawTextEx(font, shown, pos, fs, 1.0f, empty ? Fade(GRAY, 0.55f) : WHITE);
+    if (active && showCursor)
+        DrawRectangle((int)(pos.x + ts.x + 3), (int)pos.y, 2, (int)ts.y, THEME_COLOR_MAIN);
+}
+
+void DrawUISectionPanel(Font font, Rectangle r, const char *title, Color accent, float entry)
+{
+    DrawRectangleRounded(r, 0.05f, 8, Fade((Color){ 8, 11, 18, 255 }, 0.75f * entry));
+    DrawRectangleRoundedLines(r, 0.05f, 8, Fade(accent, 0.5f * entry));
+    if (title)
+    {
+        DrawTextEx(font, title, (Vector2){ r.x + 16, r.y + 10 }, 22.0f, 1.0f, Fade(accent, entry));
+        DrawLineEx((Vector2){ r.x + 16, r.y + 38 }, (Vector2){ r.x + r.width - 16, r.y + 38 }, 1.0f, Fade(accent, 0.4f * entry));
+    }
+}
+
+void DrawUIToast(Font font, const char *text, Color accent, float alpha)
+{
+    if (alpha <= 0.0f) return;
+    float fs = 20.0f, pad = 16.0f;
+    Vector2 sz = MeasureTextEx(font, text, fs, 1.0f);
+    Rectangle r = { SCREEN_WIDTH / 2.0f - sz.x / 2.0f - pad, 120.0f, sz.x + pad * 2.0f, sz.y + pad };
+    DrawRectangleRounded(r, 0.4f, 8, Fade((Color){ 8, 12, 18, 255 }, 0.92f * alpha));
+    DrawRectangleRoundedLines(r, 0.4f, 8, Fade(accent, alpha));
+    DrawTextEx(font, text, (Vector2){ r.x + pad, r.y + pad / 2.0f }, fs, 1.0f, Fade(WHITE, alpha));
+}
+
+Rectangle SettingsVolumeTrack(void) { return (Rectangle){ 600.0f, 234.0f, 250.0f, 16.0f }; }
+
+// ============================================================================
+// HELPERS PROCEDURAIS DO MENU (vírus, bactéria, biohazard, fundo, título neon)
+// ============================================================================
+void DrawMenuVirus(Vector2 c, float radius, float rotationDeg, Color col)
+{
+    DrawCircleV(c, radius * 1.15f, Fade(col, 0.10f));       // halo
+    int spikes = 10;
+    for (int i = 0; i < spikes; i++)
+    {
+        float a = (rotationDeg + i * (360.0f / spikes)) * DEG2RAD;
+        Vector2 base = { c.x + cosf(a) * radius * 0.72f, c.y + sinf(a) * radius * 0.72f };
+        Vector2 tip  = { c.x + cosf(a) * radius * 1.18f, c.y + sinf(a) * radius * 1.18f };
+        DrawLineEx(base, tip, 2.5f, Fade(col, 0.85f));
+        DrawCircleV(tip, radius * 0.10f, Fade(col, 0.9f));
+    }
+    DrawCircleV(c, radius * 0.72f, Fade(col, 0.28f));
+    DrawCircleLines((int)c.x, (int)c.y, radius * 0.72f, Fade(col, 0.85f));
+    DrawCircleV(c, radius * 0.32f, Fade(col, 0.6f));        // núcleo de RNA
+}
+
+void DrawMenuBacteria(Vector2 c, float size, float angleDeg, Color col)
+{
+    float a = angleDeg * DEG2RAD;
+    Vector2 dir = { cosf(a), sinf(a) };
+    Vector2 pa = { c.x - dir.x * size, c.y - dir.y * size };
+    Vector2 pb = { c.x + dir.x * size, c.y + dir.y * size };
+    // cílios (flagelos) perpendiculares
+    Vector2 perp = { -dir.y, dir.x };
+    for (int i = -2; i <= 2; i++)
+    {
+        Vector2 p = { c.x + dir.x * (size * 0.45f * i), c.y + dir.y * (size * 0.45f * i) };
+        DrawLineEx(p, (Vector2){ p.x + perp.x * size * 0.55f, p.y + perp.y * size * 0.55f }, 1.5f, Fade(col, 0.4f));
+        DrawLineEx(p, (Vector2){ p.x - perp.x * size * 0.55f, p.y - perp.y * size * 0.55f }, 1.5f, Fade(col, 0.4f));
+    }
+    DrawLineEx(pa, pb, size * 0.78f, Fade(col, 0.5f));      // corpo (bastonete)
+    DrawCircleV(pa, size * 0.39f, Fade(col, 0.5f));
+    DrawCircleV(pb, size * 0.39f, Fade(col, 0.5f));
+    DrawCircleLines((int)c.x, (int)c.y, size * 0.5f, Fade(col, 0.7f));
+}
+
+void DrawMenuBiohazard(Vector2 c, float radius, float pulse, Color col)
+{
+    float r = radius * (1.0f + pulse * 0.06f);
+    for (int k = 0; k < 3; k++)                              // 3 lâminas (crescentes)
+    {
+        float base = -90.0f + k * 120.0f;
+        DrawRing(c, r * 0.46f, r, base + 18.0f, base + 102.0f, 24, Fade(col, 0.85f));
+    }
+    DrawCircleV(c, r * 0.26f, Fade(col, 0.9f));
+    DrawCircleLines((int)c.x, (int)c.y, r * 0.5f, Fade(col, 0.6f));
+}
+
+void DrawMenuBackground(Color accent, float time, float entry)
+{
+    // Fundo azul-marinho quase preto (referência) com leve morph do acento.
+    Color top = (Color){ 9, 13, 30, 255 };
+    Color bot = (Color){ 4, 6, 16, 255 };
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, top, bot);
+    // brilho de acento "respirando" no topo (segue o item destacado)
+    float breath = 0.06f + 0.03f * sinf(time * 1.5f);
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, 220, Fade(accent, breath * entry), Fade(accent, 0.0f));
+
+    float fade = UIEase(entry);
+
+    // Micróbios decorativos nas BORDAS (posições determinísticas; deixam o centro livre).
+    // {x, y, tamanho, tipo(0=virus,1=bact), corIndex}
+    static const float decor[][5] = {
+        {  70,  90, 30, 0, 0 }, {  150, 280, 22, 1, 1 }, {  60, 470, 26, 0, 2 }, { 120, 640, 20, 1, 1 },
+        { 1210, 80, 32, 0, 0 }, { 1130, 250, 24, 1, 1 }, { 1225, 430, 22, 0, 2 }, { 1150, 610, 28, 1, 1 },
+        {  300, 60, 18, 1, 1 }, {  980, 60, 20, 0, 0 },  { 360, 670, 18, 0, 2 }, { 940, 668, 20, 1, 1 },
+    };
+    Color virusCol = (Color){ 170, 90, 230, 255 };   // roxo (vírus)
+    Color bactCol  = (Color){ 90, 210, 120, 255 };   // verde (bactéria)
+    Color cyanCol  = (Color){ 60, 200, 255, 255 };   // ciano (médico)
+    int n = (int)(sizeof(decor) / sizeof(decor[0]));
+    for (int i = 0; i < n; i++)
+    {
+        Vector2 c = { decor[i][0], decor[i][1] + sinf(time * 0.6f + i) * 8.0f }; // flutuação lenta + parallax
+        float sz = decor[i][2];
+        Color col = (decor[i][4] == 0) ? virusCol : (decor[i][4] == 1) ? bactCol : cyanCol;
+        col = Fade(col, fade);
+        if ((int)decor[i][3] == 0) DrawMenuVirus(c, sz, time * 25.0f + i * 30.0f, col);     // vírus girando
+        else                       DrawMenuBacteria(c, sz, time * 12.0f + i * 40.0f, col);   // bactéria flutuando
+    }
+
+    // Símbolo de risco biológico pulsante (canto inferior direito, vermelho coral).
+    DrawMenuBiohazard((Vector2){ 1180, 560 }, 46.0f, 0.5f + 0.5f * sinf(time * 2.0f), Fade((Color){ 255, 90, 90, 255 }, 0.5f * fade));
+}
+
+void DrawNeonTitle(Font font, float centerX, float topY, float scale, float entry, float time)
+{
+    float e = UIEase(entry);
+    float fs = 78.0f * scale;
+    float slide = (1.0f - e) * -28.0f;
+    float bob = sinf(time * 2.0f) * 3.0f;
+    const char *lines[2] = { "DISEASE'S", "DOOMSDAY" };
+    Color neon = THEME_COLOR_TEXT;                 // verde neon (identidade)
+    Color deep = (Color){ 0, 70, 45, 255 };
+
+    for (int li = 0; li < 2; li++)
+    {
+        Vector2 sz = MeasureTextEx(font, lines[li], fs, 4.0f);
+        float x = centerX - sz.x * 0.5f;
+        float y = topY + slide + bob + li * (fs * 0.96f);
+
+        // Glow em camadas (bloom) — vários offsets com alfa baixo.
+        for (int rad = 12; rad >= 4; rad -= 4)
+            for (int d = 0; d < 8; d++)
+            {
+                float a = d * (PI / 4.0f);
+                DrawTextEx(font, lines[li], (Vector2){ x + cosf(a) * rad, y + sinf(a) * rad },
+                           fs, 4.0f, Fade(neon, 0.05f * e));
+            }
+        // Sombra escura + contorno.
+        DrawTextEx(font, lines[li], (Vector2){ x + 4, y + 5 }, fs, 4.0f, Fade(BLACK, 0.55f * e));
+        for (int dx = -2; dx <= 2; dx += 2)
+            for (int dy = -2; dy <= 2; dy += 2)
+                if (dx || dy)
+                    DrawTextEx(font, lines[li], (Vector2){ x + dx, y + dy }, fs, 4.0f, Fade(deep, 0.6f * e));
+        // Preenchimento neon + brilho interno.
+        DrawTextEx(font, lines[li], (Vector2){ x, y }, fs, 4.0f, Fade(neon, e));
+        DrawTextEx(font, lines[li], (Vector2){ x, y - 1 }, fs, 4.0f, Fade((Color){ 200, 255, 210, 255 }, 0.35f * e));
+    }
+}
+
+bool DrawMenuBanner(Rectangle area, float entry)
+{
+    if (!SpriteAvailable(SPR_UI_MENU_BANNER)) return false;
+    Texture2D t = GetSprite(SPR_UI_MENU_BANNER);
+    if (t.id == 0 || t.width <= 0 || t.height <= 0) return false;
+    // Escala PROPORCIONAL (nunca distorce): cabe inteiro dentro de `area`.
+    float scale = fminf(area.width / (float)t.width, area.height / (float)t.height);
+    float w = t.width * scale, h = t.height * scale;
+    float e = UIEase(entry);
+    float x = area.x + (area.width - w) * 0.5f;
+    float y = area.y + (area.height - h) * 0.5f + (1.0f - e) * -18.0f;
+    Rectangle src = { 0, 0, (float)t.width, (float)t.height };
+    Rectangle dst = { x, y, w, h };
+    DrawTexturePro(t, src, dst, (Vector2){ 0, 0 }, 0.0f, Fade(WHITE, e));
+    return true;
+}
+
+// ============================================================================
+// SISTEMA ANIMADO DO MENU (organismos + ECG + título por glifos)
+// Estado num único struct, inicializado UMA vez. Tudo por delta time.
+// ============================================================================
+// População de organismos (vírus/bactérias) animada no fundo do menu.
+#define MENU_ORGANISM_TARGET     25
+#define MENU_ORGANISM_MIN_ACTIVE 24
+#define MENU_ORGANISM_MAX        25     // máximo de ORGANISMOS ativos
+#define MENU_BIOHAZARD_COUNT     5
+#define MENU_ORG_SLOTS           (MENU_ORGANISM_MAX + MENU_BIOHAZARD_COUNT)
+#define MENU_SYRINGE_COUNT       2
+#define MENU_SYRINGE_MAX         4
+#define MENU_PART_MAX            120
+#define MENU_ORGANISM_EXCLUDED   14     // organela roxa com cauda
+
+typedef struct MenuOrganism {
+    Vector2 basePosition, position, velocity;
+    float rotation, rotationSpeed, phase, depth;
+    float fade;          // 0..1 fade-in ao (re)aparecer
+    float respawnTimer;  // > 0 = inativo, aguardando respawn
+    float radius;        // raio de colisão renderizado (atualizado por frame)
+    Color tint;
+    int   catIdx;        // índice no catálogo (virus_bacterias.png); -1 = biohazard
+    int   isBiohazard;
+    bool  active;
+} MenuOrganism;
+
+typedef struct MenuSyringe {
+    Vector2 position, velocity;
+    float rotation, scale, cooldown, depth, wobble;
+    bool  active;
+} MenuSyringe;
+
+typedef struct MenuDestroyParticle {
+    Vector2 position, velocity;
+    Color color;
+    float life, maxLife, size;
+    bool  active;
+} MenuDestroyParticle;
+
+typedef struct MenuFX {
+    bool  init;
+    MenuOrganism org[MENU_ORG_SLOTS];
+    int   orgCount;     // nº de slots de ORGANISMO (vírus/bactéria) = TARGET
+    int   bioStart;     // índice onde começam os biohazards
+    int   bioCount;
+    MenuSyringe syr[MENU_SYRINGE_MAX];
+    int   syrCount;
+    MenuDestroyParticle part[MENU_PART_MAX];
+    unsigned rng;
+} MenuFX;
+
+static MenuFX MFX;
+
+static unsigned MfxRandU(void) { MFX.rng = MFX.rng * 1664525u + 1013904223u; return MFX.rng; }
+static float MfxRandF(void) { return (MfxRandU() >> 8) / 16777216.0f; }
+static float MfxRange(float a, float b) { return a + (b - a) * MfxRandF(); }
+
+// Desenha uma textura centralizada (organismos do catálogo / biohazard / seringa).
+static void DrawTexCentered(Texture2D t, Vector2 c, Vector2 sz, float rot, Color tint)
+{
+    if (t.id == 0) return;
+    Rectangle src = { 0, 0, (float)t.width, (float)t.height };
+    Rectangle dst = { c.x, c.y, sz.x, sz.y };
+    DrawTexturePro(t, src, dst, (Vector2){ sz.x * 0.5f, sz.y * 0.5f }, rot, tint);
+}
+
+// Cor representativa do organismo (para a mini-explosão), a partir do catálogo.
+static Color MenuOrgColor(int catIdx)
+{
+    if (catIdx < 0 || catIdx >= MenuOrganismCount()) return (Color){ 120, 220, 160, 255 };
+    const char *c = MENU_ORGANISMS[catIdx].color;
+    if (c[0] == 'g') return (Color){ 90, 230, 120, 255 };   // green
+    if (c[0] == 'b') return (Color){ 70, 200, 255, 255 };   // blue
+    return (Color){ 190, 110, 255, 255 };                   // purple
+}
+
+// Escolhe o modelo de organismo MENOS representado (mantém os 18 sempre visíveis).
+static int MenuPickCat(void)
+{
+    int n = MenuOrganismCount();
+    if (n <= 0) return 0;
+    if (n > 64) n = 64;
+    int counts[64] = { 0 };
+    for (int i = 0; i < MFX.orgCount; i++)
+        if (MFX.org[i].active && MFX.org[i].catIdx >= 0 && MFX.org[i].catIdx < n)
+            counts[MFX.org[i].catIdx]++;
+    int off = (int)(MfxRandF() * n), best = 0, bestc = 1 << 30;
+    for (int k = 0; k < n; k++)
+    {
+        int c = (off + k) % n;
+        if (c == MENU_ORGANISM_EXCLUDED) continue;
+        if (counts[c] < bestc) { bestc = counts[c]; best = c; }
+    }
+    return best;
+}
+
+// Converte uma posição na lista de modelos permitidos para o índice real do
+// catálogo, pulando a organela com cauda sem remover o asset da pipeline.
+static int MenuAllowedCatAt(int allowedIndex)
+{
+    return (allowedIndex >= MENU_ORGANISM_EXCLUDED) ? allowedIndex + 1 : allowedIndex;
+}
+
+// Posiciona/reseta um organismo por toda a tela, longe das seringas e dos demais
+// organismos. O painel e o título são desenhados depois, portanto continuam
+// legíveis mesmo quando um elemento atravessa a região central ao fundo.
+static void MenuOrgPlace(MenuOrganism *o, int forceCat, bool fadeIn)
+{
+    float zx = 60.0f, zy = 60.0f;
+    for (int tries = 0; tries < 24; tries++)
+    {
+        zx = MfxRange(28.0f, SCREEN_WIDTH - 28.0f);
+        zy = MfxRange(28.0f, SCREEN_HEIGHT - 28.0f);
+        bool ok = true;
+        for (int s = 0; s < MFX.syrCount; s++)
+        {
+            if (!MFX.syr[s].active) continue;
+            float dx = zx - MFX.syr[s].position.x, dy = zy - MFX.syr[s].position.y;
+            if (dx * dx + dy * dy < 120.0f * 120.0f) { ok = false; break; }
+        }
+        for (int i = 0; ok && i < MFX.orgCount; i++)
+        {
+            MenuOrganism *other = &MFX.org[i];
+            if (!other->active || other == o || other->isBiohazard) continue;
+            float dx = zx - other->position.x, dy = zy - other->position.y;
+            if (dx * dx + dy * dy < 72.0f * 72.0f) ok = false;
+        }
+        if (ok) break;
+    }
+    o->basePosition = o->position = (Vector2){ zx, zy };
+    o->depth = MfxRange(0.40f, 1.0f);
+    o->rotation = MfxRange(0.0f, 360.0f);
+    o->rotationSpeed = MfxRange(-9.0f, 9.0f) * o->depth;
+    o->phase = MfxRange(0.0f, 6.2831f);
+    float moveAngle = MfxRange(0.0f, 2.0f * PI);
+    float moveSpeed = MfxRange(10.0f, 24.0f);
+    o->velocity = (Vector2){ cosf(moveAngle) * moveSpeed, sinf(moveAngle) * moveSpeed };
+    o->tint = WHITE;
+    o->catIdx = (forceCat >= 0) ? forceCat : MenuPickCat();
+    o->isBiohazard = 0;
+    o->active = true;
+    o->respawnTimer = 0.0f;
+    o->fade = fadeIn ? 0.0f : 1.0f;
+}
+
+static void MenuSyringeSpawn(MenuSyringe *s)
+{
+    float speed = MfxRange(48.0f, 72.0f);   // travessia calma, ainda mais rápida que os organismos
+    int edge = (int)(MfxRandF() * 4.0f);
+    Vector2 p, v;
+    if (edge == 0)      { p = (Vector2){ -100.0f, MfxRange(80, 640) };  v = (Vector2){ speed, MfxRange(-40, 40) }; }
+    else if (edge == 1) { p = (Vector2){ 1380.0f, MfxRange(80, 640) };  v = (Vector2){ -speed, MfxRange(-40, 40) }; }
+    else if (edge == 2) { p = (Vector2){ MfxRange(140, 1140), -100.0f }; v = (Vector2){ MfxRange(-50, 50), speed }; }
+    else                { p = (Vector2){ MfxRange(140, 1140), 820.0f };  v = (Vector2){ MfxRange(-50, 50), -speed }; }
+    s->position = p; s->velocity = v;
+    s->rotation = atan2f(v.y, v.x) * RAD2DEG + 90.0f;
+    s->depth = MfxRange(0.45f, 0.95f);
+    s->scale = MfxRange(0.85f, 1.1f);
+    s->cooldown = 0.0f;
+    s->wobble = MfxRange(0.0f, 6.2831f);
+    s->active = true;
+}
+
+static void MenuSpawnExplosion(Vector2 at, Color base)
+{
+    int count = 8 + (int)(MfxRandF() * 7.0f);   // 8..14
+    for (int k = 0; k < count; k++)
+    {
+        int slot = -1;
+        for (int i = 0; i < MENU_PART_MAX; i++) if (!MFX.part[i].active) { slot = i; break; }
+        if (slot < 0) break;
+        MenuDestroyParticle *p = &MFX.part[slot];
+        float ang = MfxRange(0.0f, 6.2831f), spd = MfxRange(60.0f, 220.0f);
+        p->position = at;
+        p->velocity = (Vector2){ cosf(ang) * spd, sinf(ang) * spd };
+        // cor herdada do organismo, com leve variação clara (neon).
+        p->color = (Color){
+            (unsigned char)fminf(255, base.r + MfxRange(0, 40)),
+            (unsigned char)fminf(255, base.g + MfxRange(0, 40)),
+            (unsigned char)fminf(255, base.b + MfxRange(0, 40)), 255 };
+        p->maxLife = p->life = MfxRange(0.30f, 0.6f);
+        p->size = MfxRange(2.0f, 5.0f);
+        p->active = true;
+    }
+}
+
+static void MenuFX_Init(void)
+{
+    MFX.rng = 0x1357abcdu;
+    MFX.syrCount = 0;     // seringas inicializadas após (placement consulta isto)
+
+    int target = MENU_ORGANISM_TARGET;
+    MFX.orgCount = target;
+    int n = MenuOrganismCount(); if (n <= 0) n = 18;
+    int allowedCount = n - ((MENU_ORGANISM_EXCLUDED >= 0 && MENU_ORGANISM_EXCLUDED < n) ? 1 : 0);
+    for (int i = 0; i < target; i++)
+    {
+        MenuOrganism o = (MenuOrganism){0};
+        // Os primeiros slots garantem que todos os modelos permitidos apareçam;
+        // o restante repete modelos variados (escala/profundidade/rotação distintas).
+        MenuOrgPlace(&o, (i < allowedCount) ? MenuAllowedCatAt(i) : -1, false);
+        MFX.org[i] = o;
+    }
+    // Biohazards (símbolo vermelho), estáveis, em camadas diferentes.
+    float bhx[5] = { 116, 318, 1054, 1172, 930 };
+    float bhy[5] = { 176, 610, 154, 502, 654 };
+    float bhd[5] = { 0.58f, 0.46f, 0.72f, 0.86f, 0.52f };
+    MFX.bioStart = target; MFX.bioCount = MENU_BIOHAZARD_COUNT;
+    for (int b = 0; b < MFX.bioCount; b++)
+    {
+        MenuOrganism o = (MenuOrganism){0};
+        o.basePosition = o.position = (Vector2){ bhx[b], bhy[b] };
+        o.depth = bhd[b];
+        o.rotation = 0; o.rotationSpeed = MfxRange(-2.0f, 2.0f);
+        o.phase = MfxRange(0, 6.2831f);
+        o.tint = WHITE; o.catIdx = -1; o.isBiohazard = 1; o.active = true; o.fade = 1.0f;
+        MFX.org[MFX.bioStart + b] = o;
+    }
+
+    // Seringas (PARTE 3).
+    MFX.syrCount = MENU_SYRINGE_COUNT;
+    for (int i = 0; i < MFX.syrCount; i++) MenuSyringeSpawn(&MFX.syr[i]);
+
+    for (int i = 0; i < MENU_PART_MAX; i++) MFX.part[i].active = false;
+    MFX.init = true;
+}
+
+// Atualiza posições, seringas, colisões, explosões e reposição (sem desenhar).
+static void MenuFX_Update(float dt, float time)
+{
+    if (dt > 0.1f) dt = 0.1f;  // estabilidade se houver hitch
+
+    // Organismos: deriva + oscilação + fade; calcula raio de colisão.
+    for (int i = 0; i < MFX.bioStart + MFX.bioCount; i++)
+    {
+        MenuOrganism *o = &MFX.org[i];
+        if (!o->isBiohazard && !o->active)
+        {
+            if (o->respawnTimer > 0.0f) o->respawnTimer -= dt;
+            if (o->respawnTimer <= 0.0f) MenuOrgPlace(o, -1, true);  // reaparece com fade
+            continue;
+        }
+        if (o->fade < 1.0f) { o->fade += dt * 2.2f; if (o->fade > 1.0f) o->fade = 1.0f; }
+        o->basePosition.x += o->velocity.x * dt * o->depth;
+        o->basePosition.y += o->velocity.y * dt * o->depth;
+        const float margin = 46.0f;
+        if (o->basePosition.y < -margin) o->basePosition.y = SCREEN_HEIGHT + margin;
+        if (o->basePosition.y > SCREEN_HEIGHT + margin) o->basePosition.y = -margin;
+        if (o->basePosition.x < -margin) o->basePosition.x = SCREEN_WIDTH + margin;
+        if (o->basePosition.x > SCREEN_WIDTH + margin) o->basePosition.x = -margin;
+        o->position.x = o->basePosition.x + sinf(time * 0.6f + o->phase) * 9.0f * o->depth;
+        o->position.y = o->basePosition.y + cosf(time * 0.5f + o->phase * 1.3f) * 7.0f * o->depth;
+        o->rotation += o->rotationSpeed * dt;
+        float targetH = (o->isBiohazard ? 64.0f : 48.0f) + o->depth * 40.0f;
+        o->radius = targetH * 0.42f;
+    }
+
+    // Seringas: travessia lenta, com leve variação de rota; reentram nas bordas.
+    for (int s = 0; s < MFX.syrCount; s++)
+    {
+        MenuSyringe *sy = &MFX.syr[s];
+        if (!sy->active) { MenuSyringeSpawn(sy); continue; }
+        if (sy->cooldown > 0.0f) sy->cooldown -= dt;
+        sy->wobble += dt;
+        Vector2 dir = Vector2Normalize(sy->velocity);
+        Vector2 perp = { -dir.y, dir.x };
+        Vector2 vel = Vector2Add(sy->velocity, Vector2Scale(perp, sinf(sy->wobble * 1.2f) * 7.0f));
+        sy->position = Vector2Add(sy->position, Vector2Scale(vel, dt));
+        sy->rotation = atan2f(vel.y, vel.x) * RAD2DEG + 90.0f;
+        if (sy->position.x < -170 || sy->position.x > 1450 || sy->position.y < -170 || sy->position.y > 890)
+            MenuSyringeSpawn(sy);
+    }
+
+    // Colisão seringa × organismo (1 por seringa por frame; cooldown curto).
+    for (int s = 0; s < MFX.syrCount; s++)
+    {
+        MenuSyringe *sy = &MFX.syr[s];
+        if (!sy->active || sy->cooldown > 0.0f) continue;
+        Texture2D st = GetSprite(SPR_MENU_SYRINGE);
+        float syrH = (70.0f + sy->depth * 60.0f) * sy->scale;
+        float syrR = (st.id ? syrH : 60.0f) * 0.26f;
+        for (int i = 0; i < MFX.orgCount; i++)   // só organismos (biohazard não é destruído)
+        {
+            MenuOrganism *o = &MFX.org[i];
+            if (!o->active) continue;
+            float dx = o->position.x - sy->position.x, dy = o->position.y - sy->position.y;
+            float rr = o->radius + syrR + 6.0f;  // margem moderada
+            if (dx * dx + dy * dy <= rr * rr)
+            {
+                MenuSpawnExplosion(o->position, MenuOrgColor(o->catIdx));
+                o->active = false;
+                o->respawnTimer = MfxRange(0.3f, 0.8f);
+                sy->cooldown = MfxRange(0.25f, 0.5f);
+                break;  // uma colisão por seringa por frame
+            }
+        }
+    }
+
+    // Reposição imediata se a população cair abaixo do mínimo visível.
+    int activeCount = 0;
+    for (int i = 0; i < MFX.orgCount; i++) if (MFX.org[i].active) activeCount++;
+    while (activeCount < MENU_ORGANISM_MIN_ACTIVE)
+    {
+        int best = -1; float bestT = 1e9f;
+        for (int i = 0; i < MFX.orgCount; i++)
+            if (!MFX.org[i].active && MFX.org[i].respawnTimer < bestT) { bestT = MFX.org[i].respawnTimer; best = i; }
+        if (best < 0) break;
+        MenuOrgPlace(&MFX.org[best], -1, true);
+        activeCount++;
+    }
+
+    // Partículas das explosões.
+    for (int i = 0; i < MENU_PART_MAX; i++)
+    {
+        MenuDestroyParticle *p = &MFX.part[i];
+        if (!p->active) continue;
+        p->life -= dt;
+        if (p->life <= 0.0f) { p->active = false; continue; }
+        p->position = Vector2Add(p->position, Vector2Scale(p->velocity, dt));
+        p->velocity = Vector2Scale(p->velocity, 1.0f - 3.0f * dt);  // desaceleração
+    }
+}
+
+// Desenha organismos cujo `depth` está em [dmin, dmax) (camada de profundidade).
+static void MenuFX_DrawOrganisms(float dmin, float dmax, float time, float entry)
+{
+    for (int i = 0; i < MFX.bioStart + MFX.bioCount; i++)
+    {
+        MenuOrganism *o = &MFX.org[i];
+        if (!o->isBiohazard && !o->active) continue;
+        if (o->depth < dmin || o->depth >= dmax) continue;
+
+        float glow = 0.85f + 0.15f * sinf(time * 2.0f + o->phase);
+        float pulse = 1.0f + 0.03f * sinf(time * 1.8f + o->phase);  // pulsação sutil
+        Texture2D t = o->isBiohazard ? GetSprite(SPR_MENU_BIOHAZARD) : GetMenuOrganism(o->catIdx);
+        if (t.id != 0 && t.height > 0)
+        {
+            float targetH = (o->isBiohazard ? 64.0f : 48.0f) + o->depth * 40.0f;
+            float sc = targetH / t.height * pulse;       // escala uniforme (preserva proporção)
+            Vector2 sz = { t.width * sc, t.height * sc };
+            float a = (0.42f + 0.55f * o->depth) * entry * glow * o->fade;
+            if (o->isBiohazard) a *= 0.85f;
+            DrawTexCentered(t, o->position, sz, o->rotation, Fade(WHITE, a)); // tint WHITE: cor original
+        }
+        else if (o->isBiohazard)
+        {
+            DrawMenuBiohazard(o->position, 30.0f * o->depth + 18.0f, glow, Fade((Color){ 255, 70, 70, 255 }, entry));
+        }
+    }
+}
+
+// Desenha seringas cujo `depth` está em [dmin, dmax).
+static void MenuFX_DrawSyringes(float dmin, float dmax, float entry)
+{
+    Texture2D t = GetSprite(SPR_MENU_SYRINGE);
+    if (t.id == 0 || t.height <= 0) return;
+    for (int s = 0; s < MFX.syrCount; s++)
+    {
+        MenuSyringe *sy = &MFX.syr[s];
+        if (!sy->active || sy->depth < dmin || sy->depth >= dmax) continue;
+        float targetH = (70.0f + sy->depth * 60.0f) * sy->scale;
+        float sc = targetH / t.height;
+        Vector2 sz = { t.width * sc, t.height * sc };
+        float a = (0.5f + 0.45f * sy->depth) * entry;
+        DrawTexCentered(t, sy->position, sz, sy->rotation, Fade(WHITE, a));
+    }
+}
+
+// Desenha as mini-explosões (partículas neon).
+static void MenuFX_DrawParticles(void)
+{
+    for (int i = 0; i < MENU_PART_MAX; i++)
+    {
+        MenuDestroyParticle *p = &MFX.part[i];
+        if (!p->active) continue;
+        float a = p->life / p->maxLife;
+        float r = p->size * (0.6f + 0.8f * a);
+        DrawCircleV(p->position, r, Fade(p->color, a));
+        DrawCircleV(p->position, r * 0.5f, Fade((Color){ 235, 255, 245, 255 }, a * 0.7f));
+    }
+}
+
+// Título DISEASE'S / DOOMSDAY montado letra a letra a partir dos glifos da arte.
+static void MenuFX_DrawTitle(Font font, float centerX, float topY, float screenAnim, float time)
+{
+    if (!MenuTitleGlyphsReady())
+    {
+        DrawNeonTitle(font, centerX, topY, 1.0f, screenAnim / 0.5f, time);  // fallback (fonte)
+        return;
+    }
+    float scale = 0.92f;
+    float left = centerX - (MENU_TITLE_W * scale) * 0.5f;
+    float collective = 0.02f * (0.5f + 0.5f * sinf(time * 1.2f));  // pulso coletivo sutil (tempo)
+    float sweep = fmodf(time * 0.45f, 1.6f);   // brilho atravessando as letras (0..1.6)
+    for (int i = 0; i < MENU_TITLE_GLYPH_COUNT; i++)
+    {
+        const MenuGlyphDef *g = &MENU_TITLE_GLYPHS[i];
+        // Entrada sequencial por glifo (baseada no tempo bruto da tela).
+        float ge = UIEase((screenAnim - 0.10f - i * 0.03f) / 0.40f);
+        if (ge <= 0.01f) continue;
+        Texture2D t = GetTitleGlyph(i);
+        if (t.id == 0) continue;
+        float ph = i * 0.5f;
+        float bob = sinf(time * 3.0f + ph) * 3.0f;            // deslocamento vertical
+        float squash = 1.0f + sinf(time * 4.0f + ph) * 0.03f + collective; // compressão/pulso
+        float gw = g->w * scale, gh = g->h * scale * squash;
+        float gx = left + g->x * scale;
+        float gy = topY + g->y * scale + bob + (1.0f - ge) * -24.0f;
+        Rectangle src = { 0, 0, (float)t.width, (float)t.height };
+        Rectangle dst = { gx, gy, gw, gh };
+        DrawTexturePro(t, src, dst, (Vector2){ 0, 0 }, 0.0f, Fade(WHITE, ge));
+        // Brilho atravessando (light sweep): realce branco quando o sweep passa pelo glifo.
+        float gp = (float)i / (float)MENU_TITLE_GLYPH_COUNT;
+        float d = fabsf(sweep - gp);
+        if (d < 0.10f)
+            DrawTexturePro(t, src, dst, (Vector2){ 0, 0 }, 0.0f, Fade((Color){ 220, 255, 230, 255 }, (0.10f - d) / 0.10f * 0.5f * ge));
+    }
+}
+
+// ---- Layout ÚNICO do menu (desenho e input compartilham os retângulos) ----
+extern UIButton menuButtons[8];
+static Rectangle g_menuName = { 0, 0, 0, 0 };
+void MenuApplyLayout(void)
+{
+    float cx = SCREEN_WIDTH / 2.0f;
+    float bw = 340.0f, bh = 36.0f, gap = 6.0f, pitch = bh + gap;
+    float bx = cx - bw / 2.0f;
+    float firstY = 332.0f;
+    for (int i = 0; i < 8; i++)
+        menuButtons[i].bounds = (Rectangle){ bx, firstY + i * pitch, bw, bh };
+    g_menuName = (Rectangle){ bx, 280.0f, bw, 40.0f };
+}
+Rectangle MenuNameRect(void) { return g_menuName; }
 
 // ============================================================================
 // 1. TELA: MENU PRINCIPAL
 // ============================================================================
 void DrawTelaMenu(GameState *game, Font font, float time)
 {
-    // Fundo verde-petóleo biológico (organismo vivo)
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
-                           THEME_COLOR_BG_DARK, THEME_COLOR_BG_LIGHT);
+    float dt = GetFrameTime();
+    if (!MFX.init) MenuFX_Init();
+    MenuApplyLayout();                       // posiciona botões + campo de nome (única fonte)
+    float entry = UIEase(game->screenAnim / 0.5f);
 
-    // Desenha as partículas de fundo (flutuando de baixo para cima)
+    // Acento que faz MORPH conforme o item destacado no menu.
+    Color morphAccent = THEME_COLOR_MAIN;
+    switch (game->highlightScreen)
+    {
+        case SCREEN_ARSENAL:  morphAccent = (Color){ 0, 220, 255, 255 };  break; // ciano
+        case SCREEN_SKINS:    morphAccent = (Color){ 190, 110, 255, 255 }; break; // roxo
+        case SCREEN_CONTROLS: morphAccent = (Color){ 90, 220, 120, 255 };  break; // verde
+        case SCREEN_SETTINGS: morphAccent = (Color){ 80, 150, 255, 255 };  break; // azul
+        case SCREEN_ADMIN:    morphAccent = (Color){ 255, 120, 110, 255 }; break; // vermelho suave
+        default:              morphAccent = THEME_COLOR_MAIN;              break;
+    }
+    static Color curAccent = { 0, 229, 255, 255 };
+    float k = 5.0f * dt; if (k > 1.0f) k = 1.0f;
+    curAccent = (Color){
+        (unsigned char)(curAccent.r + (morphAccent.r - curAccent.r) * k),
+        (unsigned char)(curAccent.g + (morphAccent.g - curAccent.g) * k),
+        (unsigned char)(curAccent.b + (morphAccent.b - curAccent.b) * k), 255 };
+
+    // Fundo azul-marinho quase preto + brilho de acento no topo + vinheta inferior.
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, (Color){ 9, 13, 30, 255 }, (Color){ 4, 6, 16, 255 });
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, 150, Fade(curAccent, (0.05f + 0.03f * sinf(time * 1.5f)) * entry), Fade(curAccent, 0.0f));
+    DrawRectangleGradientV(0, SCREEN_HEIGHT - 90, SCREEN_WIDTH, 90, Fade(BLACK, 0.0f), Fade(BLACK, 0.4f));
+
+    // FX do fundo (PARTE 7 — ordem de camadas): atualiza tudo e desenha por
+    // profundidade, intercalando seringas e explosões entre os organismos.
+    MenuFX_Update(dt, time);
+    MenuFX_DrawOrganisms(0.00f, 0.60f, time, entry);   // organismos distantes
+    MenuFX_DrawSyringes(0.00f, 0.70f, entry);          // seringas distantes
+    MenuFX_DrawOrganisms(0.60f, 0.85f, time, entry);   // organismos intermediários
+    MenuFX_DrawParticles();                            // mini-explosões
+    MenuFX_DrawOrganisms(0.85f, 1.01f, time, entry);   // organismos próximos
+    MenuFX_DrawSyringes(0.70f, 1.01f, entry);          // seringas próximas
+
+    // Partículas decorativas existentes (sobem suavemente).
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         if (game->particles[i].active)
@@ -203,44 +1066,15 @@ void DrawTelaMenu(GameState *game, Font font, float time)
         }
     }
 
-    // Painel Central Sci-Fi (Dashboard)
-    DrawSciFiBox((Rectangle){ 430, 45, 420, 570 }, THEME_COLOR_MAIN);
+    // Título DISEASE'S / DOOMSDAY montado letra a letra a partir dos glifos da arte.
+    MenuFX_DrawTitle(font, SCREEN_WIDTH / 2.0f, 44.0f, game->screenAnim, time);
 
-    // Título flutuante dinâmico (com cálculo de seno baseado no tempo)
-    float titleOffsetY = sinf(time * 2.0f) * 4.0f;
-    const char *titulo = "Disease's Doomsday";
-    int titleFontSize = 48;
-    Vector2 titleSize = MeasureTextEx(font, titulo, (float)titleFontSize, 2.0f);
-    
-    Vector2 titlePos = {
-        (SCREEN_WIDTH / 2.0f) - (titleSize.x / 2.0f),
-        75.0f + titleOffsetY
-    };
+    // ---- Painel central de interação (nome + botões), mais alto e centralizado ----
+    Rectangle panel = { SCREEN_WIDTH / 2.0f - 200.0f, 248.0f, 400.0f, 414.0f };
+    DrawPanel(panel, Fade(curAccent, entry), 0.66f * entry);
 
-    // Glow/halo ciano pulsante atrás do título (acabamento profissional)
-    float glowPulse = 0.35f + 0.15f * sinf(time * 3.0f);
-    for (int gx = -2; gx <= 2; gx++)
-        for (int gy = -2; gy <= 2; gy++)
-            if (gx != 0 || gy != 0)
-                DrawTextEx(font, titulo, (Vector2){ titlePos.x + gx * 2.0f, titlePos.y + gy * 2.0f },
-                           (float)titleFontSize, 2.0f, Fade(THEME_COLOR_MAIN, 0.05f * glowPulse));
-
-    // Sombra do título
-    DrawTextEx(font, titulo, (Vector2){ titlePos.x + 3.0f, titlePos.y + 3.0f }, (float)titleFontSize, 2.0f, Fade(BLACK, 0.45f));
-
-    // Texto principal (verde lime biológico) + leve contorno escuro
-    DrawTextEx(font, titulo, (Vector2){ titlePos.x - 1.5f, titlePos.y - 1.5f }, (float)titleFontSize, 2.0f, Fade((Color){ 0, 60, 40, 255 }, 0.6f));
-    DrawTextEx(font, titulo, titlePos, (float)titleFontSize, 2.0f, THEME_COLOR_TEXT);
-
-    // Subtítulo
-    const char *sub = "Proteja o organismo. Salve o Distrito Federal.";
-    int subSizeVal = 16;
-    Vector2 subSize = MeasureTextEx(font, sub, (float)subSizeVal, 1.0f);
-    DrawTextEx(font, sub, (Vector2){ (SCREEN_WIDTH / 2.0f) - (subSize.x / 2.0f), 135.0f + titleOffsetY }, 
-               (float)subSizeVal, 1.0f, Fade((Color){100,200,150,255}, 0.8f));
-
-    // Desenha Campo de Texto para o Nome do Jogador (Y = 200, Altura 40)
-    Rectangle nameBounds = { 500, 200, 280, 40 };
+    // Desenha Campo de Texto para o Nome do Jogador (mesmo retângulo do input).
+    Rectangle nameBounds = MenuNameRect();
     bool nameHover = CheckCollisionPointRec(g_virtualMouse, nameBounds);
     
     Color boxBg = Fade(THEME_COLOR_PANEL, 0.85f);
@@ -308,39 +1142,202 @@ void DrawTelaMenu(GameState *game, Font font, float time)
     // Se existe arquivo de save em qualquer um dos 3 slots, indica que pode carregar
     bool anySaveExists = AnySaveExistsCached();
 
-    // Desenha Botões do Menu (índice 1 = Carregar, desabilitado sem saves)
+    // Botões do menu com ENTRADA EM CASCATA (slide+fade escalonado por índice). O
+    // hitbox real (menuButtons[i].bounds) não se move; apenas o desenho desliza.
     for (int i = 0; i < MENU_BTN_COUNT; i++)
     {
-        DrawButton(menuButtons[i], font, (i == 1) ? anySaveExists : true);
+        float be = UIEase((game->screenAnim - 0.18f - i * 0.05f) / 0.35f);
+        UIButton b = menuButtons[i];
+        b.bounds.x -= (1.0f - be) * 70.0f; // desliza da esquerda
+        bool enabled = (i == 1) ? anySaveExists : true;
+        if (be <= 0.02f) continue;          // ainda não "entrou"
+        DrawButton(b, font, enabled);
     }
 
-    // Rodapé decorativo no painel
-    DrawLineEx((Vector2){ 460, 556 }, (Vector2){ 820, 556 }, 1.0f, Fade(THEME_COLOR_TEXT, 0.25f));
-    const char *verText = "Armas: 1-4  |  Skins  |  5 hordas + CHEFE na onda 5";
-    Vector2 verSize = MeasureTextEx(font, verText, 12.0f, 1.0f);
-    DrawTextEx(font, verText, (Vector2){ 640.0f - verSize.x / 2.0f, 564.0f }, 12.0f, 1.0f, Fade(THEME_COLOR_TEXT, 0.6f));
+    // Rodapé discreto (sem seletor de dificuldade — agora há tela dedicada).
+    const char *hint = "JOGAR escolhe a dificuldade  -  ESC pausa no jogo";
+    Vector2 hs = MeasureTextEx(font, hint, 13.0f, 1.0f);
+    DrawTextEx(font, hint, (Vector2){ 640.0f - hs.x / 2.0f, SCREEN_HEIGHT - 24.0f }, 13.0f, 1.0f, Fade(THEME_COLOR_TEXT, 0.55f));
+}
 
-    // ---- SELETOR DE DIFICULDADE (abaixo do painel) ----
-    DrawTextEx(font, "DIFICULDADE:", (Vector2){ MenuDifficultyRect(0).x, 608.0f }, 16.0f, 1.0f, THEME_COLOR_MAIN);
-    const char *dn[3] = { "FACIL", "MEDIO", "DIFICIL" };
-    const char *dd[3] = { "Inimigos lentos, pouca esquiva", "Equilibrado e padrao", "Rapidos, espertos, mais esquiva" };
-    Color dc[3] = { (Color){ 120, 220, 140, 255 }, (Color){ 0, 229, 255, 255 }, (Color){ 255, 90, 90, 255 } };
+// ============================================================================
+// 1b. TELA: SELEÇÃO DE DIFICULDADE (cards) — abre ao iniciar/reiniciar um jogo
+// ============================================================================
+static Rectangle DiffCardRect(int i)
+{
+    float w = 360.0f, h = 400.0f, gap = 30.0f;
+    float startX = (SCREEN_WIDTH - (3.0f * w + 2.0f * gap)) / 2.0f;
+    return (Rectangle){ startX + i * (w + gap), 158.0f, w, h };
+}
+static Rectangle DiffStartRect(void) { return (Rectangle){ SCREEN_WIDTH / 2.0f - 175.0f, 572.0f, 350.0f, 52.0f }; }
+static Rectangle DiffBackRect(void)  { return (Rectangle){ 40.0f, 652.0f, 220.0f, 46.0f }; }
+
+static const Color DIFF_COL[3] = {
+    { 110, 225, 150, 255 }, // Fácil — verde/ciano
+    { 255, 190, 70, 255 },  // Médio — amarelo/laranja
+    { 255, 84, 116, 255 }   // Difícil — vermelho/magenta
+};
+
+// Barra de intensidade (rótulo + barra preenchida) contida na largura `w`.
+static void DiffIntBar(Font font, float x, float y, float w, const char *label, float v, Color col, float a)
+{
+    v = Clamp(v, 0.0f, 1.0f);
+    DrawTextEx(font, label, (Vector2){ x, y }, 13.0f, 1.0f, Fade(WHITE, 0.8f * a));
+    float by = y + 17.0f, bh = 9.0f;
+    DrawRectangleRounded((Rectangle){ x, by, w, bh }, 0.7f, 4, Fade(BLACK, 0.5f * a));
+    DrawRectangleRounded((Rectangle){ x, by, w * v, bh }, 0.7f, 4, Fade(col, a));
+}
+
+void DrawTelaDifficulty(GameState *game, Font font)
+{
+    extern Vector2 g_virtualMouse;
+    float time = (float)GetTime();
+    float entry = UIEase(game->screenAnim / 0.5f);
+
+    // Fundo: acento conforme a opção tentativa (verde/amarelo/vermelho).
+    int pd = game->pendingDifficulty; if (pd < 0 || pd > 2) pd = DIFFICULTY_MEDIUM;
+    DrawMenuBackground(DIFF_COL[pd], time, game->screenAnim / 0.5f);
+
+    DrawTitleText(font, "SELECIONE A DIFICULDADE", SCREEN_WIDTH / 2.0f, 70.0f, 40.0f, Fade(THEME_COLOR_TEXT, entry));
+    const char *sub = "A dificuldade so e aplicada ao confirmar em INICIAR MISSAO.";
+    Vector2 ss = MeasureTextEx(font, sub, 16.0f, 1.0f);
+    DrawTextEx(font, sub, (Vector2){ SCREEN_WIDTH / 2.0f - ss.x / 2.0f, 124.0f }, 16.0f, 1.0f, Fade(WHITE, 0.8f * entry));
+
+    const char *names[3] = { "FACIL", "MEDIO", "DIFICIL" };
+    const char *subt[3]  = { "Acessivel", "Recomendado", "Extremo" };
+    const char *desc[3]  = {
+        "Inimigos um pouco mais lentos e janelas de esquiva generosas. Ideal para aprender e curtir a campanha.",
+        "Desafio elevado: IA mais agressiva e coordenada, com invocacoes mais frequentes. A experiencia recomendada.",
+        "Experiencia extrema para veteranos: reacao quase instantanea, esquiva e flanqueamento implacaveis."
+    };
+    const char *barLabels[3] = { "IA / coordenacao", "Velocidade", "Pressao / cadencia" };
+    float barVals[3][3] = {
+        { 0.45f, 0.55f, 0.40f },
+        { 0.72f, 0.74f, 0.68f },
+        { 1.00f, 0.95f, 1.00f }
+    };
+
     for (int i = 0; i < 3; i++)
     {
-        Rectangle r = MenuDifficultyRect(i);
-        bool active = (game->difficulty == i);
+        Rectangle r = DiffCardRect(i);
+        Color col = DIFF_COL[i];
+        bool selected = (game->pendingDifficulty == i);
         bool hover = CheckCollisionPointRec(g_virtualMouse, r);
-        DrawRectangleRounded(r, 0.25f, 6, active ? Fade(dc[i], 0.25f) : Fade((Color){ 12, 14, 22, 255 }, 0.85f));
-        DrawRectangleRoundedLines(r, 0.25f, 6, active ? dc[i] : (hover ? YELLOW : THEME_COLOR_BORDER));
-        Vector2 ns = MeasureTextEx(font, dn[i], 20.0f, 1.0f);
-        DrawTextEx(font, dn[i], (Vector2){ r.x + r.width / 2.0f - ns.x / 2.0f, r.y + 4.0f }, 20.0f, 1.0f, active ? dc[i] : WHITE);
-        Vector2 ds = MeasureTextEx(font, dd[i], 11.0f, 1.0f);
-        DrawTextEx(font, dd[i], (Vector2){ r.x + r.width / 2.0f - ds.x / 2.0f, r.y + 28.0f }, 11.0f, 1.0f, Fade(WHITE, 0.7f));
+        bool pressed = hover && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+
+        // Entrada em cascata + leve elevação no hover/selecionado.
+        float ce = UIEase((game->screenAnim - 0.1f - i * 0.08f) / 0.4f);
+        float dy = (1.0f - ce) * 50.0f + ((hover || selected) ? -6.0f : 0.0f) + (pressed ? 3.0f : 0.0f);
+        Rectangle dr = { r.x, r.y + dy, r.width, r.height };
+
+        // Fundo + borda por estado.
+        DrawRectangleRounded(dr, 0.06f, 10, Fade((Color){ 10, 13, 20, 255 }, (selected ? 0.95f : 0.82f) * ce));
+        if (selected)
+        {
+            float gp = 0.5f + 0.5f * sinf(time * 5.0f);
+            DrawRectangleRoundedLines((Rectangle){ dr.x - 3, dr.y - 3, dr.width + 6, dr.height + 6 }, 0.06f, 10, Fade(col, (0.4f + 0.5f * gp) * ce));
+            DrawRectangleRoundedLines(dr, 0.06f, 10, Fade(col, ce));
+        }
+        else
+        {
+            DrawRectangleRoundedLines(dr, 0.06f, 10, Fade(col, (hover ? 0.9f : 0.5f) * ce));
+        }
+        // Faixa de acento no topo do card.
+        DrawRectangleRounded((Rectangle){ dr.x + 14, dr.y + 12, dr.width - 28, 6 }, 0.8f, 4, Fade(col, ce));
+
+        float pad = 22.0f;
+        // Nome (ajustado para nunca estourar).
+        DrawTextFitCentered(font, names[i], (Rectangle){ dr.x, dr.y + 26, dr.width, 40 }, 32.0f, Fade(col, ce), true);
+        // Badge RECOMENDADO no Médio.
+        if (i == 1)
+        {
+            const char *bd = "RECOMENDADO";
+            Vector2 bs = MeasureTextEx(font, bd, 12.0f, 1.0f);
+            Rectangle badge = { dr.x + dr.width / 2.0f - bs.x / 2.0f - 10, dr.y + 64, bs.x + 20, 20 };
+            DrawRectangleRounded(badge, 0.5f, 6, Fade(col, 0.22f * ce));
+            DrawRectangleRoundedLines(badge, 0.5f, 6, Fade(col, ce));
+            DrawTextEx(font, bd, (Vector2){ badge.x + 10, badge.y + 4 }, 12.0f, 1.0f, Fade(col, ce));
+        }
+        // Subtítulo.
+        Vector2 sts = MeasureTextEx(font, subt[i], 17.0f, 1.0f);
+        DrawTextEx(font, subt[i], (Vector2){ dr.x + dr.width / 2.0f - sts.x / 2.0f, dr.y + 92 }, 17.0f, 1.0f, Fade(WHITE, 0.85f * ce));
+        // Descrição (wrap; encolhe p/ caber na altura).
+        DrawTextWrapped(font, desc[i], (Rectangle){ dr.x + pad, dr.y + 120, dr.width - pad * 2, 92 }, 15.0f, 1.0f, Fade(WHITE, 0.8f * ce));
+        // Indicador de intensidade (3 barras).
+        DrawTextEx(font, "INTENSIDADE", (Vector2){ dr.x + pad, dr.y + 222 }, 13.0f, 1.0f, Fade(col, ce));
+        for (int b = 0; b < 3; b++)
+            DiffIntBar(font, dr.x + pad, dr.y + 244 + b * 30, dr.width - pad * 2, barLabels[b], barVals[i][b], col, ce);
+        // Selecionado.
+        if (selected)
+        {
+            const char *sel = "> SELECIONADO <";
+            Vector2 zs = MeasureTextEx(font, sel, 14.0f, 1.0f);
+            DrawTextEx(font, sel, (Vector2){ dr.x + dr.width / 2.0f - zs.x / 2.0f, dr.y + dr.height - 28 }, 14.0f, 1.0f, Fade(col, ce));
+        }
     }
 
-    // Rodapé
-    DrawTextEx(font, "ESC pausa | Dificuldade ativa: ", (Vector2){ 20, SCREEN_HEIGHT - 24 }, 14.0f, 1.0f, DARKGRAY);
-    DrawTextEx(font, DifficultyName(game->difficulty), (Vector2){ 270, SCREEN_HEIGHT - 24 }, 14.0f, 1.0f, dc[game->difficulty % 3]);
+    // Botões: INICIAR MISSAO (confirma) + VOLTAR.
+    UIButton startBtn = { DiffStartRect(), "INICIAR MISSAO", CheckCollisionPointRec(g_virtualMouse, DiffStartRect()), false };
+    DrawButton(startBtn, font, true);
+    UIButton backBtn = { DiffBackRect(), "VOLTAR", CheckCollisionPointRec(g_virtualMouse, DiffBackRect()), false };
+    DrawButton(backBtn, font, true);
+
+    const char *nav = "Setas / A-D para escolher   -   ENTER confirma   -   ESC volta";
+    Vector2 ns = MeasureTextEx(font, nav, 14.0f, 1.0f);
+    DrawTextEx(font, nav, (Vector2){ SCREEN_WIDTH / 2.0f - ns.x / 2.0f, SCREEN_HEIGHT - 26.0f }, 14.0f, 1.0f, Fade(THEME_COLOR_TEXT, 0.6f));
+}
+
+void UpdateTelaDifficulty(GameState *game, Vector2 mouse)
+{
+    if (game->pendingDifficulty < 0 || game->pendingDifficulty > 2)
+        game->pendingDifficulty = DIFFICULTY_MEDIUM;
+
+    // Seleção por clique no card (NÃO muda só por passar o mouse).
+    bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    for (int i = 0; i < 3; i++)
+        if (clicked && CheckCollisionPointRec(mouse, DiffCardRect(i)))
+            game->pendingDifficulty = i;
+
+    // Navegação por teclado.
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D))
+        game->pendingDifficulty = (game->pendingDifficulty + 1) % 3;
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))
+        game->pendingDifficulty = (game->pendingDifficulty + 2) % 3;
+
+    // VOLTAR / ESC: retorna à tela de origem sem alterar a dificuldade.
+    bool backClick = clicked && CheckCollisionPointRec(mouse, DiffBackRect());
+    if (backClick || IsKeyPressed(KEY_ESCAPE))
+    {
+        GameScreen ret = (GameScreen)game->diffReturnScreen;
+        if (ret == SCREEN_DIFFICULTY_SELECT) ret = SCREEN_MENU; // segurança
+        game->currentScreen = ret;
+        return;
+    }
+
+    // INICIAR MISSAO / ENTER: confirma — só AQUI a dificuldade é aplicada.
+    bool startClick = clicked && CheckCollisionPointRec(mouse, DiffStartRect());
+    if (startClick || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER))
+    {
+        int chosen = game->pendingDifficulty;
+        if (chosen < 0 || chosen > 2) chosen = DIFFICULTY_MEDIUM;
+        GameScreen ret = (GameScreen)game->diffReturnScreen;
+
+        game->difficulty = chosen;   // InitGame preserva e aplica (ApplyDifficulty)
+        InitGame(game);
+        SavePlayerConfig(game);      // persiste a dificuldade escolhida
+
+        if (ret == SCREEN_MENU)
+        {
+            // Jogo novo completo: passa pelo tutorial (cutscene de injeção).
+            RequestLoadingScreen(game, LOAD_TO_TUTORIAL, 2.0f);
+        }
+        else
+        {
+            // Reinício (Game Over / Vitória): vai direto à gameplay.
+            game->inTutorial = false;
+            RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 2.0f);
+        }
+    }
 }
 
 
@@ -353,13 +1350,75 @@ static int g_tutTab = 0;
 static const char *g_tutTabNames[TUT_TAB_COUNT] = {
     "BASICO", "ARMAS", "INIMIGOS", "CHEFE", "SKINS", "XP/UPGRADES", "HORDAS"
 };
+static const char *g_tutTabSub[TUT_TAB_COUNT] = {
+    "Objetivo e controles", "Equipamentos e combate", "Conheca as ameacas",
+    "Batalha da onda final", "Identidade visual", "Evolucao do anticorpo",
+    "Progressao das ondas"
+};
+
+static Color TutAccent(int tab)
+{
+    static const Color colors[TUT_TAB_COUNT] = {
+        { 80, 220, 160, 255 }, { 255, 196, 72, 255 }, { 80, 205, 255, 255 },
+        { 255, 84, 108, 255 }, { 205, 110, 255, 255 }, { 255, 150, 70, 255 },
+        { 90, 145, 255, 255 }
+    };
+    if (tab < 0 || tab >= TUT_TAB_COUNT) tab = 0;
+    return colors[tab];
+}
 
 static Rectangle TutTabRect(int i)
 {
-    float tabW = 150.0f, gap = 8.0f;
-    float total = TUT_TAB_COUNT * tabW + (TUT_TAB_COUNT - 1) * gap;
-    float startX = (SCREEN_WIDTH - total) / 2.0f;
-    return (Rectangle){ startX + i * (tabW + gap), 116.0f, tabW, 40.0f };
+    return (Rectangle){ 54.0f, 116.0f + i * 66.0f, 264.0f, 56.0f };
+}
+
+// Ícones vetoriais simples para identificar rapidamente cada seção. São usados
+// tanto na navegação quanto no cabeçalho do painel de detalhes.
+static void DrawTutorialIcon(int tab, Vector2 c, float size, Color accent, float time)
+{
+    float pulse = 1.0f + 0.04f * sinf(time * 2.5f + tab);
+    float s = size * pulse;
+    DrawCircleV(c, s * 0.58f, Fade(accent, 0.10f));
+    DrawCircleLines((int)c.x, (int)c.y, s * 0.52f, Fade(accent, 0.75f));
+
+    switch (tab)
+    {
+        case 0: // controles: direcional
+            DrawRectangleRounded((Rectangle){ c.x - s*0.12f, c.y - s*0.38f, s*0.24f, s*0.76f }, 0.3f, 4, accent);
+            DrawRectangleRounded((Rectangle){ c.x - s*0.38f, c.y - s*0.12f, s*0.76f, s*0.24f }, 0.3f, 4, accent);
+            break;
+        case 1: // arma/projétil
+            DrawLineEx((Vector2){ c.x-s*0.32f, c.y+s*0.24f }, (Vector2){ c.x+s*0.28f, c.y-s*0.30f }, s*0.16f, accent);
+            DrawCircleV((Vector2){ c.x+s*0.34f, c.y-s*0.36f }, s*0.10f, WHITE);
+            break;
+        case 2: // patógeno
+            DrawCircleV(c, s*0.27f, Fade(accent, 0.75f));
+            for (int i = 0; i < 8; i++) {
+                float a = i * PI/4.0f + time*0.15f;
+                Vector2 a0 = { c.x+cosf(a)*s*0.27f, c.y+sinf(a)*s*0.27f };
+                Vector2 a1 = { c.x+cosf(a)*s*0.43f, c.y+sinf(a)*s*0.43f };
+                DrawLineEx(a0, a1, 2.0f, accent); DrawCircleV(a1, s*0.05f, accent);
+            }
+            break;
+        case 3: // chefe/coroa
+            DrawTriangle((Vector2){c.x-s*.34f,c.y+s*.20f}, (Vector2){c.x-s*.24f,c.y-s*.30f}, (Vector2){c.x,c.y+s*.02f}, accent);
+            DrawTriangle((Vector2){c.x,c.y+s*.02f}, (Vector2){c.x+s*.24f,c.y-s*.30f}, (Vector2){c.x+s*.34f,c.y+s*.20f}, accent);
+            DrawRectangleRounded((Rectangle){c.x-s*.34f,c.y+s*.15f,s*.68f,s*.17f},0.3f,4,accent);
+            break;
+        case 4: // skin/escudo
+            DrawPoly(c, 6, s*0.34f, 30.0f, Fade(accent, 0.75f));
+            DrawPolyLinesEx(c, 6, s*0.34f, 30.0f, 3.0f, WHITE);
+            break;
+        case 5: // evolução
+            DrawLineEx((Vector2){c.x-s*.28f,c.y+s*.28f}, (Vector2){c.x+s*.28f,c.y-s*.28f}, 4.0f, accent);
+            DrawTriangle((Vector2){c.x+s*.28f,c.y-s*.28f}, (Vector2){c.x+s*.02f,c.y-s*.22f}, (Vector2){c.x+s*.22f,c.y+s*.02f}, accent);
+            DrawCircleV((Vector2){c.x-s*.25f,c.y+s*.25f},s*.09f,WHITE);
+            break;
+        default: // hordas/ondas
+            for (int i = 0; i < 3; i++)
+                DrawRing(c, s*(0.12f+i*.10f), s*(0.15f+i*.10f), 200, 340, 18, Fade(accent, 1.0f-i*.18f));
+            break;
+    }
 }
 
 // Linha "rótulo: texto" auxiliar do tutorial
@@ -378,14 +1437,15 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
     float x = panel.x + 28.0f;
     float y = panel.y + 22.0f;
     float step = 30.0f;
+    Color accent = TutAccent(g_tutTab);
 
     switch (g_tutTab)
     {
         case 0: // BASICO + CONTROLES
-            DrawTextEx(font, "OBJETIVO", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 30.0f;
+            DrawTextEx(font, "OBJETIVO", (Vector2){ x, y }, 22.0f, 1.0f, accent); y += 30.0f;
             DrawTextEx(font, "Voce e um Anticorpo. Sobreviva a 5 hordas de patogenos, derrote o", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 24.0f;
             DrawTextEx(font, "chefe da onda 5 e proteja o organismo do Distrito Federal.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 38.0f;
-            DrawTextEx(font, "CONTROLES", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 32.0f;
+            DrawTextEx(font, "CONTROLES", (Vector2){ x, y }, 22.0f, 1.0f, accent); y += 32.0f;
             TutLine(font, x, y, "WASD / SETAS", YELLOW, "Mover o Anticorpo"); y += step;
             TutLine(font, x, y, "CLIQUE ESQ. / ESPACO", YELLOW, "Atacar com a arma equipada"); y += step;
             TutLine(font, x, y, "1  2  3  4", YELLOW, "Selecionar / trocar de arma"); y += step;
@@ -421,7 +1481,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
             };
             for (int i = 0; i < 5; i++)
             {
-                DrawTextEx(font, en[i][0], (Vector2){ x, y }, 19.0f, 1.0f, THEME_COLOR_MAIN); y += 24.0f;
+                DrawTextEx(font, en[i][0], (Vector2){ x, y }, 19.0f, 1.0f, accent); y += 24.0f;
                 DrawTextEx(font, en[i][1], (Vector2){ x + 16, y }, 15.0f, 1.0f, Fade(WHITE, 0.82f)); y += 21.0f;
                 TutLine(font, x + 16, y, "Dica:", GOLD, en[i][2]); y += 28.0f;
             }
@@ -432,7 +1492,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
             DrawTextEx(font, "CHEFE: SUPERBACTERIA KPC", (Vector2){ x, y }, 24.0f, 1.0f, (Color){ 255, 80, 90, 255 }); y += 34.0f;
             DrawTextEx(font, "Aparece SEMPRE na onda 5, com o corpo bem maior e milhares de vida.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
             DrawTextEx(font, "Surge CERCADO por lacaios que o escoltam e te distraem.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
-            DrawTextEx(font, "Tem 3 FASES conforme perde vida:", (Vector2){ x, y }, 18.0f, 1.0f, THEME_COLOR_MAIN); y += 28.0f;
+            DrawTextEx(font, "Tem 3 FASES conforme perde vida:", (Vector2){ x, y }, 18.0f, 1.0f, accent); y += 28.0f;
             TutLine(font, x + 16, y, "Fase 1:", GOLD, "tiros duplos em ritmo normal."); y += 26.0f;
             TutLine(font, x + 16, y, "Fase 2:", GOLD, "mais rapido e INVOCA lacaios."); y += 26.0f;
             TutLine(font, x + 16, y, "Fase 3:", GOLD, "enfurecido, dispara rajada em todas as direcoes."); y += 32.0f;
@@ -441,7 +1501,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
 
         case 4: // SKINS
             DrawTextEx(font, "Abra 'SKINS' no menu para escolher (preview ao vivo).", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 34.0f;
-            DrawTextEx(font, "SKINS DO ANTICORPO:", (Vector2){ x, y }, 18.0f, 1.0f, THEME_COLOR_MAIN); y += 28.0f;
+            DrawTextEx(font, "SKINS DO ANTICORPO:", (Vector2){ x, y }, 18.0f, 1.0f, accent); y += 28.0f;
             TutLine(font, x + 16, y, "PADRAO", YELLOW, "cavaleiro imune classico."); y += 26.0f;
             TutLine(font, x + 16, y, "MEDICA", YELLOW, "jaleco branco com cruz vermelha."); y += 26.0f;
             TutLine(font, x + 16, y, "INFECTADA", YELLOW, "armadura roxa corrompida."); y += 34.0f;
@@ -450,18 +1510,18 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
             break;
 
         case 5: // XP / UPGRADES
-            DrawTextEx(font, "PROGRESSAO DE RPG", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 32.0f;
+            DrawTextEx(font, "PROGRESSAO DE RPG", (Vector2){ x, y }, 22.0f, 1.0f, accent); y += 32.0f;
             TutLine(font, x, y, "XP:", GOLD, "derrotar patogenos enche a barra roxa de XP."); y += 28.0f;
             TutLine(font, x, y, "NIVEL:", GOLD, "ao subir, ganha +Vida, +Dano, +Velocidade e cura total."); y += 28.0f;
             TutLine(font, x, y, "ARMAS:", GOLD, "Fuzil (Nv2), Granada (Nv3) e BFG (Nv4) desbloqueiam por nivel."); y += 28.0f;
-            DrawTextEx(font, "PONTOS DO SUS", (Vector2){ x, y }, 20.0f, 1.0f, THEME_COLOR_MAIN); y += 28.0f;
+            DrawTextEx(font, "PONTOS DO SUS", (Vector2){ x, y }, 20.0f, 1.0f, accent); y += 28.0f;
             TutLine(font, x, y, "QUIZ:", GOLD, "acertar o quiz entre ondas da +50 Pontos do SUS."); y += 26.0f;
             TutLine(font, x, y, "LOJA:", GOLD, "gaste os pontos em +Vida Max, +Velocidade ou +Dano."); y += 26.0f;
             DrawTextEx(font, "A tela de Melhorias do SUS aparece automaticamente entre as ondas.", (Vector2){ x, y }, 15.0f, 1.0f, Fade(WHITE, 0.8f));
             break;
 
         default: // HORDAS
-            DrawTextEx(font, "SISTEMA DE HORDAS", (Vector2){ x, y }, 22.0f, 1.0f, THEME_COLOR_MAIN); y += 32.0f;
+            DrawTextEx(font, "SISTEMA DE HORDAS", (Vector2){ x, y }, 22.0f, 1.0f, accent); y += 32.0f;
             DrawTextEx(font, "Sao 5 ondas, cada uma mais dificil: mais inimigos e mais fortes.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
             DrawTextEx(font, "Elimine todos os patogenos da onda para avancar.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
             DrawTextEx(font, "Entre as ondas: QUIZ educativo + tela de Melhorias do SUS.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 32.0f;
@@ -473,32 +1533,85 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
 
 void DrawTelaControles(GameState *game, Font font)
 {
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
-                           (Color){ 6, 14, 10, 255 }, (Color){ 10, 22, 16, 255 });
+    float time = (float)GetTime();
+    DrawThemedBackground(SCREEN_CONTROLS, time, game->screenAnim / 0.4f);
+    float entry = UIEase(game->screenAnim / 0.4f);
+    Color acc = TutAccent(g_tutTab);
+    DrawUIScreenTitle(font, "TUTORIAL", acc, entry);
 
-    DrawTextEx(font, "TUTORIAL", (Vector2){ SCREEN_WIDTH / 2.0f - MeasureTextEx(font, "TUTORIAL", 40.0f, 1.5f).x / 2.0f, 48.0f }, 40.0f, 1.5f, THEME_COLOR_TEXT);
+    const char *screenSub = "GUIA DE CAMPO DO ANTICORPO";
+    Vector2 screenSubSize = MeasureTextEx(font, screenSub, 14.0f, 1.0f);
+    DrawTextEx(font, screenSub,
+               (Vector2){ SCREEN_WIDTH/2.0f-screenSubSize.x/2.0f, 91.0f },
+               14.0f, 1.0f, Fade(WHITE, 0.62f*entry));
 
-    // Abas
+    // Coluna de navegação no padrão Arsenal: cards empilhados com ícone,
+    // numeração, nome e estado selecionado.
     for (int i = 0; i < TUT_TAB_COUNT; i++)
     {
         Rectangle tr = TutTabRect(i);
         bool active = (g_tutTab == i);
         bool hover = CheckCollisionPointRec(g_virtualMouse, tr);
-        DrawRectangleRounded(tr, 0.25f, 6, active ? Fade(THEME_COLOR_MAIN, 0.22f) : Fade((Color){ 12, 14, 22, 255 }, 0.85f));
-        DrawRectangleRoundedLines(tr, 0.25f, 6, active ? THEME_COLOR_MAIN : (hover ? YELLOW : THEME_COLOR_BORDER));
-        Vector2 nSz = MeasureTextEx(font, g_tutTabNames[i], 14.0f, 1.0f);
-        DrawTextEx(font, g_tutTabNames[i], (Vector2){ tr.x + tr.width / 2.0f - nSz.x / 2.0f, tr.y + 12.0f }, 14.0f, 1.0f,
-                   active ? THEME_COLOR_MAIN : Fade(WHITE, 0.85f));
+        Color tabAccent = TutAccent(i);
+        float ce = UIEase((game->screenAnim - i*0.04f) / 0.4f);
+        Rectangle dr = tr; dr.x -= (1.0f-ce)*34.0f;
+        DrawUICard(dr, tabAccent, hover, active, ce);
+        DrawTutorialIcon(i, (Vector2){dr.x+31.0f, dr.y+28.0f}, 29.0f,
+                         active ? tabAccent : Fade(tabAccent, 0.72f), time);
+        DrawTextEx(font, TextFormat("%02d", i+1),
+                   (Vector2){dr.x+57.0f, dr.y+8.0f}, 12.0f, 1.0f,
+                   Fade(tabAccent, 0.75f*ce));
+        Rectangle tabName = { dr.x+78.0f, dr.y+8.0f, dr.width-90.0f, 38.0f };
+        DrawTextFitCentered(font, g_tutTabNames[i], tabName, 17.0f,
+                            active ? tabAccent : Fade(WHITE, hover ? 0.95f : 0.76f), true);
+        if (active)
+            DrawRectangleRounded((Rectangle){dr.x+4.0f,dr.y+10.0f,4.0f,dr.height-20.0f},0.8f,4,tabAccent);
     }
 
-    // Painel de conteúdo
-    Rectangle panel = { 120, 176, 1040, 432 };
-    DrawRectangleRounded(panel, 0.04f, 6, Fade(BLACK, 0.5f));
-    DrawRectangleRoundedLines(panel, 0.04f, 6, THEME_COLOR_BORDER);
-    DrawTutContent(game, font, panel);
+    // Painel principal de detalhes, equivalente ao preview amplo do Arsenal.
+    Rectangle detail = { 338.0f, 116.0f, 882.0f, 500.0f };
+    DrawUICard(detail, acc, false, true, entry);
 
-    DrawTextEx(font, "Use as ABAS (clique) ou SETAS <- ->   |   ESC para voltar",
-               (Vector2){ 120, 620 }, 15.0f, 1.0f, Fade(WHITE, 0.6f));
+    // Cabeçalho visual da categoria selecionada.
+    DrawTutorialIcon(g_tutTab, (Vector2){390.0f, 160.0f}, 54.0f, acc, time);
+    DrawTextEx(font, g_tutTabNames[g_tutTab], (Vector2){ 434.0f, 132.0f },
+               27.0f, 1.0f, Fade(acc, entry));
+    DrawTextEx(font, g_tutTabSub[g_tutTab], (Vector2){ 434.0f, 166.0f },
+               15.0f, 1.0f, Fade(WHITE, 0.68f*entry));
+
+    // Indicador integrado ao cabeçalho do painel, longe dos seletores.
+    char prog[16];
+    snprintf(prog, sizeof(prog), "%d / %d", g_tutTab + 1, TUT_TAB_COUNT);
+    Vector2 ps = MeasureTextEx(font, prog, 16.0f, 1.0f);
+    Rectangle progressBadge = { detail.x+detail.width-104.0f, 137.0f, 76.0f, 30.0f };
+    DrawRectangleRounded(progressBadge, 0.5f, 6, Fade((Color){ 8, 14, 20, 255 }, 0.78f * entry));
+    DrawRectangleRoundedLines(progressBadge, 0.5f, 6, Fade(acc, 0.75f * entry));
+    DrawTextEx(font, prog,
+               (Vector2){ progressBadge.x + (progressBadge.width - ps.x) * 0.5f,
+                          progressBadge.y + (progressBadge.height - ps.y) * 0.5f },
+               16.0f, 1.0f, Fade(acc, entry));
+
+    DrawLineEx((Vector2){detail.x+24.0f,194.0f},
+               (Vector2){detail.x+detail.width-24.0f,194.0f}, 2.0f, Fade(acc,0.35f*entry));
+
+    // Conteúdo com slide/fade ao trocar de categoria.
+    static int prevTab = -1; static float tabAnim = 0.0f;
+    if (g_tutTab != prevTab) { prevTab = g_tutTab; tabAnim = 0.0f; }
+    tabAnim += GetFrameTime();
+    float ta = UIEase(tabAnim / 0.3f);
+    Rectangle panel = { 358.0f, 207.0f, 842.0f, 389.0f };
+    DrawUISectionPanel(font, panel, NULL, acc, entry);
+    BeginScissorMode((int)panel.x, (int)panel.y, (int)panel.width, (int)panel.height);
+    rlPushMatrix();
+    rlTranslatef((1.0f - ta) * 36.0f, 0.0f, 0.0f);
+    DrawTutContent(game, font, panel);
+    rlPopMatrix();
+    EndScissorMode();
+
+    const char *tutorialHint = "SETAS / W-S: navegar   |   clique para selecionar   |   ESC: voltar";
+    DrawTextEx(font, tutorialHint,
+               (Vector2){ 54.0f, 637.0f },
+               15.0f, 1.0f, Fade(WHITE, 0.6f));
 
     // Botão voltar
     DrawButton(controlsButton, font, true);
@@ -512,8 +1625,10 @@ void UpdateTelaTutorial(GameState *game, Vector2 mouse)
         if (CheckCollisionPointRec(mouse, TutTabRect(i)) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
             g_tutTab = i;
     }
-    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) g_tutTab = (g_tutTab + 1) % TUT_TAB_COUNT;
-    if (IsKeyPressed(KEY_LEFT)  || IsKeyPressed(KEY_A)) g_tutTab = (g_tutTab + TUT_TAB_COUNT - 1) % TUT_TAB_COUNT;
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_S))
+        g_tutTab = (g_tutTab + 1) % TUT_TAB_COUNT;
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_W))
+        g_tutTab = (g_tutTab + TUT_TAB_COUNT - 1) % TUT_TAB_COUNT;
 
     UpdateBtnState(&controlsButton, mouse);
     if (controlsButton.clicked || IsKeyPressed(KEY_ESCAPE))
@@ -561,35 +1676,49 @@ void DrawTelaPausa(GameState *game, Font font)
 // ============================================================================
 // 4. TELA: GAME OVER
 // ============================================================================
+// Linha de estatística alinhada (rótulo à esquerda, valor à direita) dentro de
+// um painel — texto sempre contido (mede com MeasureTextEx).
+static void StatLine(Font font, Rectangle panel, float y, const char *label, const char *value, Color valCol)
+{
+    float fs = 21.0f, padX = 22.0f;
+    DrawTextEx(font, label, (Vector2){ panel.x + padX, y }, fs, 1.0f, Fade(WHITE, 0.85f));
+    Vector2 vs = MeasureTextEx(font, value, fs, 1.0f);
+    DrawTextEx(font, value, (Vector2){ panel.x + panel.width - padX - vs.x, y }, fs, 1.0f, valCol);
+}
+
 void DrawTelaGameOver(GameState *game, Font font)
 {
-    // Fundo vermelho escuro/preto degradê do void
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
-                           (Color){ 20, 6, 12, 255 }, (Color){ 10, 4, 8, 255 });
+    float time = (float)GetTime();
+    DrawThemedBackground(SCREEN_GAMEOVER, time, game->screenAnim / 0.5f);
 
-    // Título pulsante
-    float pulse = 1.0f + sinf((float)GetTime() * 4.0f) * 0.05f;
-    const char *txt = "GAME OVER";
-    int fSize = 65;
-    Vector2 txtSize = MeasureTextEx(font, txt, (float)fSize, 2.0f);
-    Vector2 txtPos = {
-        (SCREEN_WIDTH / 2.0f) - (txtSize.x * pulse / 2.0f),
-        120.0f - (txtSize.y * pulse / 2.0f)
-    };
-    DrawTextEx(font, txt, txtPos, (float)fSize * pulse, 2.0f, RED);
+    float entry = UIEase(game->screenAnim / 0.5f);
+    float slide = (1.0f - entry) * 46.0f;
 
-    // Painel de estatísticas (Estilo SciFi)
-    DrawSciFiBox((Rectangle){ 400, 200, 480, 160 }, MAROON);
+    rlPushMatrix();
+    rlTranslatef(0.0f, slide, 0.0f);
 
-    DrawTextEx(font, TextFormat("Pontuação Final: %d", game->player.score), (Vector2){ 440, 225 }, 22.0f, 1.0f, WHITE);
-    DrawTextEx(font, TextFormat("Nível Final: Lvl %d", game->player.level), (Vector2){ 440, 260 }, 22.0f, 1.0f, WHITE);
-    DrawTextEx(font, TextFormat("Patógenos Eliminados: %d", game->totalEnemiesKilled), (Vector2){ 440, 295 }, 22.0f, 1.0f, WHITE);
+    // "Flatline" dramática atrás do título (sem prejudicar legibilidade).
+    float baseY = 132.0f;
+    DrawLineEx((Vector2){ 120, baseY }, (Vector2){ 520, baseY }, 2.0f, Fade(RED, 0.35f * entry));
+    DrawLineEx((Vector2){ 520, baseY }, (Vector2){ 560, baseY - 26 }, 2.0f, Fade(RED, 0.5f * entry));
+    DrawLineEx((Vector2){ 560, baseY - 26 }, (Vector2){ 600, baseY + 30 }, 2.0f, Fade(RED, 0.5f * entry));
+    DrawLineEx((Vector2){ 600, baseY + 30 }, (Vector2){ 640, baseY }, 2.0f, Fade(RED, 0.5f * entry));
+    DrawLineEx((Vector2){ 640, baseY }, (Vector2){ 1160, baseY }, 2.0f, Fade(RED, 0.35f * entry));
 
-    // Botões
-    for (int i = 0; i < 2; i++)
-    {
-        DrawButton(gameOverButtons[i], font, true);
-    }
+    float pulse = 1.0f + sinf(time * 4.0f) * 0.04f;
+    DrawTitleText(font, "GAME OVER", SCREEN_WIDTH / 2.0f, 86.0f, 66.0f * pulse, Fade((Color){ 235, 60, 70, 255 }, entry));
+
+    // Painel de estatísticas alinhado.
+    Rectangle panel = { 400, 210, 480, 170 };
+    DrawPanel(panel, Fade((Color){ 230, 80, 90, 255 }, entry), 0.72f * entry);
+    StatLine(font, panel, panel.y + 26, "Pontuacao final", TextFormat("%d", game->player.score), GOLD);
+    StatLine(font, panel, panel.y + 64, "Nivel final", TextFormat("Lvl %d", game->player.level), WHITE);
+    StatLine(font, panel, panel.y + 102, "Patogenos eliminados", TextFormat("%d", game->totalEnemiesKilled), (Color){ 120, 220, 140, 255 });
+
+    rlPopMatrix();
+
+    // Botões (sem transform p/ manter hitbox correta; perfeitamente alinhados).
+    for (int i = 0; i < 2; i++) DrawButton(gameOverButtons[i], font, true);
 }
 
 
@@ -599,11 +1728,10 @@ void DrawTelaGameOver(GameState *game, Font font)
 // ============================================================================
 void DrawTelaVitoria(GameState *game, Font font)
 {
-    // Fundo azul escuro do espaço sideral degradê
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
-                           (Color){ 10, 16, 36, 255 }, (Color){ 6, 8, 20, 255 });
+    float time = (float)GetTime();
+    DrawThemedBackground(SCREEN_VICTORY, time, game->screenAnim / 0.5f);
 
-    // Efeito de estrelas/partículas subindo
+    // Partículas festivas (atualizadas no UpdateButtonsVitoria).
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         if (game->particles[i].active)
@@ -613,34 +1741,38 @@ void DrawTelaVitoria(GameState *game, Font font)
         }
     }
 
-    // Título
-    float pulse = 1.0f + sinf((float)GetTime() * 3.5f) * 0.04f;
-    const char *txt = "ORGANISMO CURADO!";
-    int fSize = 65;
-    Vector2 txtSize = MeasureTextEx(font, txt, (float)fSize, 2.0f);
-    Vector2 txtPos = {
-        (SCREEN_WIDTH / 2.0f) - (txtSize.x * pulse / 2.0f),
-        120.0f - (txtSize.y * pulse / 2.0f)
-    };
-    DrawTextEx(font, txt, txtPos, (float)fSize * pulse, 2.0f, THEME_COLOR_TEXT);
+    float entry = UIEase(game->screenAnim / 0.5f);
+    float slide = (1.0f - entry) * 46.0f;
 
-    // Parabéns
-    const char *congrats = "Você erradicou todas as infecções do Distrito Federal!";
-    Vector2 congratsSize = MeasureTextEx(font, congrats, 18.0f, 1.0f);
-    DrawTextEx(font, congrats, (Vector2){ (SCREEN_WIDTH / 2.0f) - (congratsSize.x / 2.0f), 165.0f }, 18.0f, 1.0f, (Color){ 100, 220, 160, 255 });
-
-    // Painel de estatísticas (Estilo SciFi)
-    DrawSciFiBox((Rectangle){ 400, 200, 480, 160 }, GOLD);
-
-    DrawTextEx(font, TextFormat("Pontuação Final: %d", game->player.score), (Vector2){ 440, 225 }, 22.0f, 1.0f, GOLD);
-    DrawTextEx(font, TextFormat("Nível Final: Lvl %d", game->player.level), (Vector2){ 440, 260 }, 22.0f, 1.0f, WHITE);
-    DrawTextEx(font, TextFormat("Total de Patógenos: %d", game->totalEnemiesKilled), (Vector2){ 440, 295 }, 22.0f, 1.0f, WHITE);
-
-    // Botões
-    for (int i = 0; i < 2; i++)
+    // Raios celebratórios irradiando atrás do título (tema imunológico).
+    Vector2 burst = { SCREEN_WIDTH / 2.0f, 110.0f };
+    for (int r = 0; r < 16; r++)
     {
-        DrawButton(victoryButtons[i], font, true);
+        float a = (time * 0.6f + r * (360.0f / 16.0f)) * DEG2RAD;
+        float len = 120.0f + sinf(time * 2.0f + r) * 24.0f;
+        DrawLineEx(burst, (Vector2){ burst.x + cosf(a) * len, burst.y + sinf(a) * len },
+                   2.0f, Fade(GOLD, 0.10f * entry));
     }
+
+    rlPushMatrix();
+    rlTranslatef(0.0f, slide, 0.0f);
+
+    float pulse = 1.0f + sinf(time * 3.5f) * 0.04f;
+    DrawTitleText(font, "ORGANISMO CURADO!", SCREEN_WIDTH / 2.0f, 78.0f, 60.0f * pulse, Fade(THEME_COLOR_TEXT, entry));
+
+    Rectangle congrats = { 240, 150, 800, 34 };
+    DrawTextWrapped(font, "Voce erradicou todas as infeccoes do Distrito Federal!",
+                    congrats, 19.0f, 1.0f, Fade((Color){ 120, 230, 170, 255 }, entry));
+
+    Rectangle panel = { 400, 200, 480, 170 };
+    DrawPanel(panel, Fade(GOLD, entry), 0.72f * entry);
+    StatLine(font, panel, panel.y + 26, "Pontuacao final", TextFormat("%d", game->player.score), GOLD);
+    StatLine(font, panel, panel.y + 64, "Nivel final", TextFormat("Lvl %d", game->player.level), WHITE);
+    StatLine(font, panel, panel.y + 102, "Total de patogenos", TextFormat("%d", game->totalEnemiesKilled), (Color){ 120, 220, 140, 255 });
+
+    rlPopMatrix();
+
+    for (int i = 0; i < 2; i++) DrawButton(victoryButtons[i], font, true);
 }
 
 
@@ -892,8 +2024,7 @@ UIButton settingsBtnVoltar = { { 490, 600, 300, 50 }, "BACK", false, false };
 
 void DrawTelaSettings(GameState *game, Font font)
 {
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
-                           (Color){ 10, 8, 20, 255 }, (Color){ 20, 12, 36, 255 });
+    DrawThemedBackground(SCREEN_SETTINGS, (float)GetTime(), game->screenAnim / 0.4f);
 
     DrawTextEx(font, "SETTINGS", (Vector2){ 540, 60 }, 42.0f, 1.5f, SKYBLUE);
 
@@ -904,16 +2035,26 @@ void DrawTelaSettings(GameState *game, Font font)
 
     DrawTextEx(font, "MASTER VOLUME", (Vector2){ 380, 230 }, 24.0f, 1.0f, WHITE);
 
-    Rectangle sliderBg = { 600, 230, 300, 20 };
-    Rectangle sliderFill = { 600, 230, 300 * game->masterVolume, 20 };
-
-    DrawRectangleRec(sliderBg, Fade(BLACK, 0.6f));
-    DrawRectangleRec(sliderFill, THEME_COLOR_MAIN);
-    DrawRectangleLinesEx(sliderBg, 2.0f, THEME_COLOR_BORDER);
+    // Slider com geometria ÚNICA (trilho), knob SEMPRE dentro das extremidades e
+    // tudo contido no card (340..940). O preenchimento e o knob seguem o trilho.
+    float vol = Clamp(game->masterVolume, 0.0f, 1.0f);
+    Rectangle track = SettingsVolumeTrack();
+    bool sHover = CheckCollisionPointRec(g_virtualMouse, (Rectangle){ track.x - 14, track.y - 14, track.width + 28, track.height + 28 });
+    DrawRectangleRounded(track, 0.8f, 6, Fade(BLACK, 0.6f));
+    DrawRectangleRounded((Rectangle){ track.x, track.y, track.width * vol, track.height }, 0.8f, 6, THEME_COLOR_MAIN);
+    DrawRectangleRoundedLines(track, 0.8f, 6, Fade(sHover ? THEME_COLOR_MAIN : THEME_COLOR_BORDER, 0.9f));
+    // Knob: centro limitado a [x+r, x+w-r] para nunca sair do trilho/card.
+    float kr = 11.0f;
+    float kcx = track.x + track.width * vol;
+    if (kcx < track.x + kr) kcx = track.x + kr;
+    if (kcx > track.x + track.width - kr) kcx = track.x + track.width - kr;
+    float kcy = track.y + track.height / 2.0f;
+    DrawCircleV((Vector2){ kcx, kcy }, kr + 2.0f, Fade(THEME_COLOR_MAIN, 0.3f + (sHover ? 0.2f : 0.0f)));
+    DrawCircleV((Vector2){ kcx, kcy }, kr, sHover ? THEME_COLOR_MAIN : (Color){ 220, 235, 245, 255 });
 
     char volText[16];
-    sprintf(volText, "%d%%", (int)(game->masterVolume * 100));
-    DrawTextEx(font, volText, (Vector2){ 920, 228 }, 24.0f, 1.0f, WHITE);
+    sprintf(volText, "%d%%", (int)(vol * 100.0f + 0.5f));
+    DrawTextEx(font, volText, (Vector2){ track.x + track.width + 16.0f, track.y - 6.0f }, 22.0f, 1.0f, WHITE);
 
     // ------------------------------------------------------------------------
     // SELETORES DE SKIN (personagem e arma)

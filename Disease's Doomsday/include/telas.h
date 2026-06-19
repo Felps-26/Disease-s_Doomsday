@@ -11,6 +11,75 @@ void DrawButton(UIButton botao, Font font, bool enabled);
 // Desenha texto centralizado que reduz a fonte para caber na largura da área.
 void DrawTextFitCentered(Font font, const char *text, Rectangle area, float maxFont, Color color, bool shadow);
 
+// ============================================================================
+// COMPONENTES REUTILIZÁVEIS DE UI (tema médico/imunológico/sci-fi)
+// Todos medem o texto com MeasureTextEx e respeitam o retângulo do componente —
+// o texto nunca ultrapassa seu painel (encolhe a fonte ou faz wrap).
+// ============================================================================
+// Ease de entrada (cubic-out) usado por animações de slide/fade. 0..1 -> 0..1.
+float UIEase(float t);
+// Painel temático com brilho de borda e cantos sci-fi (alpha do fundo ajustável).
+void DrawPanel(Rectangle r, Color accent, float bgAlpha);
+// Título com halo/sombra e contorno (centralizado em centerX).
+void DrawTitleText(Font font, const char *text, float centerX, float y, float fontSize, Color color);
+// Texto com quebra de linha (word-wrap) dentro de `area`; encolhe a fonte se
+// preciso para caber na altura. Retorna a altura usada.
+float DrawTextWrapped(Font font, const char *text, Rectangle area, float fontSize, float spacing, Color color);
+// Tooltip (painel pequeno) ancorado perto de um ponto, mantido dentro da tela.
+void DrawTooltip(Font font, const char *text, Vector2 anchor);
+// Fundo temático por tela (gradiente + células biológicas flutuantes). `entry`
+// (0..1) controla o fade de entrada; faz morph suave entre temas.
+void DrawThemedBackground(int screen, float time, float entry);
+
+// ---- Helpers procedurais reutilizáveis do MENU (tema biológico/sci-fi) ----
+// Vírus (círculo com espículas + núcleo de RNA), bactéria (bastonete com cílios)
+// e símbolo de risco biológico (pulsante). Desenhados em coordenadas de tela.
+void DrawMenuVirus(Vector2 center, float radius, float rotationDeg, Color col);
+void DrawMenuBacteria(Vector2 center, float size, float angleDeg, Color col);
+void DrawMenuBiohazard(Vector2 center, float radius, float pulse, Color col);
+// Fundo animado do menu: gradiente azul-marinho + ECG + micróbios nas bordas
+// (posições determinísticas, animação por tempo, baixo custo). `accent` faz o
+// morph conforme o item destacado.
+void DrawMenuBackground(Color accent, float time, float entry);
+// Título neon em duas linhas (DISEASE'S / DOOMSDAY) com sombra, glow em camadas
+// e entrada animada. centerX define o eixo horizontal; `entry` 0..1.
+void DrawNeonTitle(Font font, float centerX, float topY, float scale, float entry, float time);
+// Banner/hero do menu a partir de menu_background.png, em proporção correta
+// (nunca distorce) dentro de uma área. Retorna true se o PNG foi usado.
+bool DrawMenuBanner(Rectangle area, float entry);
+
+// Layout ÚNICO do menu principal: posiciona os 8 botões (menuButtons[].bounds) e
+// o campo de nome. Desenho e input usam EXATAMENTE os mesmos retângulos.
+void MenuApplyLayout(void);
+Rectangle MenuNameRect(void);
+
+// ============================================================================
+// SISTEMA VISUAL COMPARTILHADO (padrão Arsenal) — componentes reutilizáveis
+// ============================================================================
+// Card com estados (normal/hover/selecionado), borda/glow de acento e entrada.
+void DrawUICard(Rectangle r, Color accent, bool hover, bool selected, float entry);
+// Aba/chip selecionável (tabs no estilo card).
+void DrawUITab(Font font, Rectangle r, const char *text, Color accent, bool active, bool hover);
+// Título de tela (centralizado, com glow) + sublinha de acento.
+void DrawUIScreenTitle(Font font, const char *text, Color accent, float entry);
+// Botão "voltar" consistente (canto inferior esquerdo); retorna true se clicado.
+bool DrawUIBackButton(Font font, Vector2 mouse, const char *text);
+// Barra de atributo (rótulo + valor 0..1 + texto), contida em `w`.
+void DrawUIStatBar(Font font, float x, float y, float w, const char *label, float v, const char *valueTxt, Color col);
+// Campo de texto/entrada (com placeholder, foco e cursor opcional).
+void DrawUIInput(Font font, Rectangle r, const char *text, const char *placeholder, bool active, bool hover, bool showCursor);
+// Painel de seção com cabeçalho.
+void DrawUISectionPanel(Font font, Rectangle r, const char *title, Color accent, float entry);
+// Toast/feedback flutuante (texto curto), alpha 0..1.
+void DrawUIToast(Font font, const char *text, Color accent, float alpha);
+// Geometria ÚNICA do slider de volume (trilho), compartilhada por desenho e input.
+Rectangle SettingsVolumeTrack(void);
+
+// Tela de SELEÇÃO DE DIFICULDADE (3 cards: Fácil/Médio/Difícil) — abre ao
+// iniciar/reiniciar um jogo; confirma em "INICIAR MISSAO".
+void DrawTelaDifficulty(GameState *game, Font font);
+void UpdateTelaDifficulty(GameState *game, Vector2 mouse);
+
 // Verifica (com cache de ~1s) se existe algum arquivo de save nos 3 slots.
 // Evita abrir arquivos do disco a cada frame no menu.
 bool AnySaveExistsCached(void);

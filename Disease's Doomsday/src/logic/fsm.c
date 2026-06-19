@@ -17,6 +17,12 @@ void UpdateStateMachine(GameState *game)
 {
     float delta = GetFrameTime();
 
+    // Relógio de ENTRADA da tela (reusável p/ animações de UI): zera ao trocar de
+    // tela e acumula a cada frame. As telas leem game->screenAnim para fade/slide.
+    static GameScreen sm_prev = (GameScreen)-1;
+    if (game->currentScreen != sm_prev) { sm_prev = game->currentScreen; game->screenAnim = 0.0f; }
+    else                                { game->screenAnim += delta; }
+
     switch (game->currentScreen)
     {
         case SCREEN_MENU:
@@ -24,6 +30,10 @@ void UpdateStateMachine(GameState *game)
             {
                 game->shouldClose = true;
             }
+            break;
+
+        case SCREEN_DIFFICULTY_SELECT:
+            UpdateTelaDifficulty(game, g_virtualMouse);
             break;
 
         case SCREEN_TUTORIAL:
@@ -167,6 +177,10 @@ void DrawStateMachine(GameState *game)
     {
         case SCREEN_MENU:
             DrawTelaMenu(game, g_gameFont, (float)GetTime());
+            break;
+
+        case SCREEN_DIFFICULTY_SELECT:
+            DrawTelaDifficulty(game, g_gameFont);
             break;
 
         case SCREEN_TUTORIAL:

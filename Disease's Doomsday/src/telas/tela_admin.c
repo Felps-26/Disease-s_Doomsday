@@ -5,12 +5,15 @@
 #include "../../include/gameplay.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #define ADMIN_PASSWORD "cyberbullies"
 
 static char pwInput[40] = "";
 static bool pwFocused = true;
 static bool showError = false;
+static float pwShake = 0.0f;    // > 0 = tremor do input (senha incorreta)
+static float pwSuccess = 0.0f;  // > 0 = animação "ACESSO AUTORIZADO" antes de abrir
 static UIButton adminBack = { { 490, 650, 300, 44 }, "VOLTAR", false, false };
 
 // Linhas configuráveis (label, ponteiro, passo, min, max). Geometria compartilhada
@@ -32,7 +35,7 @@ static void ActivateAdminDefaults(GameState *game)
 
 void DrawTelaAdmin(GameState *game, Font font)
 {
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, (Color){ 18, 14, 4, 255 }, (Color){ 26, 20, 6, 255 });
+    DrawThemedBackground(SCREEN_ADMIN, (float)GetTime(), game->screenAnim / 0.4f);
 
     const char *title = "MODO ADMINISTRADOR / DEV";
     Vector2 tSz = MeasureTextEx(font, title, 38.0f, 1.2f);
@@ -45,24 +48,39 @@ void DrawTelaAdmin(GameState *game, Font font)
         Vector2 iSz = MeasureTextEx(font, info, 18.0f, 1.0f);
         DrawTextEx(font, info, (Vector2){ SCREEN_WIDTH / 2.0f - iSz.x / 2.0f, 200.0f }, 18.0f, 1.0f, Fade(WHITE, 0.85f));
 
-        Rectangle box = { 440, 280, 400, 50 };
+        // Input centralizado, com tremor (erro) e cor de borda por estado.
+        float shakeX = (pwShake > 0.0f) ? sinf((float)GetTime() * 50.0f) * 9.0f * (pwShake / 0.45f) : 0.0f;
+        Rectangle box = { 440 + shakeX, 280, 400, 50 };
+        Color border = (pwSuccess > 0.0f) ? (Color){ 90, 255, 160, 255 }
+                     : showError            ? (Color){ 255, 80, 80, 255 }
+                     : (pwFocused ? (Color){ 255, 210, 60, 255 } : THEME_COLOR_BORDER);
         DrawRectangleRounded(box, 0.2f, 6, Fade((Color){ 10, 10, 14, 255 }, 0.9f));
-        DrawRectangleRoundedLines(box, 0.2f, 6, pwFocused ? (Color){ 255, 210, 60, 255 } : THEME_COLOR_BORDER);
+        DrawRectangleRoundedLines(box, 0.2f, 6, border);
 
-        // Mostra a senha mascarada
+        // Senha mascarada + cursor piscando.
         char masked[40];
         int len = (int)strlen(pwInput);
         for (int i = 0; i < len && i < 39; i++) masked[i] = '*';
         masked[(len < 39) ? len : 39] = '\0';
         char shown[44];
-        snprintf(shown, sizeof(shown), "%s%s", masked, ((int)(GetTime() * 2) % 2 == 0) ? "|" : "");
+        snprintf(shown, sizeof(shown), "%s%s", masked, (pwFocused && (int)(GetTime() * 2) % 2 == 0) ? "|" : "");
         DrawTextEx(font, shown, (Vector2){ box.x + 16, box.y + 14 }, 24.0f, 1.0f, WHITE);
 
-        if (showError)
+        if (pwSuccess > 0.0f)
+        {
+            // Animação de confirmação: verde/ciano + pulso.
+            float p = 1.0f - (pwSuccess / 0.9f);
+            const char *ok = "ACESSO AUTORIZADO";
+            float fs = 26.0f + 6.0f * sinf((float)GetTime() * 10.0f);
+            Vector2 oSz = MeasureTextEx(font, ok, fs, 1.5f);
+            DrawTextEx(font, ok, (Vector2){ SCREEN_WIDTH / 2.0f - oSz.x / 2.0f, 352.0f }, fs, 1.5f, (Color){ 100, 255, 170, 255 });
+            DrawCircleLines(SCREEN_WIDTH / 2, 300, 60.0f + p * 220.0f, Fade((Color){ 100, 255, 170, 255 }, 1.0f - p));
+        }
+        else if (showError)
         {
             const char *err = "Senha incorreta. Tente novamente.";
             Vector2 eSz = MeasureTextEx(font, err, 18.0f, 1.0f);
-            DrawTextEx(font, err, (Vector2){ SCREEN_WIDTH / 2.0f - eSz.x / 2.0f, 350.0f }, 18.0f, 1.0f, RED);
+            DrawTextEx(font, err, (Vector2){ SCREEN_WIDTH / 2.0f - eSz.x / 2.0f, 352.0f }, 18.0f, 1.0f, (Color){ 255, 90, 90, 255 });
         }
     }
     else
@@ -124,7 +142,23 @@ void UpdateTelaAdmin(GameState *game, Vector2 mouse)
 
     if (!game->adminMode)
     {
-        // Digitação da senha
+        float dt = GetFrameTime();
+        if (pwShake > 0.0f) pwShake -= dt;
+
+        // Animação de sucesso em andamento: abre o painel ao terminar.
+        if (pwSuccess > 0.0f)
+        {
+            pwSuccess -= dt;
+            if (pwSuccess <= 0.0f)
+            {
+                pwSuccess = 0.0f;
+                ActivateAdminDefaults(game);
+                pwInput[0] = '\0';
+            }
+            return; // ignora digitação durante a confirmação
+        }
+
+        // Digitação da senha (limpa o erro ao editar — input continua utilizável).
         int key = GetCharPressed();
         while (key > 0)
         {
@@ -133,6 +167,7 @@ void UpdateTelaAdmin(GameState *game, Vector2 mouse)
                 int l = (int)strlen(pwInput);
                 pwInput[l] = (char)key;
                 pwInput[l + 1] = '\0';
+                showError = false;
             }
             key = GetCharPressed();
         }
@@ -140,19 +175,19 @@ void UpdateTelaAdmin(GameState *game, Vector2 mouse)
         {
             int l = (int)strlen(pwInput);
             if (l > 0) pwInput[l - 1] = '\0';
+            showError = false;
         }
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER))
         {
             if (strcmp(pwInput, ADMIN_PASSWORD) == 0)
             {
-                ActivateAdminDefaults(game);
+                pwSuccess = 0.9f;   // inicia a confirmação animada (verde/ciano)
                 showError = false;
-                pwInput[0] = '\0';
             }
             else
             {
-                showError = true;
-                pwInput[0] = '\0';
+                showError = true;   // feedback vermelho + tremor; mantém o texto editável
+                pwShake = 0.45f;
             }
         }
         return;

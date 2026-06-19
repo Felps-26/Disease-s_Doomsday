@@ -1,0 +1,12 @@
+.DS_Store
+*.o
+
+# Executaveis gerados localmente
+Disease's Doomsday/rpg_game
+Disease's Doomsday/test_core_spawns
+
+# Configuracoes e progresso locais
+Disease's Doomsday/Saves/
+
+# Preview gerado pelos scripts de extracao
+Disease's Doomsday/tools/_organisms_preview.png

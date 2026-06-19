@@ -64,7 +64,7 @@ else
 endif
 
 # ---------------------------------------------------------------------------
-.PHONY: all run clean
+.PHONY: all run clean test
 all: $(TARGET)
 
 $(TARGET): $(SRCS)
@@ -74,6 +74,14 @@ $(TARGET): $(SRCS)
 run: $(TARGET)
 	./$(TARGET)
 
+# Teste de ACEITACAO (Etapa 2): simula muitos spawns de chefe em posicoes
+# aleatorias e valida que TODOS os Nucleos de Infeccao nascem dentro do corpo e
+# sao alcancaveis por melee. Usa stubs de desenho (nao precisa de janela/X11).
+# Compile com AddressSanitizer adicionando: make test CC="gcc -fsanitize=address,undefined"
+test:
+	$(CC) -O2 $(CFLAGS) tests/test_core_spawns.c Assets/Maps/map_body.c -o test_core_spawns -lm
+	./test_core_spawns
+
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) test_core_spawns
 	@echo "[OK] Limpeza concluida."

@@ -1,4 +1,6 @@
 #include "../../include/sprite_manager.h"
+#include "../../Assets/@models/menu_title_glyphs.h"
+#include "../../Assets/@models/menu_organisms.h"
 #include <stddef.h>
 
 // ============================================================================
@@ -51,10 +53,25 @@ static const char *SPRITE_PATHS[SPRITE_COUNT] = {
 
     // UI
     [SPR_UI_ICONS] = "Assets/Sprites/UI/icones.png",
+    [SPR_UI_MENU_BANNER] = "Assets/Sprites/UI/menu_background.png",
+
+    // Elementos do menu recortados da arte original (título/biohazard/seringa)
+    [SPR_MENU_SYRINGE]      = "Assets/Sprites/UI/Menu/syringe_cyan.png",
+    [SPR_MENU_BIOHAZARD]    = "Assets/Sprites/UI/Menu/biohazard_red.png",
 };
 
 static Texture2D s_sprites[SPRITE_COUNT] = {0};
 static bool s_loaded[SPRITE_COUNT] = {0};
+
+// Glifos do título do menu (carregados uma única vez junto com os sprites).
+static Texture2D s_glyphs[MENU_TITLE_GLYPH_COUNT] = {0};
+static bool s_glyphLoaded[MENU_TITLE_GLYPH_COUNT] = {0};
+static bool s_glyphsReady = false;
+
+// Catálogo de organismos do menu (18 recortes de virus_bacterias.png).
+static Texture2D s_org[MENU_ORGANISM_COUNT] = {0};
+static bool s_orgLoaded[MENU_ORGANISM_COUNT] = {0};
+static bool s_orgReady = false;
 
 void LoadSprites(void)
 {
@@ -76,6 +93,46 @@ void LoadSprites(void)
             }
         }
     }
+
+    // Glifos do título (uma vez). s_glyphsReady só é true se TODOS carregarem.
+    s_glyphsReady = (MENU_TITLE_GLYPH_COUNT > 0);
+    for (int i = 0; i < MENU_TITLE_GLYPH_COUNT; i++)
+    {
+        s_glyphLoaded[i] = false;
+        s_glyphs[i] = (Texture2D){0};
+        const char *p = MENU_TITLE_GLYPHS[i].path;
+        if (p != NULL && FileExists(p))
+        {
+            Texture2D t = LoadTexture(p);
+            if (t.id != 0)
+            {
+                SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+                s_glyphs[i] = t;
+                s_glyphLoaded[i] = true;
+            }
+        }
+        if (!s_glyphLoaded[i]) s_glyphsReady = false;
+    }
+
+    // Catálogo de organismos do menu (uma vez). Ready só se TODOS carregarem.
+    s_orgReady = (MENU_ORGANISM_COUNT > 0);
+    for (int i = 0; i < MENU_ORGANISM_COUNT; i++)
+    {
+        s_orgLoaded[i] = false;
+        s_org[i] = (Texture2D){0};
+        const char *p = MENU_ORGANISMS[i].path;
+        if (p != NULL && FileExists(p))
+        {
+            Texture2D t = LoadTexture(p);
+            if (t.id != 0)
+            {
+                SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+                s_org[i] = t;
+                s_orgLoaded[i] = true;
+            }
+        }
+        if (!s_orgLoaded[i]) s_orgReady = false;
+    }
 }
 
 void UnloadSprites(void)
@@ -89,7 +146,37 @@ void UnloadSprites(void)
         s_loaded[i] = false;
         s_sprites[i] = (Texture2D){0};
     }
+    for (int i = 0; i < MENU_TITLE_GLYPH_COUNT; i++)
+    {
+        if (s_glyphLoaded[i] && s_glyphs[i].id != 0) UnloadTexture(s_glyphs[i]);
+        s_glyphLoaded[i] = false;
+        s_glyphs[i] = (Texture2D){0};
+    }
+    s_glyphsReady = false;
+    for (int i = 0; i < MENU_ORGANISM_COUNT; i++)
+    {
+        if (s_orgLoaded[i] && s_org[i].id != 0) UnloadTexture(s_org[i]);
+        s_orgLoaded[i] = false;
+        s_org[i] = (Texture2D){0};
+    }
+    s_orgReady = false;
 }
+
+int MenuTitleGlyphCount(void) { return MENU_TITLE_GLYPH_COUNT; }
+Texture2D GetTitleGlyph(int i)
+{
+    if (i < 0 || i >= MENU_TITLE_GLYPH_COUNT) return (Texture2D){0};
+    return s_glyphs[i];
+}
+bool MenuTitleGlyphsReady(void) { return s_glyphsReady; }
+
+int MenuOrganismCount(void) { return MENU_ORGANISM_COUNT; }
+Texture2D GetMenuOrganism(int i)
+{
+    if (i < 0 || i >= MENU_ORGANISM_COUNT) return (Texture2D){0};
+    return s_org[i];
+}
+bool MenuOrganismsReady(void) { return s_orgReady; }
 
 bool SpriteAvailable(SpriteID id)
 {

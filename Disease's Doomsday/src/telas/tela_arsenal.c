@@ -1,102 +1,207 @@
 // tela_arsenal.c
-// Tela de Arsenal: mostra TODAS as armas com nome, dano, cadência, cooldown,
-// efeito especial, como muda a jogabilidade, tecla e requisito de desbloqueio.
+// Tela de Arsenal: lista selecionável de armas + um grande painel de detalhes com
+// PREVIEW REAL (mesmo renderer do gameplay: DrawHeldWeapon/DrawScalpel), barras
+// de dano/cadência/cooldown, descrição com wrap e requisito de nível.
+// O preview respeita o Mundo e a skin atuais; nenhum texto escapa do painel.
 #include "../../include/telas.h"
 #include "../../include/gameplay.h"
+#include "../../Assets/@models/weapons_model.h"
+#include "raymath.h"
 #include <stdio.h>
+#include <math.h>
 
-static UIButton arsenalBack = { { 490, 650, 300, 46 }, "VOLTAR", false, false };
+static UIButton arsenalBack = { { 60, 648, 300, 48 }, "VOLTAR", false, false };
+static int g_arsenalSel = 0;          // arma selecionada (0..3 => armas 1..4)
+static float g_unlockPulse[4] = {0};  // destaque de "recém-selecionada/desbloqueada"
 
-// Desenha um pequeno "ícone" representando cada arma (formas simples).
-static void DrawWeaponGlyph(int weapon, Vector2 c, Color col)
+// Retângulo do seletor i (coluna esquerda).
+static Rectangle ArsenalCardRect(int i)
 {
-    switch (weapon)
+    return (Rectangle){ 60.0f, 150.0f + i * 110.0f, 360.0f, 96.0f };
+}
+
+// Barra de atributo com rótulo e valor 0..1, contida no painel (texto medido).
+static void DrawStatBar(Font font, float x, float y, float w, const char *label,
+                        float value01, const char *valueTxt, Color col)
+{
+    if (value01 < 0.0f) value01 = 0.0f;
+    if (value01 > 1.0f) value01 = 1.0f;
+    DrawTextEx(font, label, (Vector2){ x, y }, 16.0f, 1.0f, Fade(WHITE, 0.85f));
+    float bx = x, by = y + 22.0f, bw = w, bh = 14.0f;
+    DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.6f, 6, Fade(BLACK, 0.5f));
+    DrawRectangleRounded((Rectangle){ bx, by, bw * value01, bh }, 0.6f, 6, col);
+    DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.6f, 6, Fade(col, 0.7f));
+    Vector2 vs = MeasureTextEx(font, valueTxt, 14.0f, 1.0f);
+    DrawTextEx(font, valueTxt, (Vector2){ bx + bw - vs.x, y }, 14.0f, 1.0f, col);
+}
+
+// Desenha o PREVIEW da arma (modelo real) centrado em `center`, com flutuação,
+// pulso de energia, partículas e brilho/silhueta conforme desbloqueio.
+static void DrawWeaponPreview(int weapon, Vector2 center, bool unlocked, float highlight,
+                              Color primary, Color secondary, float time)
+{
+    float bob = sinf(time * 2.0f) * 7.0f;
+    float sway = sinf(time * 1.3f) * 8.0f;            // leve balanço (graus)
+    Vector2 c = { center.x, center.y + bob };
+    float ring = 92.0f + sinf(time * 3.0f) * 8.0f;     // pulso de energia
+
+    Color aura = unlocked ? primary : (Color){ 90, 96, 110, 255 };
+
+    // Halo / pulso de energia atrás da arma.
+    DrawCircleGradient((int)c.x, (int)c.y, ring, Fade(aura, (unlocked ? 0.22f : 0.10f) + highlight * 0.2f), BLANK);
+    DrawCircleLines((int)c.x, (int)c.y, ring, Fade(aura, 0.25f + highlight * 0.4f));
+
+    // Partículas orbitando (determinísticas por tempo).
+    int np = unlocked ? 6 : 3;
+    for (int i = 0; i < np; i++)
     {
-        case 1: // Lâmina: losango (golpe em volta)
-            DrawCircleLines((int)c.x, (int)c.y, 22.0f, Fade(col, 0.6f));
-            DrawPoly(c, 4, 14.0f, 45.0f, col);
-            break;
-        case 2: // Fuzil: três tiros
-            for (int i = 0; i < 3; i++)
-                DrawRectangle((int)c.x - 18 + i * 14, (int)c.y - 3, 9, 6, col);
-            break;
-        case 3: // Granada: círculo com brilho (área)
-            DrawCircleV(c, 20.0f, Fade(col, 0.35f));
-            DrawCircleV(c, 11.0f, col);
-            break;
-        default: // BFG: orbe perfurante com rastro
-            DrawCircleV(c, 16.0f, col);
-            DrawCircleLines((int)c.x, (int)c.y, 22.0f, Fade(col, 0.7f));
-            DrawLineEx((Vector2){ c.x - 26, c.y }, (Vector2){ c.x + 26, c.y }, 3.0f, Fade(col, 0.6f));
-            break;
+        float a = time * 1.4f + i * (2.0f * PI / np);
+        float rr = ring * (0.78f + 0.12f * sinf(time * 2.0f + i));
+        Vector2 p = { c.x + cosf(a) * rr, c.y + sinf(a) * rr * 0.8f };
+        DrawCircleV(p, unlocked ? 4.0f : 2.5f, Fade(secondary, 0.5f + 0.3f * sinf(time * 4.0f + i)));
+    }
+
+    // MODELO REAL da arma (mesmo renderer do gameplay). size em px.
+    float size = 96.0f;
+    DrawHeldWeapon(weapon, c, size, sway, primary, secondary);
+
+    // Bloqueada: escurece (silhueta) e desenha um cadeado.
+    if (!unlocked)
+    {
+        DrawCircleV(c, ring * 0.92f, Fade((Color){ 4, 6, 10, 255 }, 0.55f));
+        Vector2 lk = { c.x, c.y };
+        DrawRectangleRounded((Rectangle){ lk.x - 22, lk.y - 4, 44, 40 }, 0.3f, 6, Fade((Color){ 200, 200, 210, 255 }, 0.9f));
+        DrawRing((Vector2){ lk.x, lk.y - 6 }, 14.0f, 19.0f, 180.0f, 360.0f, 24, Fade((Color){ 200, 200, 210, 255 }, 0.9f));
+        DrawCircleV((Vector2){ lk.x, lk.y + 12 }, 5.0f, (Color){ 40, 44, 54, 255 });
     }
 }
 
 void DrawTelaArsenal(GameState *game, Font font)
 {
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, THEME_COLOR_BG_DARK, THEME_COLOR_BG_LIGHT);
+    float time = (float)GetTime();
+    // Sincroniza nomes E modelos das armas com o Mundo atual (Mundo 1/2).
+    SetWeaponWorld(game->currentWorld);
 
-    const char *title = "ARSENAL DO ANTICORPO";
-    Vector2 tSz = MeasureTextEx(font, title, 40.0f, 1.5f);
-    DrawTextEx(font, title, (Vector2){ SCREEN_WIDTH / 2.0f - tSz.x / 2.0f, 36.0f }, 40.0f, 1.5f, THEME_COLOR_TEXT);
-    const char *sub = "Troque de arma a qualquer momento com as teclas 1, 2, 3 e 4.";
+    DrawThemedBackground(SCREEN_ARSENAL, time, game->screenAnim / 0.4f);
+
+    DrawTitleText(font, "ARSENAL DO ANTICORPO", SCREEN_WIDTH / 2.0f, 30.0f, 40.0f, THEME_COLOR_TEXT);
+    const char *sub = "Selecione uma arma. Em jogo, troque com as teclas 1, 2, 3 e 4.";
     Vector2 sSz = MeasureTextEx(font, sub, 16.0f, 1.0f);
     DrawTextEx(font, sub, (Vector2){ SCREEN_WIDTH / 2.0f - sSz.x / 2.0f, 84.0f }, 16.0f, 1.0f, Fade(WHITE, 0.8f));
 
-    float cardW = 540.0f, cardH = 222.0f, gapX = 30.0f, gapY = 24.0f;
-    float startX = (SCREEN_WIDTH - (2 * cardW + gapX)) / 2.0f;
-    float startY = 120.0f;
+    Color skinPrim = WeaponSkinPrimary(game->player.weaponSkinId);
+    Color skinSec  = WeaponSkinSecondary(game->player.weaponSkinId);
 
+    // ---- COLUNA ESQUERDA: seletores das 4 armas (com mini-preview real) ----
     for (int s = 0; s < 4; s++)
     {
         WeaponInfo wi = GetWeaponInfo(s + 1);
-        int col = s % 2, row = s / 2;
-        Rectangle card = { startX + col * (cardW + gapX), startY + row * (cardH + gapY), cardW, cardH };
-
         bool unlocked = (game->player.level >= wi.unlockLevel);
+        bool selected = (g_arsenalSel == s);
+        Rectangle card = ArsenalCardRect(s);
 
-        DrawRectangleRounded(card, 0.06f, 8, Fade((Color){ 10, 14, 20, 255 }, 0.85f));
-        DrawRectangleRoundedLines(card, 0.06f, 8, Fade(wi.color, unlocked ? 0.9f : 0.4f));
-        DrawRectangle((int)card.x, (int)card.y, 6, (int)card.height, Fade(wi.color, unlocked ? 1.0f : 0.4f));
+        float entry = UIEase((game->screenAnim - s * 0.06f) / 0.4f);
+        Rectangle drawc = card; drawc.x -= (1.0f - entry) * 40.0f; // slide de entrada
 
-        // Ícone + tecla
-        DrawWeaponGlyph(s + 1, (Vector2){ card.x + 50, card.y + 56 }, unlocked ? wi.color : Fade(GRAY, 0.7f));
-        DrawRectangleRounded((Rectangle){ card.x + 28, card.y + 96, 44, 30 }, 0.3f, 6, Fade(wi.color, 0.2f));
-        DrawTextEx(font, TextFormat("[%d]", wi.key), (Vector2){ card.x + 36, card.y + 100 }, 22.0f, 1.0f, wi.color);
+        Color accent = unlocked ? wi.color : (Color){ 120, 120, 130, 255 };
+        DrawRectangleRounded(drawc, 0.18f, 8, Fade((Color){ 10, 14, 20, 255 }, (selected ? 0.92f : 0.7f) * entry));
+        DrawRectangleRoundedLines(drawc, 0.18f, 8, Fade(accent, (selected ? 1.0f : 0.5f) * entry));
+        if (selected)
+            DrawRectangleRoundedLines(drawc, 0.18f, 8, Fade(THEME_COLOR_MAIN, 0.5f + 0.5f * sinf(time * 5.0f)));
+        // acento lateral
+        DrawRectangle((int)drawc.x, (int)drawc.y + 8, 5, (int)drawc.height - 16, Fade(accent, entry));
 
-        // Nome
-        DrawTextEx(font, wi.name, (Vector2){ card.x + 96, card.y + 16 }, 24.0f, 1.0f, unlocked ? WHITE : Fade(GRAY, 0.8f));
-        DrawTextEx(font, wi.desc, (Vector2){ card.x + 96, card.y + 46 }, 15.0f, 1.0f, Fade(WHITE, 0.75f));
+        // mini-preview real da arma (modelo do jogo, escala pequena)
+        DrawHeldWeapon(s + 1, (Vector2){ drawc.x + 48, drawc.y + drawc.height / 2.0f + 12 }, 30.0f,
+                       sinf(time * 1.5f + s) * 6.0f,
+                       unlocked ? skinPrim : (Color){ 120,124,134,255 },
+                       unlocked ? skinSec : (Color){ 90,94,104,255 });
 
-        // Stats
-        float sx = card.x + 96, sy = card.y + 78;
-        DrawTextEx(font, TextFormat("Dano base: %d  (+ ATK do nivel)", wi.baseDamage), (Vector2){ sx, sy }, 15.0f, 1.0f, GOLD);
-        DrawTextEx(font, TextFormat("Cadencia: %s", wi.speedTxt), (Vector2){ sx, sy + 22 }, 15.0f, 1.0f, THEME_COLOR_MAIN);
-        DrawTextEx(font, TextFormat("Cooldown: %.2fs", wi.cooldown), (Vector2){ sx + 230, sy + 22 }, 15.0f, 1.0f, THEME_COLOR_MAIN);
-        DrawTextEx(font, TextFormat("Especial: %s", wi.special), (Vector2){ sx, sy + 44 }, 15.0f, 1.0f, (Color){ 120, 230, 140, 255 });
-        DrawTextEx(font, TextFormat("Estilo: %s", wi.playstyle), (Vector2){ sx, sy + 66 }, 14.0f, 1.0f, Fade(WHITE, 0.7f));
+        DrawTextEx(font, TextFormat("[%d]", wi.key), (Vector2){ drawc.x + 86, drawc.y + 12 }, 18.0f, 1.0f, accent);
+        // nome ajustado para nunca estourar o card
+        Rectangle nameArea = { drawc.x + 86, drawc.y + 34, drawc.width - 96, 30 };
+        DrawTextFitCentered(font, wi.name, nameArea, 20.0f, unlocked ? WHITE : Fade(GRAY, 0.85f), true);
+        DrawTextEx(font, unlocked ? "DISPONIVEL" : TextFormat("NIVEL %d", wi.unlockLevel),
+                   (Vector2){ drawc.x + 86, drawc.y + 66 }, 14.0f, 1.0f,
+                   unlocked ? (Color){ 120, 220, 140, 255 } : (Color){ 230, 120, 120, 255 });
+    }
 
-        // Rodapé do card: desbloqueio
-        Rectangle foot = { card.x + 6, card.y + cardH - 30, cardW - 12, 24 };
-        if (unlocked)
-        {
-            DrawTextEx(font, (wi.unlockLevel <= 1) ? "DISPONIVEL DESDE O INICIO" : TextFormat("DESBLOQUEADA (Nivel %d)", wi.unlockLevel),
-                       (Vector2){ foot.x + 10, foot.y + 4 }, 15.0f, 1.0f, (Color){ 80, 220, 120, 255 });
-        }
-        else
-        {
-            DrawRectangleRounded(foot, 0.4f, 6, Fade(RED, 0.12f));
-            DrawTextEx(font, TextFormat("BLOQUEADA - desbloqueia no Nivel %d", wi.unlockLevel),
-                       (Vector2){ foot.x + 10, foot.y + 4 }, 15.0f, 1.0f, (Color){ 230, 120, 120, 255 });
-        }
+    // ---- PAINEL DE DETALHES (direita) com PREVIEW grande ----
+    WeaponInfo wi = GetWeaponInfo(g_arsenalSel + 1);
+    bool unlocked = (game->player.level >= wi.unlockLevel);
+    Rectangle panel = { 450, 150, 770, 470 };
+    float panelEntry = UIEase(game->screenAnim / 0.5f);
+    DrawPanel(panel, Fade(wi.color, panelEntry), 0.72f * panelEntry);
+
+    // Área de preview (metade esquerda do painel).
+    Rectangle prevArea = { panel.x + 20, panel.y + 20, 300, panel.height - 40 };
+    DrawRectangleRounded(prevArea, 0.08f, 8, Fade((Color){ 6, 8, 12, 255 }, 0.55f));
+    DrawRectangleRoundedLines(prevArea, 0.08f, 8, Fade(wi.color, 0.35f));
+    g_unlockPulse[g_arsenalSel] = Lerp(g_unlockPulse[g_arsenalSel], 0.0f, 3.0f * GetFrameTime());
+    DrawWeaponPreview(g_arsenalSel + 1,
+                      (Vector2){ prevArea.x + prevArea.width / 2.0f, prevArea.y + prevArea.height / 2.0f },
+                      unlocked, g_unlockPulse[g_arsenalSel], skinPrim, skinSec, time);
+
+    // Coluna de texto/estatísticas (metade direita).
+    float tx = panel.x + 344;
+    float tw = panel.x + panel.width - tx - 24;
+    float ty = panel.y + 26;
+    DrawTextFitCentered(font, wi.name, (Rectangle){ tx, ty, tw, 30 }, 26.0f, unlocked ? WHITE : Fade(GRAY, 0.9f), true);
+    ty += 40;
+    // descrição + especial com WRAP (nunca escapa do painel)
+    ty += DrawTextWrapped(font, wi.desc, (Rectangle){ tx, ty, tw, 56 }, 17.0f, 1.0f, Fade(WHITE, 0.85f)) + 6;
+    ty += DrawTextWrapped(font, TextFormat("Especial: %s", wi.special), (Rectangle){ tx, ty, tw, 56 }, 16.0f, 1.0f, (Color){ 120, 230, 140, 255 }) + 6;
+    ty += DrawTextWrapped(font, TextFormat("Estilo: %s", wi.playstyle), (Rectangle){ tx, ty, tw, 60 }, 15.0f, 1.0f, Fade(WHITE, 0.7f)) + 10;
+
+    // Barras: Dano / Cadência / Cooldown (valores normalizados).
+    float dano01 = (float)wi.baseDamage / 100.0f;
+    float cad01  = (0.15f / wi.cooldown);                 // mais rápido => barra cheia
+    float cd01   = (wi.cooldown / 5.0f);                  // recarga longa => barra cheia
+    DrawStatBar(font, tx, ty, tw, "Dano base", dano01, TextFormat("%d (+ATK)", wi.baseDamage), GOLD); ty += 46;
+    DrawStatBar(font, tx, ty, tw, "Cadencia", cad01, wi.speedTxt, THEME_COLOR_MAIN); ty += 46;
+    DrawStatBar(font, tx, ty, tw, "Recarga (cooldown)", cd01, TextFormat("%.2fs", wi.cooldown), (Color){ 255, 150, 80, 255 }); ty += 50;
+
+    // Requisito de nível / status claro.
+    Rectangle foot = { tx, ty, tw, 30 };
+    if (unlocked)
+    {
+        DrawTextEx(font, (wi.unlockLevel <= 1) ? "DISPONIVEL DESDE O INICIO" : TextFormat("DESBLOQUEADA (Nivel %d)", wi.unlockLevel),
+                   (Vector2){ foot.x, foot.y }, 16.0f, 1.0f, (Color){ 90, 220, 130, 255 });
+    }
+    else
+    {
+        DrawRectangleRounded(foot, 0.4f, 6, Fade(RED, 0.14f));
+        DrawTextFitCentered(font, TextFormat("BLOQUEADA - desbloqueia no Nivel %d", wi.unlockLevel),
+                            foot, 16.0f, (Color){ 235, 130, 130, 255 }, true);
     }
 
     DrawButton(arsenalBack, font, true);
-    DrawTextEx(font, "ESC para voltar", (Vector2){ 20, SCREEN_HEIGHT - 30 }, 14.0f, 1.0f, DARKGRAY);
+    DrawTextEx(font, "Use 1-4 ou as setas para escolher  |  ESC para voltar",
+               (Vector2){ 380, SCREEN_HEIGHT - 28 }, 14.0f, 1.0f, DARKGRAY);
 }
 
 void UpdateTelaArsenal(GameState *game, Vector2 mouse)
 {
+    // Seleção por clique nos cards.
+    for (int s = 0; s < 4; s++)
+    {
+        if (CheckCollisionPointRec(mouse, ArsenalCardRect(s)))
+        {
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && g_arsenalSel != s)
+            {
+                g_arsenalSel = s;
+                g_unlockPulse[s] = 1.0f;
+            }
+        }
+    }
+    // Seleção por teclado (1-4 e setas).
+    if (IsKeyPressed(KEY_ONE))   { g_arsenalSel = 0; g_unlockPulse[0] = 1.0f; }
+    if (IsKeyPressed(KEY_TWO))   { g_arsenalSel = 1; g_unlockPulse[1] = 1.0f; }
+    if (IsKeyPressed(KEY_THREE)) { g_arsenalSel = 2; g_unlockPulse[2] = 1.0f; }
+    if (IsKeyPressed(KEY_FOUR))  { g_arsenalSel = 3; g_unlockPulse[3] = 1.0f; }
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_RIGHT)) { g_arsenalSel = (g_arsenalSel + 1) % 4; g_unlockPulse[g_arsenalSel] = 1.0f; }
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_LEFT))    { g_arsenalSel = (g_arsenalSel + 3) % 4; g_unlockPulse[g_arsenalSel] = 1.0f; }
+
     arsenalBack.hover = CheckCollisionPointRec(mouse, arsenalBack.bounds);
     if ((arsenalBack.hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) || IsKeyPressed(KEY_ESCAPE))
     {

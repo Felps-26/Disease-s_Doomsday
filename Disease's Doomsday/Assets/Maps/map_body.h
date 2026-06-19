@@ -17,6 +17,22 @@
 #include "raylib.h"
 #include "../../include/game.h"
 
+// ============================================================================
+// CONSTANTES DE SPAWN/COLISÃO (centralizadas — evita números mágicos espalhados)
+// Raios usados pela validação geométrica de spawns (player, inimigos, núcleos).
+// ============================================================================
+#define BODY_PLAYER_RADIUS   20.0f  // raio de colisão do herói
+#define BODY_ENEMY_RADIUS     35.0f // raio do inimigo grande (KPC)
+#define BODY_BOSS_RADIUS     100.0f // raio aproximado do chefe
+#define MELEE_REACH          170.0f // alcance do golpe em área (slash 140 + folga 30)
+
+// Margem (raio do "disco livre" exigido) para o spawn de um Núcleo de Infecção.
+// Garante que o núcleo nasça inteiramente dentro do corpo, longe de paredes, e
+// com espaço ao redor para o herói se posicionar e atacar corpo a corpo.
+#define CORE_SPAWN_MARGIN     95.0f
+#define CORE_BOSS_CLEARANCE  180.0f // distância mínima entre núcleo e centro do chefe
+#define CORE_INTER_DISTANCE  240.0f // distância mínima entre núcleos
+
 // Identificadores de região/órgão-alvo
 typedef enum BodyRegion
 {
@@ -46,10 +62,30 @@ const char *MapBody_GetDiseaseLabel(int currentWorld, int wave);
 // ---- Colisão com o corpo (o corpo É a área jogável) ----
 // true se o ponto p está dentro da silhueta do corpo.
 bool MapBody_Contains(Vector2 p);
+// true se um DISCO de raio `margin` ao redor de p está inteiramente dentro do
+// corpo (condição suficiente, conservadora: cabe numa única cápsula). Usado
+// para validar spawns longe das paredes e em passagens largas o bastante.
+bool MapBody_ContainsWithMargin(Vector2 p, float margin);
 // Mantém uma entidade de raio `radius` DENTRO do corpo: se estiver fora, empurra
 // para a borda interna mais próxima (corrige pos in-place).
 void MapBody_ApplyCollision(Vector2 *pos, float radius);
 // Retorna um ponto aleatório dentro do corpo, longe de `avoid` (p/ spawns).
 Vector2 MapBody_RandomPointInside(Vector2 avoid, float minDistFromAvoid);
+
+// ---- Helpers de spawn reutilizáveis (chefe, lacaios, núcleos, power-ups) ----
+// Centro seguro do tórax (ponto de folga máxima usado como fallback determinístico).
+Vector2 MapBody_GetSafeCenter(void);
+// Procura, de forma DETERMINÍSTICA, um ponto com "disco livre" de raio `margin`
+// próximo de `preferred`; se falhar, caminha em direção a `fallback` e por fim
+// usa o centro seguro do tórax. Retorna true se encontrou (out preenchido).
+bool MapBody_FindClearPoint(Vector2 preferred, Vector2 fallback, float margin, Vector2 *out);
+// Conveniência: valida/encontra um ponto de spawn com a margem pedida, usando o
+// centro do tórax como fallback. Sempre retorna um ponto utilizável.
+Vector2 MapBody_FindSpawnPoint(Vector2 preferred, float margin);
+// Posiciona até `maxCores` Núcleos de Infecção ao redor de `bossCenter`, todos
+// inteiramente dentro do corpo (margem), longe do chefe e entre si, alcançáveis
+// por melee. Determinístico, com fallback central. Retorna quantos posicionou.
+int MapBody_PlaceCores(Vector2 bossCenter, Vector2 *out, int maxCores,
+                       float coreMargin, float bossClear, float interCore);
 
 #endif // MAP_BODY_H

@@ -8,7 +8,6 @@
 
 extern UIButton menuButtons[8];
 extern UIButton pauseButtons[5];
-extern Rectangle MenuDifficultyRect(int i);
 extern UIButton controlsButton;
 extern UIButton gameOverButtons[2];
 extern UIButton victoryButtons[2];
@@ -29,6 +28,9 @@ void UpdateBtnState(UIButton *btn, Vector2 mouse)
 
 bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
 {
+    // Layout ÚNICO: garante que hitbox == desenho (mesmos retângulos).
+    MenuApplyLayout();
+
     // Emite partículas decorativas subindo (verde biológico e azul ciano)
     if (GetRandomValue(0, 8) == 0)
     {
@@ -50,8 +52,8 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
         }
     }
 
-    // Lógica do Input Box do Nome do Jogador (Y = 200, Altura 40)
-    Rectangle nameBounds = { 500, 200, 280, 40 };
+    // Lógica do Input Box do Nome do Jogador (mesmo retângulo do desenho)
+    Rectangle nameBounds = MenuNameRect();
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
         if (CheckCollisionPointRec(mouse, nameBounds))
@@ -113,16 +115,26 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
             }
         }
 
-        // Seletor de dificuldade (3 segmentos abaixo do painel)
-        for (int i = 0; i < 3; i++)
+        // Morph do FUNDO conforme o item destacado (hover): cada subtela tem tema.
+        game->highlightScreen = SCREEN_MENU;
+        game->menuHighlight = -1;
+        for (int i = 0; i < 8; i++)
         {
-            if (CheckCollisionPointRec(mouse, MenuDifficultyRect(i)) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            if (!menuButtons[i].hover) continue;
+            game->menuHighlight = i;
+            switch (i)
             {
-                game->difficulty = i;
-                ApplyDifficulty(game);
-                SavePlayerConfig(game);
+                case 2: game->highlightScreen = SCREEN_ARSENAL;  break;
+                case 3: game->highlightScreen = SCREEN_SKINS;    break;
+                case 4: game->highlightScreen = SCREEN_CONTROLS; break;
+                case 5: game->highlightScreen = SCREEN_SETTINGS; break;
+                case 6: game->highlightScreen = SCREEN_ADMIN;    break;
+                default: break;
             }
+            break;
         }
+        // O seletor de dificuldade do rodapé foi REMOVIDO: a escolha agora é feita
+        // na tela dedicada SCREEN_DIFFICULTY_SELECT (aberta por "JOGAR").
     }
     else
     {
@@ -134,10 +146,11 @@ bool UpdateButtonsMenu(GameState *game, Vector2 mouse)
     }
 
     // Ações (0 Jogar,1 Carregar,2 Arsenal,3 Skins,4 Tutorial,5 Config,6 Admin,7 Sair)
-    if (menuButtons[0].clicked) // JOGAR
+    if (menuButtons[0].clicked) // JOGAR -> abre a seleção de dificuldade
     {
-        InitGame(game);
-        RequestLoadingScreen(game, LOAD_TO_TUTORIAL, 2.0f);
+        game->pendingDifficulty = game->difficulty; // pré-seleciona a persistida
+        game->diffReturnScreen = SCREEN_MENU;
+        game->currentScreen = SCREEN_DIFFICULTY_SELECT;
     }
     else if (menuButtons[1].clicked) // CARREGAR JOGO
     {
@@ -231,11 +244,11 @@ void UpdateButtonsGameOver(GameState *game, Vector2 mouse)
         UpdateBtnState(&gameOverButtons[i], mouse);
     }
 
-    if (gameOverButtons[0].clicked) // TENTAR NOVAMENTE
+    if (gameOverButtons[0].clicked) // TENTAR NOVAMENTE -> escolher dificuldade
     {
-        InitGame(game);
-        game->inTutorial = false; // retry pula o tutorial (sem efeito de injeção)
-        RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 2.0f);
+        game->pendingDifficulty = game->difficulty;
+        game->diffReturnScreen = SCREEN_GAMEOVER;
+        game->currentScreen = SCREEN_DIFFICULTY_SELECT;
     }
     else if (gameOverButtons[1].clicked) // MENU
     {
@@ -270,11 +283,11 @@ void UpdateButtonsVitoria(GameState *game, Vector2 mouse)
         UpdateBtnState(&victoryButtons[i], mouse);
     }
 
-    if (victoryButtons[0].clicked) // JOGAR DE NOVO
+    if (victoryButtons[0].clicked) // NOVA JORNADA -> escolher dificuldade
     {
-        InitGame(game);
-        game->inTutorial = false; // nova jornada direto na gameplay
-        RequestLoadingScreen(game, LOAD_TO_GAMEPLAY, 2.0f);
+        game->pendingDifficulty = game->difficulty;
+        game->diffReturnScreen = SCREEN_VICTORY;
+        game->currentScreen = SCREEN_DIFFICULTY_SELECT;
     }
     else if (victoryButtons[1].clicked) // MENU
     {
@@ -392,10 +405,13 @@ void UpdateButtonsSettings(GameState *game, Vector2 mouse, GameScreen backScreen
         return;
     }
 
-    Rectangle sliderBounds = { 600, 220, 300, 40 };
-    if (CheckCollisionPointRec(mouse, sliderBounds) && IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+    // Slider de volume: MESMA geometria do desenho (SettingsVolumeTrack), com
+    // área clicável inflada e clamp 0..1 — knob/preenchimento nunca saem do card.
+    Rectangle track = SettingsVolumeTrack();
+    Rectangle sliderHit = { track.x - 14, track.y - 16, track.width + 28, track.height + 32 };
+    if (CheckCollisionPointRec(mouse, sliderHit) && IsMouseButtonDown(MOUSE_LEFT_BUTTON))
     {
-        float pct = (mouse.x - 600.0f) / 300.0f;
+        float pct = (mouse.x - track.x) / track.width;
         if (pct < 0.0f) pct = 0.0f;
         if (pct > 1.0f) pct = 1.0f;
         game->masterVolume = pct;
