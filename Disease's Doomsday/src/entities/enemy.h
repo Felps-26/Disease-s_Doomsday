@@ -92,6 +92,15 @@ typedef struct Enemy
     int   shieldHp;       // pontos de vida do escudo
     int   shieldMaxHp;    // capacidade máxima do escudo
     float shieldHitFlash; // brilho ao receber dano no escudo
+
+    // ---- Animação procedural (transitório; NÃO é salvo) ----
+    // Tudo baseado em tempo/estado (não em aleatoriedade por frame): o update
+    // alimenta estes campos e o renderer os usa para squash/stretch, bobbing,
+    // inclinação na direção do movimento, antecipação de ataque e recuo.
+    Vector2 velSmooth;  // velocidade suavizada (deslocamento real/seg) p/ lean e stretch
+    float   animTime;   // relógio de animação por inimigo (acumula delta)
+    float   attackAnim; // envelope 0..1 de antecipação(+)/recuo(-) do ataque ranged
+    float   spawnAnim;  // 0..1 "pop-in" ao surgir (cresce de 0 a 1)
 } Enemy;
 
 #endif // ENEMY_H

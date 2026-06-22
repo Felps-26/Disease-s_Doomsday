@@ -17,6 +17,12 @@ void UpdateStateMachine(GameState *game)
 {
     float delta = GetFrameTime();
 
+    // Relógio de ENTRADA da tela (reusável p/ animações de UI): zera ao trocar de
+    // tela e acumula a cada frame. As telas leem game->screenAnim para fade/slide.
+    static GameScreen sm_prev = (GameScreen)-1;
+    if (game->currentScreen != sm_prev) { sm_prev = game->currentScreen; game->screenAnim = 0.0f; }
+    else                                { game->screenAnim += delta; }
+
     switch (game->currentScreen)
     {
         case SCREEN_MENU:
@@ -24,6 +30,10 @@ void UpdateStateMachine(GameState *game)
             {
                 game->shouldClose = true;
             }
+            break;
+
+        case SCREEN_DIFFICULTY_SELECT:
+            UpdateTelaDifficulty(game, g_virtualMouse);
             break;
 
         case SCREEN_TUTORIAL:
@@ -127,6 +137,7 @@ void UpdateStateMachine(GameState *game)
                 else if (slotSelected == -1)
                 {
                     game->currentScreen = SCREEN_PAUSE;
+                    game->uiAnimTimer = 0.0f; // reanima a entrada do menu de pausa
                 }
             }
             break;
@@ -142,6 +153,8 @@ void UpdateStateMachine(GameState *game)
                 else if (slotSelected == -1)
                 {
                     game->currentScreen = loadSelectBackScreen;
+                    if (loadSelectBackScreen == SCREEN_PAUSE)
+                        game->uiAnimTimer = 0.0f; // reanima a entrada do menu de pausa
                 }
             }
             break;
@@ -169,8 +182,16 @@ void DrawStateMachine(GameState *game)
             DrawTelaMenu(game, g_gameFont, (float)GetTime());
             break;
 
+        case SCREEN_DIFFICULTY_SELECT:
+            DrawTelaDifficulty(game, g_gameFont);
+            break;
+
         case SCREEN_TUTORIAL:
-            DrawTelaTutorial(game, g_gameFont);
+            // O mundo do tutorial já foi para a textura virtual (com letterbox)
+            // no loop principal; aqui desenhamos só o HUD/overlay em resolução
+            // nativa. Sem ClearBackground (que apagaria o blit) e sem redesenhar
+            // a cena — corrige o fundo de pausa e elimina o desenho duplicado.
+            DrawTutorialHUD(game, g_gameFont);
             break;
 
         case SCREEN_LOADING:

@@ -49,6 +49,227 @@ static PlayerSkinPalette GetPlayerSkinPalette(int skinId)
 }
 
 // ============================================================================
+// GUARDA-ROUPA MODULAR — overlays cosméticos desenhados sobre o modelo base.
+// Ancorados em pontos do corpo (cabeça/torso/pés/ombros) calculados pelo modelo,
+// para alinhar nas duas poses (idle e movimento). Despacho centralizado a partir
+// de player->cosmetics[], sem condicionais espalhadas pelo resto do jogo.
+// ============================================================================
+typedef struct PlayerAnchors {
+    Vector2 head;  float headR;
+    Vector2 torsoC; float torsoW, torsoH;
+    Vector2 hipL, hipR;       // topo das pernas (acompanha os frames)
+    Vector2 footL, footR;     // pés
+    Vector2 shoulderL, shoulderR;
+    Vector2 handL, handR;     // mãos
+    Vector2 center; int dir; bool moving;
+} PlayerAnchors;
+
+#define COS_C_WHITE (Color){ 236, 242, 250, 255 }
+#define COS_C_CYAN  (Color){ 0, 200, 255, 255 }
+#define COS_C_GREEN (Color){ 40, 170, 90, 255 }
+#define COS_C_GRAY  (Color){ 150, 165, 180, 255 }
+#define COS_C_GOLD  (Color){ 230, 180, 50, 255 }
+#define COS_C_MAG   (Color){ 230, 80, 200, 255 }
+#define COS_C_PURP  (Color){ 150, 90, 210, 255 }
+
+// Capacete: VISOR (id3) preservado como referência; CONTENÇÃO (id1) e QUITINA
+// (id2) agora são DOMOS orgânicos que envolvem a cabeça (sem retângulo solto),
+// com placas laterais, segmentos e brilho — deixando rosto/visor legíveis.
+static void CosHelmet(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    Vector2 h = a.head; float r = a.headR; (void)size;
+    if (id == 3) { // Visor Microscópico — PRESERVADO (referência de qualidade)
+        DrawRectangleRounded((Rectangle){ h.x - r * 1.0f, h.y - r * 1.25f, r * 2.0f, r * 0.9f }, 0.5f, 6, (Color){ 60, 70, 86, 255 });
+        DrawRectangleRounded((Rectangle){ h.x - r * 1.05f, h.y - r * 0.35f, r * 2.1f, r * 0.5f }, 0.4f, 4, Fade(COS_C_CYAN, 0.85f));
+        DrawRectangle((int)(h.x - r * 1.05f), (int)(h.y - r * 0.18f), (int)(r * 2.1f), 2, Fade(WHITE, 0.6f + 0.4f * sinf(t * 4.0f)));
+        return;
+    }
+    bool chitin = (id == 2);
+    Color shell   = chitin ? (Color){ 46, 124, 66, 255 }  : (Color){ 232, 238, 246, 255 };
+    Color shellHi = chitin ? (Color){ 92, 182, 112, 255 } : WHITE;
+    Color shellDk = chitin ? (Color){ 24, 80, 44, 255 }   : (Color){ 168, 184, 200, 255 };
+
+    Vector2 dome = { h.x, h.y - r * 0.10f };       // centro do domo (levemente acima)
+    float R = r * 1.32f;
+    // Domo (meia-esfera superior) cobrindo o topo até pouco acima dos olhos.
+    DrawCircleSector(dome, R, 180.0f, 360.0f, 26, shell);
+    DrawLineEx((Vector2){ dome.x - R, dome.y }, (Vector2){ dome.x + R, dome.y }, 2.5f, shellDk);
+    // Placas laterais (protegem as bochechas; rosto/visor abertos no centro).
+    DrawRectangleRounded((Rectangle){ h.x - r * 1.05f, dome.y, r * 0.42f, r * 0.95f }, 0.7f, 5, shell);
+    DrawRectangleRounded((Rectangle){ h.x + r * 0.63f, dome.y, r * 0.42f, r * 0.95f }, 0.7f, 5, shell);
+    // Segmentos/placas (anéis concêntricos) — leitura de carapaça.
+    DrawRing(dome, R * 0.60f, R * 0.65f, 182.0f, 358.0f, 24, Fade(shellDk, 0.85f));
+    DrawRing(dome, R * 0.90f, R * 0.95f, 182.0f, 358.0f, 24, Fade(shellDk, 0.55f));
+    // Brilho (luz superior-esquerda) para volume.
+    DrawCircleSector((Vector2){ dome.x - R * 0.32f, dome.y - R * 0.34f }, R * 0.40f, 200.0f, 320.0f, 12, Fade(shellHi, 0.45f));
+    if (chitin) {
+        // Crista de espinhos orgânicos no topo.
+        for (int i = -1; i <= 1; i++) {
+            float sx = dome.x + i * R * 0.42f;
+            DrawTriangle((Vector2){ sx - r * 0.14f, dome.y - R * 0.80f },
+                         (Vector2){ sx,             dome.y - R * 1.14f },
+                         (Vector2){ sx + r * 0.14f, dome.y - R * 0.80f }, shellHi);
+        }
+    } else {
+        // Lanterna frontal do capacete de contenção.
+        DrawCircleV((Vector2){ dome.x + a.dir * r * 0.30f, dome.y - R * 0.45f }, r * 0.15f, COS_C_CYAN);
+    }
+}
+
+static void CosFace(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    (void)size;
+    Vector2 h = a.head; float r = a.headR; (void)t;
+    DrawRectangleRounded((Rectangle){ h.x - r * 0.85f, h.y + r * 0.05f, r * 1.7f, r * 0.7f }, 0.6f, 6,
+                         (id == 2) ? (Color){ 70, 30, 70, 255 } : (id == 3) ? (Color){ 40, 120, 70, 255 } : COS_C_WHITE);
+    // tiras laterais
+    DrawLineEx((Vector2){ h.x - r * 0.85f, h.y + r * 0.2f }, (Vector2){ h.x - r * 1.15f, h.y - r * 0.1f }, 2.0f, COS_C_GRAY);
+    DrawLineEx((Vector2){ h.x + r * 0.85f, h.y + r * 0.2f }, (Vector2){ h.x + r * 1.15f, h.y - r * 0.1f }, 2.0f, COS_C_GRAY);
+    if (id == 2) DrawCircleV((Vector2){ h.x, h.y + r * 0.4f }, r * 0.22f, COS_C_MAG);              // filtro de plasma
+    else if (id == 3) { DrawLineEx((Vector2){ h.x, h.y + r * 0.2f }, (Vector2){ h.x, h.y + r * 0.6f }, 2.0f, COS_C_GREEN);
+                        DrawLineEx((Vector2){ h.x - r * 0.18f, h.y + r * 0.15f }, (Vector2){ h.x, h.y + r * 0.35f }, 2.0f, COS_C_GREEN);
+                        DrawLineEx((Vector2){ h.x + r * 0.18f, h.y + r * 0.15f }, (Vector2){ h.x, h.y + r * 0.35f }, 2.0f, COS_C_GREEN); }
+    else { DrawRectangle((int)(h.x - r * 0.5f), (int)(h.y + r * 0.32f), (int)(r), 2, COS_C_GRAY); } // vinco N95
+}
+
+static void CosChest(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    (void)size;
+    Vector2 c = a.torsoC; float w = a.torsoW, hh = a.torsoH;
+    if (id == 1) { // Placa Celular
+        DrawRectangleRounded((Rectangle){ c.x - w * 0.32f, c.y - hh * 0.18f, w * 0.64f, hh * 0.5f }, 0.3f, 6, Fade(COS_C_CYAN, 0.55f));
+        DrawCircleLines((int)c.x, (int)c.y, w * 0.18f, Fade(WHITE, 0.6f));
+    } else if (id == 2) { // Núcleo de DNA (hélice no peito)
+        for (int i = 0; i < 5; i++) {
+            float yy = c.y - hh * 0.16f + i * (hh * 0.1f);
+            float ph = sinf(t * 2.0f + i * 0.9f);
+            DrawCircleV((Vector2){ c.x - ph * w * 0.16f, yy }, 2.6f, COS_C_GREEN);
+            DrawCircleV((Vector2){ c.x + ph * w * 0.16f, yy }, 2.6f, Fade(COS_C_GREEN, 0.7f));
+        }
+    } else { // Coldre Médico (bolsos)
+        DrawRectangleRounded((Rectangle){ c.x - w * 0.34f, c.y + hh * 0.08f, w * 0.22f, hh * 0.26f }, 0.3f, 4, COS_C_GOLD);
+        DrawRectangleRounded((Rectangle){ c.x + w * 0.12f, c.y + hh * 0.08f, w * 0.22f, hh * 0.26f }, 0.3f, 4, COS_C_GOLD);
+    }
+}
+
+// Braços: luvas FITAM nas mãos (id1) ou braçadeiras no antebraço (id2). Pequenas,
+// ancoradas em mão/ombro — acompanham a pose e não viram blocos soltos.
+static void CosArms(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    (void)t;
+    for (int s = 0; s < 2; s++) {
+        Vector2 hand = s ? a.handR : a.handL;
+        Vector2 sh   = s ? a.shoulderR : a.shoulderL;
+        if (id == 1) { // Luvas Cirúrgicas (na mão) + punho
+            DrawCircleV(hand, size * 0.095f, COS_C_WHITE);
+            DrawCircleLines((int)hand.x, (int)hand.y, size * 0.095f, Fade((Color){ 120, 200, 255, 255 }, 0.8f));
+            Vector2 cuff = { hand.x + (sh.x - hand.x) * 0.22f, hand.y + (sh.y - hand.y) * 0.22f };
+            DrawCircleV(cuff, size * 0.055f, COS_C_WHITE);
+        } else { // Braçadeiras de Quitina (no antebraço)
+            Vector2 fore = { sh.x + (hand.x - sh.x) * 0.55f, sh.y + (hand.y - sh.y) * 0.55f };
+            DrawCircleV(fore, size * 0.085f, COS_C_GREEN);
+            DrawCircleLines((int)fore.x, (int)fore.y, size * 0.085f, (Color){ 24, 80, 44, 255 });
+            DrawCircleV((Vector2){ fore.x, fore.y - size * 0.05f }, size * 0.05f, (Color){ 70, 165, 92, 255 });
+        }
+    }
+}
+
+// Calças: VARIAÇÕES do traje (reveste a perna existente, mais fina que a base —
+// não aumenta volume), com joelheira e detalhe de costura/fibra por material.
+static void CosLegs(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    (void)t;
+    Color col  = (id == 2) ? COS_C_PURP : COS_C_WHITE;
+    Color knee = (id == 2) ? (Color){ 96, 54, 150, 255 } : (Color){ 120, 200, 255, 255 };
+    for (int s = 0; s < 2; s++) {
+        Vector2 hip = s ? a.hipR : a.hipL;
+        Vector2 foot = s ? a.footR : a.footL;
+        DrawLineEx(hip, foot, size * 0.15f, Fade(col, 0.92f));          // reveste a perna (fino)
+        Vector2 mid = { (hip.x + foot.x) * 0.5f, (hip.y + foot.y) * 0.5f };
+        DrawCircleV(mid, size * 0.052f, knee);                          // joelheira
+        if (id == 2) DrawLineEx(hip, foot, size * 0.04f, Fade((Color){ 180, 120, 230, 255 }, 0.7f)); // fibra
+        else         DrawLineEx(hip, foot, size * 0.02f, Fade((Color){ 120, 200, 255, 255 }, 0.45f)); // costura
+    }
+}
+
+// Botas: FITAM o pé e o terço inferior da perna, com sola encostando no chão —
+// sem flutuar nem inflar o pé. Garra extra no material mutante.
+static void CosBoots(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    (void)t;
+    Color col = (id == 2) ? COS_C_GREEN : COS_C_WHITE;
+    Color dk  = (id == 2) ? (Color){ 24, 80, 44, 255 } : (Color){ 150, 170, 190, 255 };
+    for (int s = 0; s < 2; s++) {
+        Vector2 hip = s ? a.hipR : a.hipL;
+        Vector2 foot = s ? a.footR : a.footL;
+        Vector2 ankle = { foot.x + (hip.x - foot.x) * 0.30f, foot.y + (hip.y - foot.y) * 0.30f };
+        DrawLineEx(ankle, foot, size * 0.16f, col);                                   // cano da bota
+        DrawRectangleRounded((Rectangle){ foot.x - size * 0.12f, foot.y - size * 0.015f, size * 0.24f, size * 0.07f }, 0.5f, 4, dk); // sola
+        if (id == 2)
+            DrawTriangle((Vector2){ foot.x + a.dir * size * 0.12f, foot.y - size * 0.01f },
+                         (Vector2){ foot.x + a.dir * size * 0.21f, foot.y + size * 0.02f },
+                         (Vector2){ foot.x + a.dir * size * 0.12f, foot.y + size * 0.04f }, col);
+    }
+}
+
+// Efeitos visuais. Envolvem o CORPO INTEIRO (cabeça->pés) acompanhando o herói.
+static void CosFX(int id, PlayerAnchors a, float size, float t)
+{
+    if (id <= 0) return;
+    // Bounding vertical do corpo para envolver tudo (sem afetar hitbox/colisão).
+    float top = a.head.y - a.headR * 1.9f;
+    float bot = (a.footL.y > a.footR.y ? a.footL.y : a.footR.y) + size * 0.06f;
+    Vector2 bc = { a.center.x, (top + bot) * 0.5f };
+    float bodyR = (bot - top) * 0.5f;
+
+    if (id == 1) { // Aura de Anticorpos — ultrapassa a silhueta, pulsa, leve
+        float pulse = 0.5f + 0.5f * sinf(t * 2.6f);
+        float R = bodyR + size * 0.22f + pulse * size * 0.08f;
+        DrawCircleGradient((Vector2){ bc.x, bc.y }, R, Fade(COS_C_CYAN, 0.10f + 0.05f * pulse), BLANK);
+        DrawCircleLines((int)bc.x, (int)bc.y, R, Fade(COS_C_CYAN, 0.26f + 0.12f * pulse));
+        DrawCircleLines((int)bc.x, (int)bc.y, R * 0.93f, Fade(COS_C_CYAN, 0.13f));
+    } else if (id == 2) { // Hélice de DNA — PRESERVADA (só escala/posição responsiva)
+        for (int i = 0; i < 8; i++) {
+            float ang = t * 2.0f + i * (PI / 4.0f);
+            float rr = size * 0.42f;
+            DrawCircleV((Vector2){ a.center.x + cosf(ang) * rr, a.center.y + sinf(ang * 2.0f) * size * 0.16f },
+                        size * 0.04f, Fade(COS_C_GREEN, 0.8f));
+        }
+    } else { // Partículas de Plasma — distribuídas por todo o corpo (cap. de perf.)
+        const int N = 16;
+        for (int i = 0; i < N; i++) {
+            float ang = t * 1.2f + i * (2.0f * PI / N);
+            float wob = 0.82f + 0.18f * sinf(t * 2.4f + i * 1.3f);
+            float rx = size * 0.62f * wob;
+            float ry = bodyR * 0.96f * wob;
+            Vector2 p = { bc.x + cosf(ang) * rx, bc.y + sinf(ang) * ry };
+            float sz = 2.0f + 1.6f * (0.5f + 0.5f * sinf(t * 3.0f + i));
+            DrawCircleV(p, sz, Fade(COS_C_MAG, 0.45f + 0.3f * sinf(t * 2.0f + i)));
+        }
+    }
+}
+
+// Despacho central (ordem de camadas). A categoria TRASEIRO foi removida do jogo;
+// player->cosmetics[COS_BACK] é mantido só para compatibilidade de saves e NÃO é
+// desenhado nem exposto na UI.
+static void DrawPlayerCosmetics(Player *player, PlayerAnchors a, float size, float time)
+{
+    CosLegs(player->cosmetics[COS_LEGS], a, size, time);
+    CosBoots(player->cosmetics[COS_BOOTS], a, size, time);
+    CosChest(player->cosmetics[COS_CHEST], a, size, time);
+    CosArms(player->cosmetics[COS_ARMS], a, size, time);
+    CosHelmet(player->cosmetics[COS_HELMET], a, size, time);
+    CosFace(player->cosmetics[COS_FACE], a, size, time);
+    CosFX(player->cosmetics[COS_FX], a, size, time);
+}
+
+// ============================================================================
 // MODELO: JOGADOR (Estilo Cavaleiro Coelho)
 // ============================================================================
 void DrawPlayerModel(Player *player, float size, Color tint, float time, float attackAnimTimer)
@@ -81,6 +302,10 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
     Color swordLiquid = WeaponSkinPrimary(player->weaponSkinId);
     Color swordGlow   = WeaponSkinSecondary(player->weaponSkinId);
     int   heldWeapon  = (player->equippedWeapon >= 1 && player->equippedWeapon <= 4) ? player->equippedWeapon : 1;
+
+    // Pontos de ancoragem para os cosméticos (preenchidos por pose abaixo).
+    PlayerAnchors anch = { 0 };
+    anch.center = pPos; anch.dir = dir;
 
     if (!player->isMoving) {
         // ========================================================
@@ -181,6 +406,18 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
         Vector2 yR2 = { earREnd.x + size*0.06f, earREnd.y - size*0.08f };
         DrawLineEx(earREnd, yR1, size*0.06f, colorBlueTip);
         DrawLineEx(earREnd, yR2, size*0.06f, colorBlueTip);
+
+        // Âncoras (pose idle / frontal)
+        anch.head = headPos; anch.headR = size * 0.25f;
+        anch.torsoC = (Vector2){ pPos.x, torso.y + torso.height * 0.5f };
+        anch.torsoW = torso.width; anch.torsoH = torso.height;
+        anch.hipL = (Vector2){ legL.x + size * 0.08f, legL.y };
+        anch.hipR = (Vector2){ legR.x + size * 0.08f, legR.y };
+        anch.footL = (Vector2){ legL.x + size * 0.08f, legL.y + size * 0.32f };
+        anch.footR = (Vector2){ legR.x + size * 0.08f, legR.y + size * 0.32f };
+        anch.shoulderL = armLStart; anch.shoulderR = armRStart;
+        anch.handL = armLHand; anch.handR = armRHand;
+        anch.moving = false;
 
     } else {
         // ========================================================
@@ -286,7 +523,20 @@ void DrawPlayerModel(Player *player, float size, Color tint, float time, float a
         
         // Ombro frente
         DrawCircleV(armFrontStart, size*0.15f, colorArmorDark);
+
+        // Âncoras (pose em movimento / lateral)
+        anch.head = headPos; anch.headR = size * 0.22f;
+        anch.torsoC = (Vector2){ pPos.x, torso.y + torso.height * 0.5f };
+        anch.torsoW = torso.width * 1.3f; anch.torsoH = torso.height;
+        anch.hipL = legBackStart; anch.hipR = legFrontStart;
+        anch.footL = legBackFoot; anch.footR = legFrontFoot;
+        anch.shoulderL = armBackStart; anch.shoulderR = armFrontStart;
+        anch.handL = armBackHand; anch.handR = armFrontHand;
+        anch.moving = true;
     }
-    
+
+    // Cosméticos equipados sobre o modelo base (data-driven via player->cosmetics)
+    DrawPlayerCosmetics(player, anch, size, time);
+
     rlPopMatrix();
 }

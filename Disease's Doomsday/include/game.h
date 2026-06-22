@@ -48,10 +48,6 @@
 #define WAVES_PER_WORLD 5    // Ondas em cada Mundo (a 5ª é sempre o chefe)
 #define WORLD_COUNT 2        // Total de Mundos da campanha
 
-// Quantidade de dicas educativas exibidas na tela de carregamento (mantenha em
-// sincronia com o array loadingTips[] em telas.c).
-#define LOADING_TIP_COUNT 12
-
 // Skins disponíveis (player e armas)
 #define SKIN_COUNT 3
 #define WEAPON_SKIN_COUNT 3
@@ -77,7 +73,8 @@ typedef enum GameScreen
     SCREEN_ARSENAL,    // Tela de arsenal: detalhes de todas as armas
     SCREEN_SKINS,      // Tela de seleção de skins com preview
     SCREEN_ADMIN,      // Modo Administrador / Dev (protegido por senha)
-    SCREEN_WORLD_TRANSITION // Cutscene/tela educativa entre Mundo 1 (Bactérias) e Mundo 2 (Vírus)
+    SCREEN_WORLD_TRANSITION, // Cutscene/tela educativa entre Mundo 1 (Bactérias) e Mundo 2 (Vírus)
+    SCREEN_DIFFICULTY_SELECT // Seleção de dificuldade (cards) ao iniciar/reiniciar um jogo
 } GameScreen;
 
 // ============================================================================
@@ -257,6 +254,16 @@ typedef struct GameState
     float timeElapsed;
     float screenShake;
     float uiAnimTimer;
+    // ---- Estado de UI (transitório; NÃO é salvo) ----
+    // Tempo (s) desde que a tela atual foi aberta — alimenta animações de entrada
+    // (fade/slide), morph de fundo e transições.
+    float screenAnim;
+    GameScreen highlightScreen; // tela "destacada" p/ morph de fundo (item do menu)
+    int   menuHighlight;        // índice do item de menu sob o cursor (-1 = nenhum)
+    // Tela de seleção de dificuldade: opção tentativa (só vira game->difficulty ao
+    // confirmar) e tela para onde "VOLTAR" retorna.
+    int   pendingDifficulty;
+    int   diffReturnScreen;     // GameScreen de retorno ao cancelar a seleção
     
     // Controle de Input do Nome
     bool nameInputActive;
@@ -288,6 +295,11 @@ typedef struct GameState
     float tutorialTimer;        // Cronômetro acumulador para o passo de movimento
     bool tutorialEnemySpawned;  // Garante que apenas 1 bactéria tutorial seja criada
     DialogState tutorialDialog; // Estado do sistema de diálogo do tutorial
+    // Debounce de ataque do tutorial: enquanto um diálogo está ativo este latch
+    // fica TRUE; o ataque (SPACE/clique) só dispara depois que o jogador SOLTAR a
+    // tecla/botão que fechou a última página — evita atacar a bactéria que acabou
+    // de spawnar usando o mesmo input que avançou o texto. (Transitório; não salvo.)
+    bool attackInputLatched;
     bool injectionCutscene;     // Cutscene de injeção na seringa
     float injectionTimer;       // Timer da cutscene
 
@@ -329,6 +341,12 @@ typedef struct GameState
     // ---- Dificuldade ----
     int   difficulty;         // Difficulty (EASY/MEDIUM/HARD)
     DifficultyConfig diff;    // configuração derivada da dificuldade selecionada
+
+    // ---- Percepção do jogador pela IA (transitório; NÃO é salvo) ----
+    // Velocidade suavizada do herói, usada para antecipação LIMITADA de mira dos
+    // inimigos ranged (eles "lideram" um pouco o tiro conforme a dificuldade).
+    Vector2 playerVelSmooth;
+    Vector2 playerPrevPos;
 
     // ---- Mundo atual (expansão: campanha em 2 Mundos) ----
     // WORLD_BACTERIA (0) por padrão — saves antigos, que não gravam este campo,

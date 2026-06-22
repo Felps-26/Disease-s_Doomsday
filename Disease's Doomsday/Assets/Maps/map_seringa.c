@@ -5,12 +5,139 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <math.h>
+#include <stdio.h>
+
+// ============================================================================
+// ESTILO CENTRALIZADO (cores/parâmetros ajustáveis num só lugar)
+// ============================================================================
+// Ambiente de fundo (void). Defina 0 para REMOVER facilmente após feedback.
+#ifndef SYRINGE_VOID_FX
+#define SYRINGE_VOID_FX 1
+#endif
+#define SYR_METAL      (Color){ 178, 198, 214, 255 }  // metal base
+#define SYR_METAL_DARK (Color){ 104, 124, 144, 255 }  // sombra do metal
+#define SYR_METAL_HI   (Color){ 232, 244, 252, 255 }  // brilho do metal
+#define SYR_GLASS_EDGE (Color){ 95, 125, 155, 255 }   // borda do vidro
+#define SYR_HUB_PLAST  (Color){ 120, 200, 235, 255 }  // plástico do hub (azul)
+
+// ----------------------------------------------------------------------------
+// AMBIENTE DE FUNDO (VOID) — camadas orgânicas discretas atrás da seringa.
+// Coordenadas de mundo; a câmera segue o herói, então elementos fixos dão um
+// leve parallax natural. Tudo em baixa opacidade para não competir com o jogo.
+// Estruturado para ser facilmente ajustado/removido (SYRINGE_VOID_FX).
+// ----------------------------------------------------------------------------
+#if SYRINGE_VOID_FX
+static void DrawSyringeVoid(float time)
+{
+    // Região ampla cobrindo o que a câmera enxerga ao redor da seringa.
+    const float RX = -900.0f, RY = -520.0f, RW = 3400.0f, RH = 1440.0f;
+
+    // 1) Profundidade: base escura + gradiente azul-arroxeado muito sutil.
+    DrawRectangle((int)RX, (int)RY, (int)RW, (int)RH, (Color){ 4, 6, 14, 255 });
+    DrawRectangleGradientV((int)RX, (int)RY, (int)RW, (int)RH,
+                           (Color){ 12, 14, 34, 255 }, (Color){ 3, 4, 10, 255 });
+
+    // 2) Luz distante pulsante (glows suaves) — “iluminação ao fundo”.
+    float p = 0.5f + 0.5f * sinf(time * 0.7f);
+    DrawCircleGradient((Vector2){ 320, -120 }, 520.0f + p * 40.0f, Fade((Color){ 40, 70, 150, 255 }, 0.10f + 0.04f * p), BLANK);
+    DrawCircleGradient((Vector2){ 1180, 700 }, 600.0f, Fade((Color){ 90, 40, 130, 255 }, 0.09f), BLANK);
+
+    // 3) Membranas/células desfocadas (blobs grandes, baixa opacidade), em
+    //    posições determinísticas com leve respiração.
+    for (int i = 0; i < 12; i++)
+    {
+        float bx = RX + 220.0f + fmodf(i * 421.0f, RW - 440.0f);
+        float by = RY + 160.0f + fmodf(i * 277.0f, RH - 320.0f);
+        float br = 70.0f + (i % 5) * 34.0f + sinf(time * 0.6f + i) * 8.0f;
+        Color c = (i % 2) ? (Color){ 70, 110, 200, 255 } : (Color){ 130, 80, 180, 255 };
+        DrawCircleV((Vector2){ bx, by }, br, Fade(c, 0.05f));
+        DrawCircleLines((int)bx, (int)by, br, Fade(c, 0.06f));
+        DrawCircleV((Vector2){ bx, by }, br * 0.5f, Fade(c, 0.04f));
+    }
+
+    // 4) Correntes sanguíneas: linhas onduladas atravessando ao fundo.
+    for (int s = 0; s < 3; s++)
+    {
+        Color vc = Fade((Color){ 150, 50, 70, 255 }, 0.10f);
+        float baseY = RY + 300.0f + s * 380.0f;
+        Vector2 prev = { RX, baseY };
+        for (int k = 1; k <= 34; k++)
+        {
+            float xx = RX + k * (RW / 34.0f);
+            float yy = baseY + sinf(xx * 0.004f + time * 0.5f + s) * 60.0f;
+            Vector2 cur = { xx, yy };
+            DrawLineEx(prev, cur, 7.0f, vc);
+            prev = cur;
+        }
+    }
+
+    // 5) Partículas celulares à deriva (parallax via mundo fixo + drift lento).
+    for (int i = 0; i < 60; i++)
+    {
+        float depth = 0.3f + ((i * 37) % 100) / 100.0f * 0.7f; // 0.3..1.0
+        float driftX = sinf(time * (0.15f + depth * 0.2f) + i) * 30.0f;
+        float driftY = cosf(time * (0.12f + depth * 0.18f) + i * 1.3f) * 20.0f;
+        float bx = RX + fmodf(i * 211.0f + time * 6.0f * depth, RW) + driftX;
+        float by = RY + fmodf(i * 313.0f, RH) + driftY;
+        float r = 1.5f + depth * 3.5f;
+        Color c = (i % 3 == 0) ? (Color){ 120, 200, 255, 255 }
+                : (i % 3 == 1) ? (Color){ 160, 140, 230, 255 }
+                               : (Color){ 90, 150, 210, 255 };
+        DrawCircleV((Vector2){ bx, by }, r, Fade(c, 0.06f + depth * 0.10f));
+    }
+}
+#endif // SYRINGE_VOID_FX
+
+// Desenha a agulha/bocal externos da seringa com leitura metálica clara:
+// hub plástico (Luer) + cânula metálica com brilho + bisel afiado + gota.
+static void DrawSyringeNeedle(float time, int tutorialStep)
+{
+    float cy = (float)SYRINGE_HEIGHT / 2.0f;     // eixo da agulha (~200)
+    float hubR = SYR_LEFT;                        // borda direita do hub (encosta no cilindro)
+    float hubL = SYR_NEEDLE_X - 6.0f;             // borda esquerda do hub (~-26)
+
+    // --- Hub Luer (plástico translúcido), tronco que conecta vidro -> metal ---
+    DrawTriangle((Vector2){ hubR, cy - 34.0f }, (Vector2){ hubL, cy - 20.0f }, (Vector2){ hubL, cy + 20.0f }, Fade(SYR_HUB_PLAST, 0.85f));
+    DrawTriangle((Vector2){ hubR, cy - 34.0f }, (Vector2){ hubL, cy + 20.0f }, (Vector2){ hubR, cy + 34.0f }, Fade(SYR_HUB_PLAST, 0.85f));
+    // brilho superior do hub
+    DrawTriangle((Vector2){ hubR, cy - 34.0f }, (Vector2){ hubL, cy - 20.0f }, (Vector2){ hubR, cy - 18.0f }, Fade(SYR_METAL_HI, 0.5f));
+    // roscas do Luer-lock (3 anéis)
+    for (int k = 0; k < 3; k++)
+    {
+        float rx = hubL + 6.0f + k * 9.0f;
+        DrawLineEx((Vector2){ rx, cy - 16.0f }, (Vector2){ rx, cy + 16.0f }, 2.0f, Fade(SYR_METAL_DARK, 0.7f));
+    }
+    DrawLineEx((Vector2){ hubL, cy - 20.0f }, (Vector2){ hubR, cy - 34.0f }, 2.0f, SYR_GLASS_EDGE);
+    DrawLineEx((Vector2){ hubL, cy + 20.0f }, (Vector2){ hubR, cy + 34.0f }, 2.0f, SYR_GLASS_EDGE);
+
+    // --- Cânula metálica (haste longa e fina indo para a esquerda) ---
+    float tipX = hubL - 175.0f;       // ponta afiada
+    float shaftTop = cy - 5.0f, shaftBot = cy + 5.0f;
+    // corpo da cânula com gradiente (escuro embaixo, claro em cima => cilíndrico)
+    DrawRectangleGradientV((int)tipX, (int)shaftTop, (int)(hubL - tipX), (int)(shaftBot - shaftTop),
+                           SYR_METAL_HI, SYR_METAL_DARK);
+    // brilho especular fino
+    DrawRectangle((int)tipX, (int)(cy - 4.0f), (int)(hubL - tipX), 2, Fade(WHITE, 0.7f));
+    DrawRectangleLines((int)tipX, (int)shaftTop, (int)(hubL - tipX), (int)(shaftBot - shaftTop), Fade(SYR_METAL_DARK, 0.6f));
+
+    // --- Bisel afiado (ponta chanfrada) ---
+    DrawTriangle((Vector2){ tipX - 26.0f, cy + 4.0f }, (Vector2){ tipX, shaftBot }, (Vector2){ tipX, shaftTop }, SYR_METAL);
+    DrawTriangle((Vector2){ tipX - 26.0f, cy + 4.0f }, (Vector2){ tipX, shaftTop }, (Vector2){ tipX - 10.0f, cy - 6.0f }, SYR_METAL_HI);
+
+    // --- Gota de vacina na ponta (vida/tema), pulsa lentamente ---
+    float dpulse = 0.5f + 0.5f * sinf(time * 2.0f);
+    DrawCircleV((Vector2){ tipX - 30.0f - dpulse * 3.0f, cy + 4.0f }, 3.0f + dpulse * 1.5f, Fade((Color){ 120, 210, 255, 255 }, 0.8f));
+    (void)tutorialStep;
+}
 
 // ============================================================================
 // DrawMapSeringa — Renderiza o interior da seringa (chamar dentro BeginMode2D)
 // ============================================================================
 void DrawMapSeringa(Font font, int tutorialStep, float time, float injectionTimer)
 {
+#if SYRINGE_VOID_FX
+    DrawSyringeVoid(time);
+#endif
     // -------------------------------------------------------------------------
     // LÍQUIDO DA VACINA (fundo translúcido azul médico)
     // -------------------------------------------------------------------------
@@ -106,37 +233,9 @@ void DrawMapSeringa(Font font, int tutorialStep, float time, float injectionTime
     );
 
     // -------------------------------------------------------------------------
-    // BOCAL / AGULHA (mais detalhada)
+    // BOCAL / AGULHA — desenhada por DrawSyringeNeedle (hub + cânula + bisel)
     // -------------------------------------------------------------------------
-    // Conector Luer-Lock (onde a agulha prende na seringa)
-    DrawRectangle((int)SYR_NEEDLE_X + 15, (int)SYR_NEEDLE_Y - 5,
-                  (int)SYR_NEEDLE_W - 15, (int)SYR_NEEDLE_H + 10,
-                  (Color){ 200, 220, 230, 255 });
-    DrawRectangleLinesEx(
-        (Rectangle){ SYR_NEEDLE_X + 15, SYR_NEEDLE_Y - 5, SYR_NEEDLE_W - 15, SYR_NEEDLE_H + 10 },
-        3.0f, (Color){ 100, 128, 158, 255 }
-    );
-
-    // Canhão metálico da agulha
-    DrawRectangle((int)SYR_NEEDLE_X, (int)SYR_NEEDLE_Y + 10,
-                  15, (int)SYR_NEEDLE_H - 20,
-                  (Color){ 175, 195, 210, 255 });
-    
-    // Haste comprida e fina da agulha (indo para a esquerda)
-    DrawRectangle((int)SYR_NEEDLE_X - 120, (int)SYR_NEEDLE_Y + 25,
-                  120, 10,
-                  (Color){ 220, 230, 240, 255 });
-    DrawRectangleLinesEx(
-        (Rectangle){ SYR_NEEDLE_X - 120, SYR_NEEDLE_Y + 25, 120, 10 },
-        1.0f, (Color){ 100, 120, 140, 255 }
-    );
-    // Ponta chanfrada afiada da agulha
-    DrawTriangle(
-        (Vector2){ SYR_NEEDLE_X - 140.0f, (float)SYRINGE_HEIGHT / 2.0f },
-        (Vector2){ SYR_NEEDLE_X - 120.0f, SYR_NEEDLE_Y + 35.0f },
-        (Vector2){ SYR_NEEDLE_X - 120.0f, SYR_NEEDLE_Y + 25.0f },
-        (Color){ 220, 230, 240, 255 }
-    );
+    DrawSyringeNeedle(time, tutorialStep);
 
     // -------------------------------------------------------------------------
     // GATILHO DE SAÍDA — pisca em verde no passo 2
@@ -169,18 +268,44 @@ void DrawMapSeringa(Font font, int tutorialStep, float time, float injectionTime
     }
 
     // -------------------------------------------------------------------------
-    // BORDA GERAL DO CILINDRO (highlight metálico)
+    // MARCAÇÕES DE ESCALA (graduação em mL) ao longo do topo do cilindro.
+    // -------------------------------------------------------------------------
+    {
+        int ticks = 10;
+        float span = SYR_RIGHT - SYR_TAPER_X;          // graduação só no corpo reto
+        for (int t = 0; t <= ticks; t++)
+        {
+            float gx = SYR_TAPER_X + (span * t) / ticks;
+            bool major = (t % 2 == 0);
+            float len = major ? 16.0f : 9.0f;
+            DrawLineEx((Vector2){ gx, SYR_WALL_TOP + 6.0f }, (Vector2){ gx, SYR_WALL_TOP + 6.0f + len },
+                       major ? 2.0f : 1.0f, Fade(SYR_METAL_HI, 0.55f));
+            if (major)
+            {
+                char lbl[8];
+                snprintf(lbl, sizeof(lbl), "%d", ticks - t);
+                DrawTextEx(font, lbl, (Vector2){ gx + 3.0f, SYR_WALL_TOP + 8.0f }, 12.0f, 1.0f, Fade(SYR_METAL_HI, 0.5f));
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // BORDA GERAL DO CILINDRO (highlight metálico) + flanges das extremidades
     // -------------------------------------------------------------------------
     DrawRectangleLinesEx(
         (Rectangle){ SYR_LEFT, SYR_WALL_TOP,
                      SYR_RIGHT - SYR_LEFT, SYR_WALL_BOTTOM - SYR_WALL_TOP },
-        4.0f, (Color){ 95, 125, 155, 255 }
+        4.0f, SYR_GLASS_EDGE
     );
+    // Flange (aba de apoio dos dedos) na extremidade direita do cilindro.
+    DrawRectangle((int)SYR_RIGHT - 4, (int)SYR_WALL_TOP - 14, 12, 14, SYR_METAL_DARK);
+    DrawRectangle((int)SYR_RIGHT - 4, (int)SYR_WALL_BOTTOM, 12, 14, SYR_METAL_DARK);
 
-    // Reflexo de luz (linha branca na parte superior do cilindro)
+    // Reflexos de luz no vidro: uma faixa superior intensa e outra inferior sutil.
     DrawRectangle((int)SYR_LEFT + 8, (int)SYR_WALL_TOP + 4,
-                  (int)(SYR_RIGHT - SYR_LEFT - 16), 6,
-                  Fade(WHITE, 0.18f));
+                  (int)(SYR_RIGHT - SYR_LEFT - 16), 6, Fade(WHITE, 0.22f));
+    DrawRectangle((int)SYR_LEFT + 40, (int)SYR_WALL_BOTTOM - 12,
+                  (int)(SYR_RIGHT - SYR_LEFT - 120), 4, Fade(WHITE, 0.08f));
 }
 
 // ============================================================================

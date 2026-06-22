@@ -17,4 +17,12 @@ void SetWeaponModelWorld(int world);
 // 3=granada, 4=BFG). As cores da skin (primary/secondary) valem para todas.
 void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, Color primary, Color secondary);
 
+// Desenha a arma ENQUADRADA dentro de `frame`: como os modelos são "top-heavy"
+// (agulha/cano/orbe apontam para cima), esta função escolhe a escala (até
+// `maxSize`) e desloca a âncora para BAIXO de modo que a composição inteira
+// fique centralizada no retângulo, com padding — a ponta nunca vaza do painel.
+// Usada por previews (Arsenal, cards). Respeita SetWeaponModelWorld para o slot 1.
+void DrawHeldWeaponFramed(int weapon, Rectangle frame, float maxSize, float rotationDeg,
+                          Color primary, Color secondary);
+
 #endif // WEAPONS_MODEL_H
