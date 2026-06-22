@@ -14,7 +14,9 @@ static Vector2 PickSpawnFarFromPlayer(GameState *game)
 static void ConfigureBoss(GameState *game, int idx)
 {
     Enemy *b = &game->enemies[idx];
-    b->position = PickSpawnFarFromPlayer(game);
+    // Spawn validado: chefe nasce inteiramente dentro do corpo, com folga das
+    // paredes (não fica meio "para fora" nem preso numa passagem estreita).
+    b->position = MapBody_FindSpawnPoint(PickSpawnFarFromPlayer(game), 80.0f);
     b->active = true;
     // Visual do chefe conforme o Mundo: Superbactéria KPC (Mundo 1) ou chefe
     // viral de capsídeo reforçado (Mundo 2). O "escudo do chefe" usa o sistema
@@ -48,7 +50,7 @@ static void ConfigureBoss(GameState *game, int idx)
 static void ConfigureMiniBoss(GameState *game, int idx)
 {
     Enemy *m = &game->enemies[idx];
-    m->position = PickSpawnFarFromPlayer(game);
+    m->position = MapBody_FindSpawnPoint(PickSpawnFarFromPlayer(game), 60.0f);
     m->active = true;
     // Mini chefe temático por Mundo: superbactéria tanque (Mundo 1) ou vírus
     // atirador reforçado com escudo de capsídeo (Mundo 2).
@@ -285,7 +287,8 @@ void StartNextWave(GameState *game)
     if (powerUpsCount > 10) powerUpsCount = 10;
     for (int i = 0; i < powerUpsCount; i++)
     {
-        Vector2 itemPos = MapBody_RandomPointInside(game->player.position, 0.0f);
+        // Power-up validado: dentro do corpo e com folga das paredes (coletável).
+        Vector2 itemPos = MapBody_FindSpawnPoint(MapBody_RandomPointInside(game->player.position, 0.0f), 30.0f);
         SpawnPowerUpAt(game, itemPos, -1); // Tipo aleatório, dentro do corpo
     }
 
@@ -303,6 +306,13 @@ void StartNextWave(GameState *game)
             if (hp < 1) hp = 1;
             game->enemies[i].maxHp = hp;
             game->enemies[i].hp = hp;
+            // Inicializa os campos de ANIMAÇÃO transitórios (evita usar valores
+            // antigos de um slot reaproveitado). animTime recebe um pequeno
+            // deslocamento por índice para dessincronizar o bobbing entre inimigos.
+            game->enemies[i].velSmooth = (Vector2){ 0.0f, 0.0f };
+            game->enemies[i].animTime  = (float)(i % 8) * 0.25f;
+            game->enemies[i].attackAnim = 0.0f;
+            game->enemies[i].spawnAnim  = 0.0f;
         }
     }
 

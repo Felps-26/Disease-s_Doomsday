@@ -200,7 +200,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangle((int)(-s*0.40f), (int)(-s*1.72f), (int)(s*0.20f), (int)(s*0.80f), bodyDk);
         DrawRectangle((int)( s*0.20f), (int)(-s*1.72f), (int)(s*0.20f), (int)(s*0.80f), bodyDk);
         // Orbe de energia (glow nas cores da skin)
-        DrawCircleGradient((Vector2){ 0, -s*1.5f }, s*0.52f, primary, BLANK);
+        DrawCircleGradient(0, (int)(-s*1.5f), s*0.52f, primary, BLANK);
         DrawCircleV((Vector2){ 0, -s*1.5f }, s*0.27f, primary);
         DrawCircleV((Vector2){ 0, -s*1.5f }, s*0.14f, secondary);
         DrawCircleLines(0, (int)(-s*1.5f), s*0.52f, secondary);
@@ -209,4 +209,41 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
     }
 
     rlPopMatrix();
+}
+
+// Extensão vertical do modelo (em unidades de `size`) ACIMA (up, para -Y) e
+// ABAIXO (down, para +Y) da âncora. Os modelos apontam a ponta para cima, então
+// up >> down. Inclui folga para glows/auras. s_modelWorld decide o slot 1.
+static void WeaponVExtent(int weapon, float *up, float *down)
+{
+    if (weapon <= 1)
+    {
+        if (s_modelWorld == 1) { *up = 1.95f; *down = 0.85f; } // escalpelo
+        else                   { *up = 2.95f; *down = 0.70f; } // espada-seringa (agulha longa)
+    }
+    else if (weapon == 2)      { *up = 1.98f; *down = 0.76f; } // fuzil (muzzle)
+    else if (weapon == 3)      { *up = 1.66f; *down = 0.66f; } // granada
+    else                       { *up = 2.10f; *down = 0.66f; } // BFG (orbe/glow)
+}
+
+void DrawHeldWeaponFramed(int weapon, Rectangle frame, float maxSize, float rotationDeg,
+                          Color primary, Color secondary)
+{
+    float up, down; WeaponVExtent(weapon, &up, &down);
+    const float halfW = 0.9f;   // meia-largura aproximada do modelo (unid. de size)
+    const float pad   = 14.0f;  // padding mínimo consistente em todos os lados
+
+    float availH = frame.height - 2.0f * pad; if (availH < 8.0f) availH = 8.0f;
+    float availW = frame.width  - 2.0f * pad; if (availW < 8.0f) availW = 8.0f;
+
+    float size = maxSize;
+    float fitH = availH / (up + down);     // cabe na altura
+    float fitW = availW / (2.0f * halfW);  // cabe na largura
+    if (fitH < size) size = fitH;
+    if (fitW < size) size = fitW;
+
+    // Âncora deslocada para BAIXO: centraliza o modelo top-heavy no retângulo.
+    Vector2 anchor = { frame.x + frame.width * 0.5f,
+                       frame.y + frame.height * 0.5f + (up - down) * 0.5f * size };
+    DrawHeldWeapon(weapon, anchor, size, rotationDeg, primary, secondary);
 }

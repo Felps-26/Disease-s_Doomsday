@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../../include/asset_manager.h"
+#include "../../include/telas.h"
 #include <string.h>
 #include <time.h>
 #ifdef _WIN32
@@ -201,6 +202,17 @@ void LoadPlayerConfig(GameState *game)
             if (got >= 4 && diff >= DIFFICULTY_EASY && diff <= DIFFICULTY_HARD)
                 game->difficulty = diff;
         }
+        // Guarda-roupa modular (append no fim da linha). Configs antigos não têm
+        // estes campos: o fscanf simplesmente falha e cada slot fica em 0 (padrão).
+        for (int s = 0; s < COS_SLOT_COUNT; s++)
+        {
+            int v = 0;
+            if (fscanf(f, "%d", &v) == 1) game->player.cosmetics[s] = (v > 0 ? v : 0);
+            else                          game->player.cosmetics[s] = 0;
+        }
+        // Categoria "Traseiro" foi removida do jogo: ignora qualquer item
+        // traseiro de saves/config antigos (mantém a largura para compat.).
+        game->player.cosmetics[COS_BACK] = 0;
         fclose(f);
     }
     // Sempre garante uma configuração de dificuldade válida (mesmo sem arquivo).
@@ -211,8 +223,12 @@ void SavePlayerConfig(GameState *game)
 {
     FILE *f = fopen("Saves/config.txt", "w");
     if (f == NULL) return;
-    fprintf(f, "%f %d %d %d\n", game->masterVolume, game->player.skinId,
+    fprintf(f, "%f %d %d %d", game->masterVolume, game->player.skinId,
             game->player.weaponSkinId, game->difficulty);
+    // Guarda-roupa modular (mesma linha, na ordem do enum CosmeticSlot).
+    for (int s = 0; s < COS_SLOT_COUNT; s++)
+        fprintf(f, " %d", game->player.cosmetics[s]);
+    fprintf(f, "\n");
     fclose(f);
 }
 
@@ -289,27 +305,39 @@ void RegisterEnemyKill(GameState *game, Enemy *enemy)
 // ============================================================================
 DifficultyConfig MakeDifficultyConfig(int difficulty)
 {
+    // Filosofia de rebalanceamento (Etapa 5): a pressão vem de COMPORTAMENTO
+    // (reação, esquiva, flanqueamento, detecção, cadência, invocações, memória de
+    // perseguição) e não de "HP esponjoso". Por isso os multiplicadores de vida e
+    // dano sobem pouco entre as dificuldades, enquanto a IA fica nitidamente mais
+    // esperta/rápida. O dano máximo é limitado e o jogador tem i-frames, então não
+    // há dano inevitável — apenas janelas de esquiva mais curtas.
     DifficultyConfig d;
     switch (difficulty)
     {
         case DIFFICULTY_EASY:
-            d.enemyHealthMul = 0.75f; d.enemyDamageMul = 0.70f; d.enemySpeedMul = 0.85f;
-            d.detectionRange = 380.0f; d.loseSightRange = 650.0f; d.reactionMul = 1.4f;
-            d.dodgeChance = 0.04f; d.flankAmount = 0.25f; d.retreatThreshold = 0.30f;
-            d.summonMul = 0.6f; d.bossAggroMul = 0.85f; d.aggroMemoryTime = 1.2f;
+            // "FÁCIL" ≈ o desafio do DIFÍCIL antigo, porém justo: IA agressiva,
+            // mas vida/dano moderados e janelas de esquiva confortáveis.
+            d.enemyHealthMul = 1.00f; d.enemyDamageMul = 0.90f; d.enemySpeedMul = 1.05f;
+            d.detectionRange = 560.0f; d.loseSightRange = 1050.0f; d.reactionMul = 0.88f;
+            d.dodgeChance = 0.18f; d.flankAmount = 0.60f; d.retreatThreshold = 0.28f;
+            d.summonMul = 1.00f; d.bossAggroMul = 1.00f; d.aggroMemoryTime = 3.0f;
             break;
         case DIFFICULTY_HARD:
-            d.enemyHealthMul = 1.25f; d.enemyDamageMul = 1.25f; d.enemySpeedMul = 1.10f;
-            d.detectionRange = 650.0f; d.loseSightRange = 1200.0f; d.reactionMul = 0.7f;
-            d.dodgeChance = 0.40f; d.flankAmount = 0.85f; d.retreatThreshold = 0.20f;
-            d.summonMul = 1.4f; d.bossAggroMul = 1.25f; d.aggroMemoryTime = 4.0f;
+            // "DIFÍCIL" extremo: reage quase instantaneamente, esquiva e flanqueia
+            // muito, persegue por muito tempo — sem inflar HP de forma absurda.
+            d.enemyHealthMul = 1.40f; d.enemyDamageMul = 1.35f; d.enemySpeedMul = 1.28f;
+            d.detectionRange = 820.0f; d.loseSightRange = 1500.0f; d.reactionMul = 0.55f;
+            d.dodgeChance = 0.50f; d.flankAmount = 1.05f; d.retreatThreshold = 0.18f;
+            d.summonMul = 1.70f; d.bossAggroMul = 1.50f; d.aggroMemoryTime = 6.0f;
             break;
         case DIFFICULTY_MEDIUM:
         default:
-            d.enemyHealthMul = 1.0f; d.enemyDamageMul = 1.0f; d.enemySpeedMul = 1.0f;
-            d.detectionRange = 480.0f; d.loseSightRange = 900.0f; d.reactionMul = 1.0f;
-            d.dodgeChance = 0.18f; d.flankAmount = 0.55f; d.retreatThreshold = 0.25f;
-            d.summonMul = 1.0f; d.bossAggroMul = 1.0f; d.aggroMemoryTime = 2.2f;
+            // "MÉDIO": significativamente mais difícil que o FÁCIL, com IA mais
+            // coordenada (mais flanqueamento, esquiva e invocações).
+            d.enemyHealthMul = 1.20f; d.enemyDamageMul = 1.10f; d.enemySpeedMul = 1.15f;
+            d.detectionRange = 680.0f; d.loseSightRange = 1250.0f; d.reactionMul = 0.68f;
+            d.dodgeChance = 0.34f; d.flankAmount = 0.85f; d.retreatThreshold = 0.24f;
+            d.summonMul = 1.30f; d.bossAggroMul = 1.25f; d.aggroMemoryTime = 4.5f;
             break;
     }
     return d;
@@ -344,16 +372,26 @@ int CoresAlive(GameState *game)
 }
 
 // Cria os Núcleos de Infecção ao redor do chefe e ativa o escudo.
+// Usa MapBody_PlaceCores (geometria validada): cada núcleo nasce INTEIRAMENTE
+// dentro do corpo, com margem de aproximação melee (CORE_SPAWN_MARGIN), longe
+// do chefe (CORE_BOSS_CLEARANCE) e dos outros núcleos (CORE_INTER_DISTANCE).
+// Determinístico, com fallback no centro do tórax — nenhum núcleo depende de
+// arma de longa distância para ser destruído.
 void SpawnInfectionCores(GameState *game, Vector2 center)
 {
+    Vector2 pts[MAX_CORES];
+    int n = MapBody_PlaceCores(center, pts, MAX_CORES,
+                               CORE_SPAWN_MARGIN, CORE_BOSS_CLEARANCE, CORE_INTER_DISTANCE);
+
     for (int i = 0; i < MAX_CORES; i++)
     {
-        float ang = (float)i / (float)MAX_CORES * 2.0f * PI;
-        Vector2 p = { center.x + cosf(ang) * 360.0f, center.y + sinf(ang) * 360.0f };
-        if (p.x < 120.0f) p.x = 120.0f;
-        if (p.x > MAP_WIDTH - 120.0f) p.x = MAP_WIDTH - 120.0f;
-        if (p.y < 120.0f) p.y = 120.0f;
-        if (p.y > MAP_HEIGHT - 120.0f) p.y = MAP_HEIGHT - 120.0f;
+        Vector2 p = (i < n) ? pts[i] : MapBody_GetSafeCenter();
+
+        // Revalidação defensiva: se por algum motivo o ponto não couber com a
+        // margem do herói, recua para um ponto livre em direção ao centro.
+        if (!MapBody_ContainsWithMargin(p, BODY_PLAYER_RADIUS))
+            p = MapBody_FindSpawnPoint(p, BODY_PLAYER_RADIUS);
+
         game->cores[i].position = p;
         game->cores[i].maxHp = 120 + game->wave * 20;
         game->cores[i].hp = game->cores[i].maxHp;
@@ -599,6 +637,7 @@ void InitGame(GameState *game)
     char tempName[16] = "";
     float tempVol = 1.0f;
     int tempSkin = 0, tempWSkin = 0;
+    int tempCos[COS_SLOT_COUNT] = { 0 };   // cosméticos do guarda-roupa (preferência)
     int tempDiff = DIFFICULTY_MEDIUM;
     bool tAdmin = false, tAdminApply = false;
     int tAdmMaxHp = 0, tAdmDmg = 0, tAdmLevel = 0, tAdmSus = 0;
@@ -609,6 +648,7 @@ void InitGame(GameState *game)
         tempVol = game->masterVolume;
         tempSkin = game->player.skinId;
         tempWSkin = game->player.weaponSkinId;
+        for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
         tempDiff = game->difficulty;
         tAdmin = game->adminMode; tAdminApply = game->adminApply;
         tAdmMaxHp = game->adminMaxHp; tAdmDmg = game->adminDamage;
@@ -635,6 +675,7 @@ void InitGame(GameState *game)
     game->masterVolume = tempVol;
     game->player.skinId = tempSkin;
     game->player.weaponSkinId = tempWSkin;
+    for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
 
     // Jogador inicial
     game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
@@ -770,6 +811,11 @@ void UpdateTutorial(GameState *game, float delta)
     // ========================================================================
     if (dlg->active)
     {
+        // Debounce de ataque: enquanto o diálogo está aberto, "trava" o ataque.
+        // Só será liberado quando o jogador SOLTAR a tecla/botão (ver passo 1).
+        // Assim o mesmo SPACE/clique que avança/fecha o texto não ataca a bactéria.
+        game->attackInputLatched = true;
+
         // BUGFIX: durante um diálogo bloqueante o jogador deve PARAR imediatamente.
         // Antes, se ele estava andando ao abrir o diálogo, a flag isMoving ficava
         // true e o modelo continuava com a animação de caminhada parado no lugar.
@@ -816,11 +862,16 @@ void UpdateTutorial(GameState *game, float delta)
                 }
                 else
                 {
-                    // Última página do passo: fecha o diálogo e libera a gameplay
+                    // Última página do passo: fecha o diálogo e libera a gameplay.
                     dlg->active    = false;
                     dlg->page      = 0;
                     dlg->charShown = 0;
                     dlg->charTimer = 0.0f;
+                    // Limpa estado de ataque ao trocar de etapa: nada de ataque
+                    // pendente, slash residual ou cooldown herdado. O ataque segue
+                    // travado (attackInputLatched) até o jogador soltar o input.
+                    game->player.attackCooldown = 0.0f;
+                    game->slashAnimTimer        = 0.0f;
                 }
             }
         }
@@ -955,6 +1006,10 @@ void UpdateTutorial(GameState *game, float delta)
                     game->enemies[i].cooldownTimer   = 1.5f; // primeiro tiro após 1.5s
                     game->enemies[i].patrolTarget    = game->enemies[i].position;
                     game->enemies[i].patrolTimer     = 99.0f;
+                    game->enemies[i].velSmooth       = (Vector2){ 0.0f, 0.0f };
+                    game->enemies[i].animTime        = 0.0f;
+                    game->enemies[i].attackAnim      = 0.0f;
+                    game->enemies[i].spawnAnim       = 0.0f;
                     break;
                 }
             }
@@ -1047,8 +1102,14 @@ void UpdateTutorial(GameState *game, float delta)
             }
         }
 
-        // Ataque com ESPAÇO ou clique segurado (Q está reservado para diálogo)
-        if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+        // Ataque com ESPAÇO ou clique segurado (Q está reservado para diálogo).
+        // DEBOUNCE: o mesmo SPACE/clique que fechou a última página de diálogo NÃO
+        // pode atacar. O latch (setado enquanto o diálogo estava ativo) só é
+        // liberado quando o jogador SOLTA a tecla/botão; a bactéria recém-spawnada
+        // só recebe dano após um comando NOVO do jogador.
+        bool attackHeld = IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+        if (game->attackInputLatched && !attackHeld) game->attackInputLatched = false;
+        if (!game->attackInputLatched && attackHeld)
         {
             extern Vector2 g_virtualMouse;
             Vector2 worldMouse = GetScreenToWorld2D(g_virtualMouse, game->camera);
@@ -1366,6 +1427,14 @@ void UpdateGameplay(GameState *game, float delta)
     // O herói fica confinado DENTRO do corpo (a silhueta é a arena).
     MapBody_ApplyCollision(&game->player.position, 20.0f);
 
+    // Velocidade suavizada do herói (para antecipação LIMITADA de mira da IA).
+    if (delta > 0.0f)
+    {
+        Vector2 inst = Vector2Scale(Vector2Subtract(game->player.position, game->playerPrevPos), 1.0f / delta);
+        game->playerVelSmooth = Vector2Lerp(game->playerVelSmooth, inst, 0.25f);
+    }
+    game->playerPrevPos = game->player.position;
+
     // ------------------------------------------------------------------------
     // 3. ENTRADA DE COMBATE E ARMAS
     // ------------------------------------------------------------------------
@@ -1472,9 +1541,17 @@ void UpdateGameplay(GameState *game, float delta)
 
         Enemy *enemy = &game->enemies[i];
 
+        // Relógio de animação por inimigo + "pop-in" de surgimento (tempo/estado,
+        // sem aleatoriedade por frame). Posição inicial p/ medir o deslocamento.
+        enemy->animTime += delta;
+        if (enemy->spawnAnim < 1.0f) { enemy->spawnAnim += delta * 3.5f; if (enemy->spawnAnim > 1.0f) enemy->spawnAnim = 1.0f; }
+        Vector2 animStartPos = enemy->position;
+
         if (enemy->state == DEATH)
         {
             enemy->cooldownTimer -= delta;
+            // Recolhe a velocidade suavizada na morte (anima parando).
+            enemy->velSmooth = Vector2Scale(enemy->velSmooth, 1.0f - 6.0f * delta);
             if (enemy->cooldownTimer <= 0.0f)
             {
                 enemy->active = false;
@@ -1672,6 +1749,7 @@ void UpdateGameplay(GameState *game, float delta)
                         m->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
                         m->fleeTimer = 0.0f; m->isEscort = true; m->aiPhase = 0; m->summonTimer = 0.0f;
                         m->hitCooldown = 0.0f; m->aggroMemory = 0.0f; m->dodgeCooldown = 0.0f;
+                        m->velSmooth = (Vector2){ 0.0f, 0.0f }; m->animTime = 0.0f; m->attackAnim = 0.0f; m->spawnAnim = 0.0f;
                         game->enemiesRemaining++;
                         SpawnParticleExplosion(game, m->position, DARKGRAY, 8, 40.0f, 120.0f, 2.0f, 0.4f);
                         minions++;
@@ -1710,7 +1788,20 @@ void UpdateGameplay(GameState *game, float delta)
                     dmg = 12;
                 }
                 
-                SpawnProjectile(game, enemy->position, game->player.position, ptype, dmg);
+                // Antecipação LIMITADA de mira: lidera o alvo conforme a velocidade
+                // do herói e a dificuldade (difícil lidera mais). Limitada (cap) para
+                // continuar justo e esquivável — não é mira perfeita.
+                float lead = (game->diff.reactionMul <= 0.6f) ? 0.34f
+                           : (game->diff.reactionMul <= 0.8f) ? 0.22f : 0.12f;
+                Vector2 aimTarget = game->player.position;
+                if (enemy->isRanged) {
+                    Vector2 off = Vector2Scale(game->playerVelSmooth, lead);
+                    float m = Vector2Length(off);
+                    if (m > 140.0f) off = Vector2Scale(off, 140.0f / m);
+                    aimTarget = Vector2Add(aimTarget, off);
+                }
+
+                SpawnProjectile(game, enemy->position, aimTarget, ptype, dmg);
                 PlaySound(g_assets.sfxEnemyShoot);
 
                 // Dengue (type 1): leque de 3 projéteis (a "picada espalhada" que o
@@ -1718,16 +1809,16 @@ void UpdateGameplay(GameState *game, float delta)
                 // Os i-frames do jogador limitam o dano total — o leque serve para
                 // ser mais difícil de esquivar, não para multiplicar o dano.
                 if (enemy->type == 1) {
-                    Vector2 sprL = { game->player.position.x - 70, game->player.position.y };
-                    Vector2 sprR = { game->player.position.x + 70, game->player.position.y };
+                    Vector2 sprL = { aimTarget.x - 70, aimTarget.y };
+                    Vector2 sprR = { aimTarget.x + 70, aimTarget.y };
                     SpawnProjectile(game, enemy->position, sprL, ptype, dmg);
                     SpawnProjectile(game, enemy->position, sprR, ptype, dmg);
                 }
 
                 // KPC e Boss disparam múltiplos projéteis
                 if (enemy->tier == TIER_3_BOSS) {
-                    Vector2 off1 = { game->player.position.x + 100, game->player.position.y };
-                    Vector2 off2 = { game->player.position.x - 100, game->player.position.y };
+                    Vector2 off1 = { aimTarget.x + 100, aimTarget.y };
+                    Vector2 off2 = { aimTarget.x - 100, aimTarget.y };
                     SpawnProjectile(game, enemy->position, off1, ptype, dmg);
                     SpawnProjectile(game, enemy->position, off2, ptype, dmg);
 
@@ -1824,6 +1915,24 @@ void UpdateGameplay(GameState *game, float delta)
                     if (distSqrToPlayer > 250.0f * 250.0f) {
                         enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, currentSpeed * 0.8f * bossSpeedMult * delta));
                     }
+                } else {
+                    // RANGED GENÉRICO (bactéria/vírus atirador, mini chefe viral):
+                    // KITING + STRAFE. Mantém uma distância preferida e ORBITA o
+                    // jogador (circle-strafe), reduzindo o tempo ocioso e ficando
+                    // mais difícil de acertar. O sentido da órbita (flankSign) é
+                    // coordenado e troca de tempos em tempos (determinístico).
+                    float pref = (enemy->tier == TIER_MINIBOSS) ? 360.0f : 300.0f;
+                    float d = sqrtf(distSqrToPlayer);
+                    Vector2 perp = { -chaseDir.y, chaseDir.x };
+                    Vector2 move = { 0.0f, 0.0f };
+                    if (d > pref + 90.0f)      move = chaseDir;                        // aproxima
+                    else if (d < pref - 90.0f) move = Vector2Scale(chaseDir, -1.0f);   // recua
+                    float strafe = 0.7f + game->diff.flankAmount * 0.5f;              // orbita
+                    move = Vector2Add(move, Vector2Scale(perp, enemy->flankSign * strafe));
+                    if (Vector2LengthSqr(move) > 0.0001f) move = Vector2Normalize(move);
+                    enemy->position = Vector2Add(enemy->position, Vector2Scale(move, currentSpeed * 0.9f * delta));
+                    // Inverte o sentido da órbita ~a cada 5s (sem aleatoriedade por frame).
+                    if (fmodf(enemy->animTime, 5.0f) < delta) enemy->flankSign = -enemy->flankSign;
                 }
             }
         }
@@ -1850,6 +1959,29 @@ void UpdateGameplay(GameState *game, float delta)
             }
             Vector2 patrolDir = Vector2Normalize(Vector2Subtract(enemy->patrolTarget, enemy->position));
             enemy->position = Vector2Add(enemy->position, Vector2Scale(patrolDir, enemy->speed * delta));
+        }
+
+        // --------------------------------------------------------------------
+        // TENDÊNCIA CENTRAL DO CHEFE (fase protegida) — proteção adicional.
+        // Enquanto o escudo está ativo, o chefe é atraído suavemente para a
+        // região central segura do tórax. Mantém-no perto dos núcleos/herói e
+        // evita que knockback/separação o prendam nas extremidades do corpo.
+        // NÃO é teleporte: mistura-se ao movimento da IA e é limitado, então o
+        // chefe permanece agressivo. (A validação dos núcleos é independente.)
+        // --------------------------------------------------------------------
+        if (isBossUnit && game->bossShieldActive && enemy->state != DEATH)
+        {
+            Vector2 safe = MapBody_GetSafeCenter();
+            Vector2 toC = Vector2Subtract(safe, enemy->position);
+            float distC = Vector2Length(toC);
+            if (distC > 220.0f)
+            {
+                Vector2 dirC = Vector2Scale(toC, 1.0f / distC);
+                float ramp = (distC - 220.0f) / 600.0f;
+                if (ramp > 1.0f) ramp = 1.0f;
+                float pull = enemy->speed * bossSpeedMult * 0.45f * ramp;
+                enemy->position = Vector2Add(enemy->position, Vector2Scale(dirC, pull * delta));
+            }
         }
 
         // --------------------------------------------------------------------
@@ -1888,6 +2020,23 @@ void UpdateGameplay(GameState *game, float delta)
         {
             HandlePlayerEnemyCollision(game, enemy);
         }
+
+        // --------------------------------------------------------------------
+        // ANIMAÇÃO (fim da iteração): velocidade real suavizada (lean/stretch) e
+        // envelope de antecipação/recuo do ataque. Tudo derivado de estado/tempo.
+        // --------------------------------------------------------------------
+        if (delta > 0.0f)
+        {
+            Vector2 inst = Vector2Scale(Vector2Subtract(enemy->position, animStartPos), 1.0f / delta);
+            enemy->velSmooth = Vector2Lerp(enemy->velSmooth, inst, 0.30f);
+        }
+        // attackAnim: sobe (antecipação) enquanto carrega o tiro; cai p/ recuo logo
+        // após disparar (cooldown alto recém-iniciado); relaxa para 0 caso contrário.
+        float targetAnim = 0.0f;
+        if (enemy->state == ATTACK)               targetAnim = 1.0f;   // antecipação
+        else if (enemy->isRanged && enemy->cooldownTimer > 0.0f && enemy->state == IDLE)
+            targetAnim = -0.5f;                                        // recuo pós-disparo
+        enemy->attackAnim = Lerp(enemy->attackAnim, targetAnim, 12.0f * delta);
     }
 
     // ------------------------------------------------------------------------
@@ -1919,10 +2068,15 @@ void UpdateGameplay(GameState *game, float delta)
     {
         if (game->projectiles[i].active)
         {
-            game->projectiles[i].position = Vector2Add(game->projectiles[i].position, Vector2Scale(game->projectiles[i].velocity, delta));
-            game->projectiles[i].hitbox.x = game->projectiles[i].position.x - 10;
-            game->projectiles[i].hitbox.y = game->projectiles[i].position.y - 10;
-            
+            // Move + aplica limites de alcance/void (Fase 5). Se o rifle estourou
+            // o alcance ou saiu para o void, apenas se dissipa (sem dano).
+            if (!Projectile_Advance(&game->projectiles[i], delta)) {
+                if (game->projectiles[i].isPlayerProjectile)
+                    SpawnParticle(game, game->projectiles[i].position, (Vector2){ 0, 0 },
+                                  WeaponSkinPrimary(game->player.weaponSkinId), 3.0f, 0.22f);
+                continue;
+            }
+
             if (game->projectiles[i].isPlayerProjectile) {
                 // Diminui o tempo de vida para explosivos
                 game->projectiles[i].lifeTime -= delta;
@@ -2034,6 +2188,14 @@ void UpdateGameplay(GameState *game, float delta)
             if (game->projectiles[i].type == PROJ_PLAYER_BFG && game->projectiles[i].lifeTime <= 0.0f) {
                 game->projectiles[i].active = false;
                 SpawnParticleExplosion(game, game->projectiles[i].position, GREEN, 30, 100.0f, 300.0f, 5.0f, 0.8f);
+            }
+
+            // Rifles retos: backstop por lifetime (proteção SECUNDÁRIA ao alcance).
+            if (game->projectiles[i].active && game->projectiles[i].lifeTime <= 0.0f &&
+                (game->projectiles[i].type == PROJ_PLAYER_PHAGE ||
+                 game->projectiles[i].type == PROJ_PLAYER_VACCINE ||
+                 game->projectiles[i].type == PROJ_PLAYER_RIFLE)) {
+                game->projectiles[i].active = false;
             }
             
             // Remove se sair do mapa
@@ -2291,6 +2453,8 @@ void CarregarJogoSlot(GameState *game, int slot)
         float tempVol = game->masterVolume;
         int tempSkin = game->player.skinId;
         int tempWSkin = game->player.weaponSkinId;
+        int tempCos[COS_SLOT_COUNT];   // cosméticos persistem ao carregar um save
+        for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
 
         // Limpa estados de buffs temporários
         memset(game, 0, sizeof(GameState));
@@ -2300,6 +2464,7 @@ void CarregarJogoSlot(GameState *game, int slot)
         game->masterVolume = tempVol;
         game->player.skinId = tempSkin;
         game->player.weaponSkinId = tempWSkin;
+        for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
         InitParticlePool(game);
 
         // Pular/Ler metadados iniciais
@@ -2534,7 +2699,8 @@ void RequestLoadingScreen(GameState *game, LoadTarget target, float duration)
     game->loadTarget = target;
     game->loadingTimer = 0.0f;
     game->loadingDuration = duration;
-    game->loadingTip = GetRandomValue(0, LOADING_TIP_COUNT - 1);
+    int tipCount = GetLoadingTipCount();
+    game->loadingTip = tipCount > 0 ? GetRandomValue(0, tipCount - 1) : 0;
     game->screenShake = 0.0f;
 }
 

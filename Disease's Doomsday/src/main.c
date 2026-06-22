@@ -6,9 +6,42 @@
 #include "../include/input_controller.h"
 #include "../include/asset_manager.h"
 #include "logic/fsm.h"
+#include "rlgl.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+// ----------------------------------------------------------------------------
+// SUPERSAMPLING DO MUNDO (SSAA). O mundo (gameplay/tutorial) é renderizado numa
+// textura WORLD_SS× maior que a virtual 1280x720 e REDUZIDA no blit. Isso
+// elimina o borrão do antigo UPSCALE de um alvo fixo 1280x720 para a janela
+// (em telas maiores), mantendo o personagem/cenário nítidos. Um override de
+// projeção mapeia o espaço LÓGICO 1280x720 sobre o alvo maior, então NENHUMA
+// coordenada de desenho muda (HUD, colisão, escala lógica permanecem iguais).
+// ----------------------------------------------------------------------------
+#define WORLD_SS 2
+
+static void BeginWorldRender(RenderTexture2D t)
+{
+    BeginTextureMode(t);
+    ClearBackground(BLACK);
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlOrtho(0.0, SCREEN_WIDTH, SCREEN_HEIGHT, 0.0, -1.0, 1.0);
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+}
+static void EndWorldRender(void)
+{
+    rlDrawRenderBatchActive();
+    rlMatrixMode(RL_PROJECTION);
+    rlPopMatrix();
+    rlMatrixMode(RL_MODELVIEW);
+    rlLoadIdentity();
+    EndTextureMode();
+}
 
 // Globais para escalonamento da janela física e virtual (Letterbox)
 float g_scale = 1.0f;
@@ -26,6 +59,15 @@ bool hasScreenshotTemp = false;
 
 int main(void)
 {
+    // Relative asset/save paths must resolve beside the executable even when
+    // the game is launched directly from Finder or another working directory.
+    const char *applicationDirectory = GetApplicationDirectory();
+    if (applicationDirectory[0] == '\0' || !ChangeDirectory(applicationDirectory))
+    {
+        fprintf(stderr, "Failed to enter application directory: %s\n", applicationDirectory);
+        return EXIT_FAILURE;
+    }
+
     // Habilita janela redimensionável e sincronização vertical (VSync)
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Disease's Doomsday");
@@ -65,8 +107,10 @@ int main(void)
         SetMusicVolume(musicB, 0.0f);
     }
 
-    // Render target para o escalonamento adaptativo (Letterbox virtual)
-    RenderTexture2D target = LoadRenderTexture(SCREEN_WIDTH, SCREEN_HEIGHT);
+    // Render target do MUNDO em WORLD_SS× (SSAA). É reduzido no blit para a
+    // região do letterbox — nitidez sem borrão de upscale. Filtro bilinear para
+    // uma redução suave (downsample), não ampliação.
+    RenderTexture2D target = LoadRenderTexture(SCREEN_WIDTH * WORLD_SS, SCREEN_HEIGHT * WORLD_SS);
     SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
 
     // Loop de jogo principal
@@ -172,10 +216,9 @@ int main(void)
         if (game.currentScreen == SCREEN_GAMEPLAY && IsKeyPressed(KEY_F5))
         {
             // Garante renderização da gameplay limpa antes de capturar
-            BeginTextureMode(target);
-            ClearBackground(BLACK);
+            BeginWorldRender(target);
             DrawTelaGameplay(&game, g_gameFont, false);
-            EndTextureMode();
+            EndWorldRender();
 
             // Quicksave para o Slot 1 (Padrão)
             SalvarJogoSlot(&game, 1);
@@ -236,10 +279,9 @@ int main(void)
                 }
 
                 // Renderiza a jogabilidade limpa (sem overlays) para a render target
-                BeginTextureMode(target);
-                ClearBackground(BLACK);
+                BeginWorldRender(target);
                 DrawTelaGameplay(&game, g_gameFont, false);
-                EndTextureMode();
+                EndWorldRender();
 
                 screenshotTemp = LoadImageFromTexture(target.texture);
                 ImageFlipVertical(&screenshotTemp);
@@ -250,6 +292,8 @@ int main(void)
                 {
                     char path[64];
                     sprintf(path, "Saves/screenshot_slot_%d.png", i + 1);
+                    // Evita double-load: descarrega a textura anterior do slot.
+                    if (slotTexturesLoaded[i]) { UnloadTexture(slotTextures[i]); slotTexturesLoaded[i] = false; }
                     if (FileExists(path))
                     {
                         slotTextures[i] = LoadTexture(path);
@@ -277,6 +321,8 @@ int main(void)
                 {
                     char path[64];
                     sprintf(path, "Saves/screenshot_slot_%d.png", i + 1);
+                    // Evita double-load: descarrega a textura anterior do slot.
+                    if (slotTexturesLoaded[i]) { UnloadTexture(slotTextures[i]); slotTexturesLoaded[i] = false; }
                     if (FileExists(path))
                     {
                         slotTextures[i] = LoadTexture(path);
@@ -307,22 +353,38 @@ int main(void)
         // --------------------------------------------------------------------
         // C. RENDERIZAÇÃO NA TEXTURA VIRTUAL (1280x720) - APENAS MUNDO DO JOGO
         // --------------------------------------------------------------------
-        BeginTextureMode(target);
-        ClearBackground(BLACK);
+        BeginWorldRender(target);
 
-        if (game.currentScreen == SCREEN_GAMEPLAY || 
-            game.currentScreen == SCREEN_PAUSE || 
-            game.currentScreen == SCREEN_SAVE_SELECT ||
-            game.currentScreen == SCREEN_TUTORIAL ||
-            game.currentScreen == SCREEN_QUIZ ||
-            game.currentScreen == SCREEN_UPGRADE ||
-            (game.currentScreen == SCREEN_LOAD_SELECT && loadSelectBackScreen == SCREEN_PAUSE))
+        // Fundo do mundo (textura virtual). DIFERENCIA explicitamente o fundo do
+        // TUTORIAL (seringa) e da GAMEPLAY (corpo): ao pausar DENTRO da seringa, o
+        // fundo congelado deve ser a própria cena do tutorial — nunca a gameplay
+        // do corpo. game.inTutorial distingue os dois contextos (FSM usa o mesmo
+        // flag para voltar do pause à tela certa). O shader/câmera já são tratados
+        // abaixo para SCREEN_PAUSE/TUTORIAL/GAMEPLAY.
+        // Qualquer sobreposição aberta DE DENTRO do tutorial (pause; ou load-
+        // select aberto a partir da pausa do tutorial) deve congelar a cena da
+        // SERINGA — nunca o corpo. game.inTutorial distingue os contextos.
+        bool overlayInTutorial = game.inTutorial &&
+            (game.currentScreen == SCREEN_PAUSE ||
+             (game.currentScreen == SCREEN_LOAD_SELECT && loadSelectBackScreen == SCREEN_PAUSE));
+        if (game.currentScreen == SCREEN_TUTORIAL || overlayInTutorial)
+        {
+            // Apenas o MUNDO do tutorial vai para a textura virtual; o HUD é
+            // desenhado depois (resolução nativa). Sem desenho duplicado.
+            DrawTutorialWorld(&game, g_gameFont);
+        }
+        else if (game.currentScreen == SCREEN_GAMEPLAY ||
+                 game.currentScreen == SCREEN_PAUSE ||
+                 game.currentScreen == SCREEN_SAVE_SELECT ||
+                 game.currentScreen == SCREEN_QUIZ ||
+                 game.currentScreen == SCREEN_UPGRADE ||
+                 (game.currentScreen == SCREEN_LOAD_SELECT && loadSelectBackScreen == SCREEN_PAUSE))
         {
             // Desenha apenas o mundo 2D (sem o HUD) na textura virtual
             DrawTelaGameplay(&game, g_gameFont, false);
         }
 
-        EndTextureMode();
+        EndWorldRender();
 
         // --------------------------------------------------------------------
         // D. DESENHA A TEXTURA REDIMENSIONADA NA TELA FÍSICA
@@ -330,7 +392,13 @@ int main(void)
         BeginDrawing();
         ClearBackground(BLACK);
 
-        bool useBiologicalShader = g_assets.shaderLoaded && (game.currentScreen == SCREEN_GAMEPLAY || game.currentScreen == SCREEN_TUTORIAL || game.currentScreen == SCREEN_PAUSE);
+        // O shader biológico (distorção orgânica + vinheta) representa estar
+        // DENTRO do corpo: vale na gameplay e na pausa da gameplay. O tutorial
+        // ocorre numa seringa (vidro/metal) — aplicá-lo ali distorce a cena e
+        // divergia entre jogo e pausa. Por isso o tutorial fica de fora.
+        bool useBiologicalShader = g_assets.shaderLoaded &&
+            (game.currentScreen == SCREEN_GAMEPLAY ||
+             (game.currentScreen == SCREEN_PAUSE && !game.inTutorial));
         
         if (useBiologicalShader)
         {
@@ -377,6 +445,11 @@ int main(void)
     // As músicas são descarregadas no asset_manager
 
     UnloadRenderTexture(target);
+    UnloadGameplayResources();   // libera a textura do biossensor (HUD)
+    // Limpa quaisquer texturas de slot/screenshot ainda carregadas
+    for (int i = 0; i < 3; i++)
+        if (slotTexturesLoaded[i]) { UnloadTexture(slotTextures[i]); slotTexturesLoaded[i] = false; }
+    if (hasScreenshotTemp) { UnloadImage(screenshotTemp); hasScreenshotTemp = false; }
     UnloadGameAssets();
     CloseWindow();
 

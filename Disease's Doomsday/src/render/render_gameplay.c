@@ -7,6 +7,7 @@
 #include "../../Assets/Maps/map_body.h"
 #include "../../Assets/@models/player_model.h"
 #include "../../Assets/@models/enemy_model.h"
+#include "../../Assets/@models/doctor_model.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -123,17 +124,57 @@ void DrawPlayerHero(GameState *game, Vector2 pPos, float playerSize)
     }
 }
 
-// Converte uma posição do mundo (0..MAP) para um ponto dentro do radar global.
-// O mapa inteiro é normalizado para um quadrado inscrito no círculo do radar,
-// de modo que QUALQUER inimigo da arena apareça, independente da distância.
-static Vector2 WorldToRadar(Vector2 world, Vector2 radarCenter, float radarHalf)
+// Converte uma posição do mundo para um ponto dentro do minimapa CORPORAL,
+// enquadrando a bounding box do corpo (MapBody_WorldBounds) no retângulo `r`.
+// Assim os marcadores ficam sempre alinhados à silhueta desenhada no HUD.
+static Vector2 WorldToMini(Vector2 world, Rectangle bounds, Rectangle r)
 {
-    float nx = world.x / (float)MAP_WIDTH;
-    float ny = world.y / (float)MAP_HEIGHT;
-    nx = (nx < 0.0f) ? 0.0f : (nx > 1.0f ? 1.0f : nx);
-    ny = (ny < 0.0f) ? 0.0f : (ny > 1.0f ? 1.0f : ny);
-    return (Vector2){ radarCenter.x - radarHalf + nx * 2.0f * radarHalf,
-                      radarCenter.y - radarHalf + ny * 2.0f * radarHalf };
+    float u = Clamp((world.x - bounds.x) / bounds.width, 0.0f, 1.0f);
+    float v = Clamp((world.y - bounds.y) / bounds.height, 0.0f, 1.0f);
+    return (Vector2){ r.x + u * r.width, r.y + v * r.height };
+}
+
+// Minimapa corporal (biossensor): silhueta do corpo gerada UMA vez a partir da
+// occupancy grid de colisão (não relê a imagem 1254x1254 por frame). Textura de
+// vida útil única do app; reconstruída se invalidada.
+static Texture2D gMiniBodyTex = { 0 };
+static bool gMiniBodyReady = false;
+static void BuildBodyMinimap(void)
+{
+    Rectangle b = MapBody_WorldBounds();
+    int TW = 64;
+    int TH = (int)(TW * (b.height / b.width) + 0.5f);
+    if (TH < 8) TH = 8;
+    if (TH > 256) TH = 256;
+    Image img = GenImageColor(TW, TH, BLANK);
+    for (int y = 0; y < TH; y++)
+        for (int x = 0; x < TW; x++)
+        {
+            float wx = b.x + (x + 0.5f) / TW * b.width;
+            float wy = b.y + (y + 0.5f) / TH * b.height;
+            if (!MapBody_Contains((Vector2){ wx, wy })) continue;
+            // realça a membrana (borda) testando os 4 vizinhos no espaço do mundo
+            float dx = b.width / TW, dy = b.height / TH;
+            bool edge = !MapBody_Contains((Vector2){ wx - dx, wy }) || !MapBody_Contains((Vector2){ wx + dx, wy }) ||
+                        !MapBody_Contains((Vector2){ wx, wy - dy }) || !MapBody_Contains((Vector2){ wx, wy + dy });
+            ImageDrawPixel(&img, x, y, edge ? (Color){ 196, 96, 110, 255 } : (Color){ 116, 44, 56, 224 });
+        }
+    if (gMiniBodyReady && gMiniBodyTex.id != 0) UnloadTexture(gMiniBodyTex);
+    gMiniBodyTex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    gMiniBodyReady = true;
+}
+
+// Libera a textura do biossensor no encerramento (evita vazamento de GPU). O
+// loop principal chama isto antes de fechar a janela.
+void UnloadGameplayResources(void)
+{
+    if (gMiniBodyReady && gMiniBodyTex.id != 0)
+    {
+        UnloadTexture(gMiniBodyTex);
+        gMiniBodyTex = (Texture2D){ 0 };
+        gMiniBodyReady = false;
+    }
 }
 
 void DrawHUD(GameState *game, Font font)
@@ -373,75 +414,58 @@ void DrawHUD(GameState *game, Font font)
         }
     }
 
-    // E. RADAR ESPACIAL DENTRO DO HUD
-    Vector2 radarCenter = { 1195.0f, 85.0f };
-    float radarRadius = 65.0f;
-    float radarRange = 1200.0f; 
-    
-    DrawCircleV(radarCenter, radarRadius, Fade((Color){ 10, 8, 22, 255 }, 0.65f));
-    
-    Rectangle radarFrame = { radarCenter.x - radarRadius - 5, radarCenter.y - radarRadius - 5, radarRadius * 2 + 10, radarRadius * 2 + 10 };
-    DrawRectangleLinesEx(radarFrame, 1.0f, Fade(THEME_COLOR_MAIN, 0.3f));
-    float len = 6.0f;
-    DrawLineEx((Vector2){ radarFrame.x, radarFrame.y }, (Vector2){ radarFrame.x + len, radarFrame.y }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x, radarFrame.y }, (Vector2){ radarFrame.x, radarFrame.y + len }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x + radarFrame.width, radarFrame.y }, (Vector2){ radarFrame.x + radarFrame.width - len, radarFrame.y }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x + radarFrame.width, radarFrame.y }, (Vector2){ radarFrame.x + radarFrame.width, radarFrame.y + len }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x, radarFrame.y + radarFrame.height }, (Vector2){ radarFrame.x + len, radarFrame.y + radarFrame.height }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x, radarFrame.y + radarFrame.height }, (Vector2){ radarFrame.x, radarFrame.y + radarFrame.height - len }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x + radarFrame.width, radarFrame.y + radarFrame.height }, (Vector2){ radarFrame.x + radarFrame.width - len, radarFrame.y + radarFrame.height }, 1.5f, THEME_COLOR_MAIN);
-    DrawLineEx((Vector2){ radarFrame.x + radarFrame.width, radarFrame.y + radarFrame.height }, (Vector2){ radarFrame.x + radarFrame.width, radarFrame.y + radarFrame.height - len }, 1.5f, THEME_COLOR_MAIN);
+    // E. BIOSSENSOR CORPORAL — minimapa no formato do corpo humano
+    if (!gMiniBodyReady) BuildBodyMinimap();
+    Rectangle miBounds = MapBody_WorldBounds();
+    float miH = 128.0f;
+    float miW = miH * (miBounds.width / miBounds.height);
+    Vector2 miCenter = { 1212.0f, 92.0f };
+    Rectangle miRect  = { miCenter.x - miW * 0.5f, miCenter.y - miH * 0.5f, miW, miH };
+    Rectangle miPanel = { miRect.x - 12.0f, miRect.y - 12.0f, miRect.width + 24.0f, miRect.height + 24.0f };
 
-    DrawCircleLines(radarCenter.x, radarCenter.y, radarRadius, THEME_COLOR_MAIN);
-    DrawCircleLines(radarCenter.x, radarCenter.y, radarRadius * 0.66f, Fade(THEME_COLOR_MAIN, 0.25f));
-    DrawCircleLines(radarCenter.x, radarCenter.y, radarRadius * 0.33f, Fade(THEME_COLOR_MAIN, 0.15f));
-    
-    DrawLineV((Vector2){ radarCenter.x - radarRadius, radarCenter.y }, (Vector2){ radarCenter.x + radarRadius, radarCenter.y }, Fade(THEME_COLOR_MAIN, 0.2f));
-    DrawLineV((Vector2){ radarCenter.x, radarCenter.y - radarRadius }, (Vector2){ radarCenter.x, radarCenter.y + radarRadius }, Fade(THEME_COLOR_MAIN, 0.2f));
-    
-    float sweepTime = (float)GetTime() * 3.0f;
-    Vector2 sweepEnd = {
-        radarCenter.x + cosf(sweepTime) * radarRadius,
-        radarCenter.y + sinf(sweepTime) * radarRadius
-    };
-    DrawLineEx(radarCenter, sweepEnd, 1.5f, Fade(THEME_COLOR_MAIN, 0.5f));
+    DrawRectangleRounded(miPanel, 0.14f, 6, Fade((Color){ 10, 8, 22, 255 }, 0.72f));
+    DrawRectangleRoundedLines(miPanel, 0.14f, 6, Fade(THEME_COLOR_MAIN, 0.32f));
+    float cl = 7.0f;
+    DrawLineEx((Vector2){ miPanel.x, miPanel.y }, (Vector2){ miPanel.x + cl, miPanel.y }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x, miPanel.y }, (Vector2){ miPanel.x, miPanel.y + cl }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x + miPanel.width, miPanel.y }, (Vector2){ miPanel.x + miPanel.width - cl, miPanel.y }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x + miPanel.width, miPanel.y }, (Vector2){ miPanel.x + miPanel.width, miPanel.y + cl }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x, miPanel.y + miPanel.height }, (Vector2){ miPanel.x + cl, miPanel.y + miPanel.height }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x, miPanel.y + miPanel.height }, (Vector2){ miPanel.x, miPanel.y + miPanel.height - cl }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x + miPanel.width, miPanel.y + miPanel.height }, (Vector2){ miPanel.x + miPanel.width - cl, miPanel.y + miPanel.height }, 1.5f, THEME_COLOR_MAIN);
+    DrawLineEx((Vector2){ miPanel.x + miPanel.width, miPanel.y + miPanel.height }, (Vector2){ miPanel.x + miPanel.width, miPanel.y + miPanel.height - cl }, 1.5f, THEME_COLOR_MAIN);
 
-    // RADAR GLOBAL: mapeia a arena inteira (0..MAP) para um quadrado inscrito no
-    // círculo do radar, então TODOS os inimigos aparecem, mesmo muito distantes.
-    float radarHalf = radarRadius * 0.70f; // metade do lado do quadrado inscrito
-    (void)radarRange;
+    // Silhueta do corpo (textura única) + leve linha de varredura
+    if (gMiniBodyReady && gMiniBodyTex.id != 0)
+        DrawTexturePro(gMiniBodyTex, (Rectangle){ 0, 0, (float)gMiniBodyTex.width, (float)gMiniBodyTex.height },
+                       miRect, (Vector2){ 0, 0 }, 0.0f, Fade(WHITE, 0.92f));
+    float scan = miRect.y + (0.5f + 0.5f * sinf((float)GetTime() * 1.4f)) * miRect.height;
+    DrawLineEx((Vector2){ miRect.x, scan }, (Vector2){ miRect.x + miRect.width, scan }, 1.0f, Fade(THEME_COLOR_MAIN, 0.18f));
 
-    // Power-ups
+    // Marcadores normalizados sobre a silhueta corporal
     for (int i = 0; i < MAX_POWERUPS; i++)
-    {
         if (game->powerUps[i].active)
-            DrawCircleV(WorldToRadar(game->powerUps[i].position, radarCenter, radarHalf), 2.0f, YELLOW);
-    }
+            DrawCircleV(WorldToMini(game->powerUps[i].position, miBounds, miRect), 2.0f, YELLOW);
 
-    // Núcleos de Infecção do escudo do chefe (marcador ciano-claro)
     for (int i = 0; i < MAX_CORES; i++)
-    {
         if (game->cores[i].active)
         {
-            Vector2 d = WorldToRadar(game->cores[i].position, radarCenter, radarHalf);
-            DrawCircleV(d, 3.5f, (Color){ 120, 230, 255, 255 });
+            Vector2 d = WorldToMini(game->cores[i].position, miBounds, miRect);
+            DrawCircleV(d, 3.0f, (Color){ 120, 230, 255, 255 });
             DrawCircleLines((int)d.x, (int)d.y, 5.0f, Fade((Color){ 120, 230, 255, 255 }, 0.6f));
         }
-    }
 
-    // Inimigos — chefe/minichefe com marcador especial (maior e pulsante)
     for (int i = 0; i < MAX_ENEMIES; i++)
     {
         if (!game->enemies[i].active) continue;
-        Vector2 d = WorldToRadar(game->enemies[i].position, radarCenter, radarHalf);
+        Vector2 d = WorldToMini(game->enemies[i].position, miBounds, miRect);
         EnemyTier tier = game->enemies[i].tier;
         if (tier == TIER_3_BOSS || tier == TIER_MINIBOSS)
         {
-            float pr = (tier == TIER_3_BOSS) ? 6.0f : 4.5f;
-            float pp = pr + sinf((float)GetTime() * 6.0f) * 1.2f;
+            float pr = (tier == TIER_3_BOSS) ? 5.0f : 4.0f;
             Color bc = (tier == TIER_3_BOSS) ? (Color){ 255, 40, 60, 255 } : (Color){ 255, 140, 40, 255 };
             DrawCircleV(d, pr, bc);
-            DrawCircleLines((int)d.x, (int)d.y, pp + 2.0f, Fade(bc, 0.6f));
+            DrawCircleLines((int)d.x, (int)d.y, pr + 2.0f + sinf((float)GetTime() * 6.0f) * 1.2f, Fade(bc, 0.6f));
         }
         else
         {
@@ -450,13 +474,15 @@ void DrawHUD(GameState *game, Font font)
         }
     }
 
-    // Jogador (marcador ciano pulsante na sua posição real na arena)
-    Vector2 pdot = WorldToRadar(game->player.position, radarCenter, radarHalf);
+    Vector2 pdot = WorldToMini(game->player.position, miBounds, miRect);
     float pPulse = 3.0f + sinf((float)GetTime() * 6.0f) * 0.8f;
     DrawCircleV(pdot, pPulse, SKYBLUE);
     DrawCircleLines((int)pdot.x, (int)pdot.y, pPulse + 2.0f, Fade(SKYBLUE, 0.6f));
 
-    DrawTextEx(font, "BIOSSENSOR (ARENA)", (Vector2){ radarCenter.x - 52.0f, radarCenter.y + radarRadius + 8.0f }, 11.0f, 1.0f, GRAY);
+    Vector2 lblSz = MeasureTextEx(font, "BIOSSENSOR", 11.0f, 1.0f);
+    DrawTextEx(font, "BIOSSENSOR",
+               (Vector2){ miPanel.x + (miPanel.width - lblSz.x) * 0.5f, miPanel.y + miPanel.height + 4.0f },
+               11.0f, 1.0f, Fade(THEME_COLOR_MAIN, 0.8f));
     
     if (game->saveLoaded)
     {
@@ -619,32 +645,55 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
             float destSize = (enemy->tier == TIER_3_BOSS) ? 140.0f
                            : (enemy->tier == TIER_MINIBOSS) ? 90.0f : 45.0f;
             Vector2 renderPos = enemy->position;
-            
+
+            // ANIMAÇÃO PROCEDURAL (Etapa 5) — squash/stretch, bobbing, inclinação,
+            // antecipação/recuo, flash de dano e morte. Tudo baseado em TEMPO/ESTADO
+            // (velSmooth/animTime/attackAnim/spawnAnim), nunca em random por frame.
+            float t = (float)GetTime();
+            float spd = Vector2Length(enemy->velSmooth);
+            float spdN = spd / (enemy->speed + 1.0f);
+            if (spdN > 1.0f) spdN = 1.0f;
+
             float squashFactor = 1.0f;
             float scale = 1.0f;
             float rotation = 0.0f;
             float alpha = 1.0f;
-            
-            if (enemy->state == HURT)
-            {
-                float intensity = (enemy->cooldownTimer / 0.25f) * 6.0f;
-                renderPos.x += GetRandomValue(-intensity, intensity);
-                renderPos.y += GetRandomValue(-intensity, intensity);
-                
-                float t = enemy->cooldownTimer / 0.25f;
-                squashFactor = 1.0f + sinf(t * PI * 4.0f) * 0.18f;
-            }
-            else if (enemy->state == DEATH)
+
+            if (enemy->state == DEATH)
             {
                 float deathPct = enemy->cooldownTimer / 0.5f;
                 if (deathPct < 0.0f) deathPct = 0.0f;
                 if (deathPct > 1.0f) deathPct = 1.0f;
-                
-                scale = deathPct;
-                rotation = (1.0f - deathPct) * 360.0f;
-                alpha = deathPct;
+                scale = deathPct;                       // encolhe
+                rotation = (1.0f - deathPct) * 360.0f;  // gira ao dissolver
+                alpha = deathPct;                       // some
+                squashFactor = 0.7f + deathPct * 0.3f;
             }
-            
+            else
+            {
+                // "Pop-in" ao surgir.
+                scale = 0.45f + 0.55f * enemy->spawnAnim;
+                // Respiração + stretch ao mover + antecipação(+)/recuo(-) do ataque.
+                squashFactor = 1.0f + sinf(enemy->animTime * 4.0f) * 0.04f
+                             + spdN * 0.10f + enemy->attackAnim * 0.16f;
+                // Bobbing vertical (mais intenso em movimento).
+                renderPos.y += sinf(enemy->animTime * (6.0f + spdN * 8.0f)) * (2.0f + spdN * 6.0f);
+                // Inclinação na direção do movimento horizontal.
+                rotation += Clamp(enemy->velSmooth.x * 0.02f, -14.0f, 14.0f);
+                // Flash/tremor de dano DETERMINÍSTICO (senoidal, não aleatório).
+                if (enemy->state == HURT)
+                {
+                    float k = enemy->cooldownTimer / 0.25f;
+                    k = Clamp(k, 0.0f, 1.0f);
+                    renderPos.x += sinf(t * 60.0f) * 6.0f * k;
+                    renderPos.y += cosf(t * 70.0f) * 4.0f * k;
+                    squashFactor += sinf(k * PI * 4.0f) * 0.18f; // pop de impacto
+                }
+                // Pulso de fase do chefe (mais "raivoso" nas fases finais).
+                if (enemy->tier == TIER_3_BOSS)
+                    scale *= 1.0f + 0.05f * (float)enemy->aiPhase * (0.5f + 0.5f * sinf(t * (3.0f + enemy->aiPhase)));
+            }
+
             float currentDestSize = destSize * scale;
 
             DrawEnemyModel(enemy, renderPos, currentDestSize, rotation, squashFactor, alpha);
@@ -753,7 +802,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
 
             if (p->type == PROJ_PLAYER_BFG) {
                 srcSize = 30.0f;
-                DrawCircleGradient((Vector2){ p->position.x, p->position.y }, srcSize, pCol, BLANK);
+                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize, pCol, BLANK);
                 DrawCircleLines(p->position.x, p->position.y, srcSize, wpnSec);
             } else if (p->type == PROJ_PLAYER_GRENADE) {
                 srcSize = 15.0f;
@@ -824,7 +873,9 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
     if (hpPct < 0.25f && g_assets.shdLowHP.id != 0) {
         BeginShaderMode(g_assets.shdLowHP);
         float time = (float)GetTime();
-        float res[2] = { (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+        // Resolução do FRAMEBUFFER atual (alvo SSAA pode ser 2x), para o vinheta
+        // usar gl_FragCoord/resolution corretamente (0..1).
+        float res[2] = { (float)rlGetFramebufferWidth(), (float)rlGetFramebufferHeight() };
         SetShaderValue(g_assets.shdLowHP, g_assets.shdLowHPTimeLoc, &time, SHADER_UNIFORM_FLOAT);
         SetShaderValue(g_assets.shdLowHP, g_assets.shdLowHPResLoc, res, SHADER_UNIFORM_VEC2);
         
@@ -845,7 +896,9 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
     }
 }
 
-void DrawTelaTutorial(GameState *game, Font font)
+// Mundo do tutorial (espaço da câmera): cenário da seringa + entidades. É o que
+// vai para a textura virtual (com shader/letterbox) e congela atrás do pause.
+void DrawTutorialWorld(GameState *game, Font font)
 {
     ClearBackground(BLACK);
     BeginMode2D(game->camera);
@@ -880,11 +933,13 @@ void DrawTelaTutorial(GameState *game, Font font)
             
             if (e->state == HURT)
             {
-                float intensity = (e->cooldownTimer / 0.25f) * 6.0f;
-                renderPos.x += GetRandomValue(-intensity, intensity);
-                renderPos.y += GetRandomValue(-intensity, intensity);
-                
+                // Tremor DETERMINÍSTICO (senoidal), não aleatório por quadro:
+                // evita o "chiado" visual e mantém o feedback de impacto legível.
                 float t = e->cooldownTimer / 0.25f;
+                float k = Clamp(t, 0.0f, 1.0f);
+                float gt = (float)GetTime();
+                renderPos.x += sinf(gt * 60.0f) * 6.0f * k;
+                renderPos.y += cosf(gt * 70.0f) * 4.0f * k;
                 squashX = 1.0f + sinf(t * PI * 4.0f) * 0.15f;
                 squashY = 1.0f - sinf(t * PI * 4.0f) * 0.15f;
             }
@@ -1037,7 +1092,9 @@ void DrawTelaTutorial(GameState *game, Font font)
     if (hpPct < 0.25f && g_assets.shdLowHP.id != 0) {
         BeginShaderMode(g_assets.shdLowHP);
         float time = (float)GetTime();
-        float res[2] = { (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+        // Resolução do FRAMEBUFFER atual (alvo SSAA pode ser 2x), para o vinheta
+        // usar gl_FragCoord/resolution corretamente (0..1).
+        float res[2] = { (float)rlGetFramebufferWidth(), (float)rlGetFramebufferHeight() };
         SetShaderValue(g_assets.shdLowHP, g_assets.shdLowHPTimeLoc, &time, SHADER_UNIFORM_FLOAT);
         SetShaderValue(g_assets.shdLowHP, g_assets.shdLowHPResLoc, res, SHADER_UNIFORM_VEC2);
 
@@ -1051,7 +1108,14 @@ void DrawTelaTutorial(GameState *game, Font font)
         float a = (game->hurtFlashTimer / 0.35f) * 0.4f;
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(RED, a));
     }
+}
 
+// HUD/overlay do tutorial (espaço de tela). Separado do mundo para que o mundo
+// possa ir para a textura virtual (com letterbox) e congelar corretamente atrás
+// do menu de pausa, SEM redesenhar a cena duas vezes e SEM um ClearBackground
+// que apagava o blit já renderizado (corrige fundo de pausa + desperdício).
+void DrawTutorialHUD(GameState *game, Font font)
+{
     char stepStr[32];
     sprintf(stepStr, "PASSO %d/3", game->tutorialStep + 1);
     DrawSciFiBox((Rectangle){ 1050, 20, 210, 45 }, (Color){ 0, 200, 100, 255 });
@@ -1062,10 +1126,6 @@ void DrawTelaTutorial(GameState *game, Font font)
     {
         DrawRectangleRounded((Rectangle){ 80, 580, 1120, 120 }, 0.08f, 6, Fade((Color){ 6, 18, 12, 255 }, 0.92f));
         DrawRectangleRoundedLines((Rectangle){ 80, 580, 1120, 120 }, 0.08f, 6, (Color){ 0, 200, 100, 255 });
-
-        DrawCircle(120, 640, 22, (Color){ 0, 150, 200, 255 });
-        DrawCircleLines(120, 640, 22, THEME_COLOR_MAIN);
-        DrawTextEx(font, "Ab", (Vector2){ 108, 630 }, 16.0f, 1.0f, WHITE);
 
         const char *fullL1 = "";
         const char *fullL2 = "";
@@ -1080,6 +1140,13 @@ void DrawTelaTutorial(GameState *game, Font font)
         int len1 = strlen(fullL1);
         int len2 = strlen(fullL2);
         int len3 = strlen(fullL3);
+
+        // Doutor assistente animado (substitui o antigo círculo "Ab"): fala
+        // enquanto o texto é digitado e reage no início de cada fala.
+        int totalLen = len1 + len2 + len3;
+        bool talking = (charLimit < totalLen);
+        float reactT = (charLimit < 8) ? 1.0f : 0.0f;
+        DrawTutorialDoctor((Vector2){ 122, 640 }, 30.0f, (float)GetTime(), talking, reactT);
 
         if (charLimit <= len1)
         {
@@ -1123,4 +1190,12 @@ void DrawTelaTutorial(GameState *game, Font font)
     sprintf(hpBuf, "%d/%d HP", game->player.hp, game->player.maxHp);
     Vector2 hpSz = MeasureTextEx(font, hpBuf, 12.0f, 1.0f);
     DrawTextEx(font, hpBuf, (Vector2){ 220.0f - hpSz.x, 44.0f }, 12.0f, 1.0f, WHITE);
+}
+
+// Compatibilidade: desenha a cena do tutorial completa (mundo + HUD) numa só
+// chamada. O loop principal usa DrawTutorialWorld/DrawTutorialHUD separadamente.
+void DrawTelaTutorial(GameState *game, Font font)
+{
+    DrawTutorialWorld(game, font);
+    DrawTutorialHUD(game, font);
 }

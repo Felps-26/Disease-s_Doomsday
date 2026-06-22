@@ -26,13 +26,21 @@ typedef struct Projectile
     int damage;
     Rectangle hitbox;
     bool isPlayerProjectile;
-    float lifeTime; // Util para granada e bfg
-    
+    float lifeTime; // Proteção SECUNDÁRIA (granada/BFG e backstop dos rifles)
+    Vector2 origin; // Posição de disparo (mede a distância percorrida)
+    float maxRange; // Alcance máximo em px; <= 0 = sem limite por alcance
 } Projectile;
 
 // Forward declaration of GameState
 struct GameState;
 
 void SpawnProjectile(struct GameState *game, Vector2 pos, Vector2 target, ProjectileType type, int dmg);
+
+// Avança o projétil por dt: move, atualiza a hitbox e aplica os limites de
+// Fase 5 — ALCANCE percorrido (maxRange) e saída para o VOID do corpo (rifles
+// retos do jogador). Retorna true se o projétil continua ativo; false se
+// estourou alcance/void (e marca active=false). Independente de GameState e da
+// raylib gráfica (apenas raymath inline + MapBody_Contains), portanto testável.
+bool Projectile_Advance(Projectile *p, float dt);
 
 #endif // PROJECTILES_H

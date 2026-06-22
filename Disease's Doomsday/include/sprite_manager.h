@@ -63,6 +63,12 @@ typedef enum SpriteID
 
     // ---- UI (ícones de arma/item para HUD e hotbar) ----
     SPR_UI_ICONS,
+    SPR_UI_MENU_BANNER,       // Banner/hero do menu principal (arte larga; legado)
+
+    // ---- Elementos do MENU recortados da arte original (Assets/Sprites/UI/Menu) ----
+    // (os micróbios do menu agora vêm do CATÁLOGO de organismos — ver abaixo.)
+    SPR_MENU_SYRINGE,
+    SPR_MENU_BIOHAZARD,
 
     SPRITE_COUNT
 } SpriteID;
@@ -72,6 +78,20 @@ void LoadSprites(void);
 
 // Descarrega todas as texturas carregadas.
 void UnloadSprites(void);
+
+// ---- Glifos do título do menu (recortados da arte; carregados uma única vez) ----
+// Quantidade de glifos disponíveis (0 se não houver PNGs/arte).
+int MenuTitleGlyphCount(void);
+// Textura do glifo i (id == 0 se indisponível).
+Texture2D GetTitleGlyph(int i);
+// true se TODOS os glifos do título foram carregados com sucesso.
+bool MenuTitleGlyphsReady(void);
+
+// ---- Catálogo de ORGANISMOS do menu (18 recortes de virus_bacterias.png) ----
+// Carregados uma única vez junto com os sprites; descarregados no encerramento.
+int MenuOrganismCount(void);          // total de organismos do catálogo
+Texture2D GetMenuOrganism(int i);     // textura do organismo i (id 0 se ausente)
+bool MenuOrganismsReady(void);        // true se TODOS carregaram
 
 // true se a textura do sprite foi carregada com sucesso (PNG presente e válido).
 bool SpriteAvailable(SpriteID id);

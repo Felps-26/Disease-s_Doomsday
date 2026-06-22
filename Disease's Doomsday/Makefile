@@ -39,6 +39,8 @@ SRCS = \
   Assets/@models/player_model.c \
   Assets/@models/enemy_model.c \
   Assets/@models/weapons_model.c \
+  Assets/@models/doctor_model.c \
+  Assets/@models/cosmetics.c \
   Assets/Maps/map_seringa.c \
   Assets/Maps/map_body.c
 
@@ -64,7 +66,7 @@ else
 endif
 
 # ---------------------------------------------------------------------------
-.PHONY: all run clean
+.PHONY: all run clean test
 all: $(TARGET)
 
 $(TARGET): $(SRCS)
@@ -74,6 +76,20 @@ $(TARGET): $(SRCS)
 run: $(TARGET)
 	./$(TARGET)
 
+# Teste de ACEITACAO (Etapa 2): simula muitos spawns de chefe em posicoes
+# aleatorias e valida que TODOS os Nucleos de Infeccao nascem dentro do corpo e
+# sao alcancaveis por melee. Usa stubs de desenho (nao precisa de janela/X11).
+# Compile com AddressSanitizer adicionando: make test CC="gcc -fsanitize=address,undefined"
+test:
+	$(CC) -O2 $(CFLAGS) tests/test_core_spawns.c Assets/Maps/map_body.c -o test_core_spawns -lm
+	./test_core_spawns
+	$(CC) -O2 $(CFLAGS) tests/test_map_body.c Assets/Maps/map_body.c -o test_map_body -lm
+	./test_map_body
+	$(CC) -O2 $(CFLAGS) tests/test_rifle_range.c src/entities/projectiles.c Assets/Maps/map_body.c -o test_rifle_range -lm
+	./test_rifle_range
+	$(CC) -O2 $(CFLAGS) tests/test_cosmetics.c Assets/@models/cosmetics.c -o test_cosmetics -lm
+	./test_cosmetics
+
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) test_core_spawns test_map_body test_rifle_range test_cosmetics
 	@echo "[OK] Limpeza concluida."
