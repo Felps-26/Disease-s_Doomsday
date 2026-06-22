@@ -14,7 +14,8 @@ typedef enum ProjectileType
     PROJ_PLAYER_GRENADE,    // Granada Macrófago
     PROJ_PLAYER_BFG,        // Vacina BFG
     PROJ_PLAYER_PHAGE,      // Rifle de Bacteriófagos (Mundo 1): bônus vs. bactérias
-    PROJ_PLAYER_VACCINE     // Rifle de Vacina (Mundo 2): bônus vs. vírus / escudo
+    PROJ_PLAYER_VACCINE,    // Rifle de Vacina (Mundo 2): bônus vs. vírus / escudo
+    PROJ_VIRAL_SPORE        // Material viral disparado pelos vírus atirador/elite/chefe
 } ProjectileType;
 
 typedef struct Projectile

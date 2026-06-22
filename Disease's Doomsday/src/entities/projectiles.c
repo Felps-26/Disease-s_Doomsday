@@ -36,6 +36,7 @@ void SpawnProjectile(GameState *game, Vector2 pos, Vector2 target, ProjectileTyp
         {
             case PROJ_ACID_ARC:       speed = 220.0f; break;
             case PROJ_BULLET_SPREAD:  speed = 350.0f; break;
+            case PROJ_VIRAL_SPORE:    speed = 330.0f; break; // material viral (atirador/elite/chefe)
             case PROJ_VOID_BOLT:      speed = 400.0f; break;
             case PROJ_BOSS_BULLET:    speed = 300.0f; break;
             case PROJ_PLAYER_RIFLE:   // rifles retos do jogador: alcance limitado

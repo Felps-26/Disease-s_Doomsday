@@ -28,6 +28,7 @@ Color Fade(Color c, float a) { (void)a; return c; }
 int GetRandomValue(int mn, int mx) { return mn + rand() % (mx - mn + 1); }
 bool SpriteAvailable(int id) { (void)id; return false; }
 void DrawSpriteCentered(int id, Vector2 c, Vector2 s, float r, Color col) { (void)id;(void)c;(void)s;(void)r;(void)col; }
+Texture2D GetSprite(int id) { (void)id; return (Texture2D){0}; }
 
 static float frand(float a, float b){ return a + (b-a)*((float)rand()/(float)RAND_MAX); }
 static float dist(Vector2 a, Vector2 b){ return sqrtf((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)); }
@@ -159,7 +160,92 @@ int main(void)
         if (outOfBounds || normViol || !safeInside || !boundsInWorld || !safeDeep) fail++;
     }
 
-    printf("%s\n", fail==0 ? "RESULTADO: PASSOU (colisao/margem/projecao/conectividade/minimapa)"
+    // ------------------------------------------------------------------
+    // 5) REGIÕES ALCANÇÁVEIS (a partir do centro seguro): cabeça, pescoço,
+    //    tórax, abdome, pelve, pernas e braços. O corredor do pescoço conecta
+    //    cabeça e tronco (ambas no mesmo componente). Os CENTROS LÓGICOS dos
+    //    órgãos (pulmão/coração/intestino) são caminháveis — órgãos são apenas
+    //    arte e NÃO bloqueiam. Anchors validados contra a máscara nova.
+    // ------------------------------------------------------------------
+    {
+        enum { STEP = 25, COLS = MAP_WIDTH / STEP, ROWS = MAP_HEIGHT / STEP, CELLS = COLS * ROWS };
+        static unsigned char pass[CELLS], seen[CELLS]; static int q[CELLS];
+        Vector2 safe = MapBody_GetSafeCenter();
+        for (int y = 0; y < ROWS; y++) for (int x = 0; x < COLS; x++)
+        { int i = y*COLS+x; Vector2 p = { x*STEP+STEP*0.5f, y*STEP+STEP*0.5f };
+          pass[i] = MapBody_ContainsWithMargin(p, BODY_PLAYER_RADIUS); seen[i] = 0; }
+        int sc = ((int)(safe.y/STEP))*COLS + (int)(safe.x/STEP);
+        int head = 0, tail = 0; if (pass[sc]) { q[tail++] = sc; seen[sc] = 1; }
+        while (head < tail) { int i=q[head++],x=i%COLS,y=i/COLS;
+            int nx[4]={x-1,x+1,x,x}, ny[4]={y,y,y-1,y+1};
+            for (int d=0;d<4;d++){ if(nx[d]<0||nx[d]>=COLS||ny[d]<0||ny[d]>=ROWS)continue;
+                int n=ny[d]*COLS+nx[d]; if(pass[n]&&!seen[n]){seen[n]=1;q[tail++]=n;} } }
+        #define REACH(WX,WY) (pass[((int)((WY)/STEP))*COLS+(int)((WX)/STEP)] && seen[((int)((WY)/STEP))*COLS+(int)((WX)/STEP)])
+        struct { const char *n; float x, y; } A[] = {
+            {"cabeca",2000,420},{"pescoco",2000,820},{"torax",2000,1300},
+            {"abdome",2000,2050},{"pelve",2000,2700},{"pernaL",1820,3300},{"pernaR",2180,3300},
+            {"pulmao",2000,1320},{"coracao",2000,1660},{"intestino",2000,2180} };
+        int nA = (int)(sizeof(A)/sizeof(A[0])), okA = 0;
+        for (int a=0;a<nA;a++) { if (REACH(A[a].x,A[a].y)) okA++; else printf("   inalcancavel: %s (%.0f,%.0f)\n",A[a].n,A[a].x,A[a].y); }
+        int armL=0, armR=0;
+        for (int y=1800;y<=2600&&!armL;y+=25) for (int x=950;x<=1350;x+=25) if (REACH((float)x,(float)y)){armL=1;break;}
+        for (int y=1800;y<=2600&&!armR;y+=25) for (int x=2650;x<=3050;x+=25) if (REACH((float)x,(float)y)){armR=1;break;}
+        if (!armL) printf("   braco esquerdo inalcancavel\n");
+        if (!armR) printf("   braco direito inalcancavel\n");
+        printf("5) Regioes: anchors %d/%d  bracoL=%d bracoR=%d\n", okA, nA, armL, armR);
+        if (okA != nA || !armL || !armR) fail++;
+        #undef REACH
+    }
+
+    // ------------------------------------------------------------------
+    // 6) ÓRGÃOS NÃO CRIAM PAREDES: a silhueta é SÓLIDA — não há bolsões
+    //    internos bloqueados (todo void interno foi preenchido no bake). Faz
+    //    flood do "não-corpo" a partir da borda; nenhuma célula não-corpo pode
+    //    ficar presa dentro do corpo.
+    // ------------------------------------------------------------------
+    {
+        enum { STEP = 25, COLS = MAP_WIDTH / STEP, ROWS = MAP_HEIGHT / STEP, CELLS = COLS * ROWS };
+        static unsigned char inside[CELLS], es[CELLS]; static int q[CELLS];
+        for (int y=0;y<ROWS;y++) for (int x=0;x<COLS;x++)
+        { int i=y*COLS+x; Vector2 p={x*STEP+STEP*0.5f,y*STEP+STEP*0.5f}; inside[i]=MapBody_Contains(p); es[i]=0; }
+        int head=0,tail=0;
+        for (int x=0;x<COLS;x++){ int a=x,b=(ROWS-1)*COLS+x; if(!inside[a]&&!es[a]){es[a]=1;q[tail++]=a;} if(!inside[b]&&!es[b]){es[b]=1;q[tail++]=b;} }
+        for (int y=0;y<ROWS;y++){ int a=y*COLS,b=y*COLS+COLS-1; if(!inside[a]&&!es[a]){es[a]=1;q[tail++]=a;} if(!inside[b]&&!es[b]){es[b]=1;q[tail++]=b;} }
+        while (head<tail){ int i=q[head++],x=i%COLS,y=i/COLS;
+            int nx[4]={x-1,x+1,x,x},ny[4]={y,y,y-1,y+1};
+            for(int d=0;d<4;d++){ if(nx[d]<0||nx[d]>=COLS||ny[d]<0||ny[d]>=ROWS)continue; int n=ny[d]*COLS+nx[d]; if(!inside[n]&&!es[n]){es[n]=1;q[tail++]=n;} } }
+        int holes=0; for (int i=0;i<CELLS;i++) if(!inside[i]&&!es[i]) holes++;
+        printf("6) Buracos internos (orgaos bloqueando): %d\n", holes);
+        if (holes != 0) fail++;
+    }
+
+    // ------------------------------------------------------------------
+    // 7) FORA DA SILHUETA É BLOQUEADO (não dá para sair do corpo).
+    // ------------------------------------------------------------------
+    {
+        Vector2 outs[] = { {200,200},{3800,200},{200,3800},{3800,3800},{2000,40},{3700,2000},{300,2000} };
+        int leaks = 0;
+        for (int i=0;i<(int)(sizeof(outs)/sizeof(outs[0]));i++) if (MapBody_Contains(outs[i])) leaks++;
+        printf("7) Externos bloqueados: vazamentos=%d\n", leaks);
+        if (leaks) fail++;
+    }
+
+    // ------------------------------------------------------------------
+    // 8) SPAWNS PERMANECEM DENTRO DO CORPO (random e determinístico c/ margem).
+    // ------------------------------------------------------------------
+    {
+        srand(99);
+        Vector2 safe = MapBody_GetSafeCenter();
+        int outR = 0, outF = 0;
+        for (int t=0;t<5000;t++){ Vector2 p = MapBody_RandomPointInside(safe, 300.0f); if (!MapBody_Contains(p)) outR++; }
+        for (int t=0;t<3000;t++){ Vector2 pref = { frand(0,MAP_WIDTH), frand(0,MAP_HEIGHT) };
+            Vector2 sp = MapBody_FindSpawnPoint(pref, CORE_SPAWN_MARGIN);
+            if (!MapBody_ContainsWithMargin(sp, BODY_PLAYER_RADIUS)) outF++; }
+        printf("8) Spawns: RandomPointInside fora=%d  FindSpawnPoint semMargem=%d\n", outR, outF);
+        if (outR || outF) fail++;
+    }
+
+    printf("%s\n", fail==0 ? "RESULTADO: PASSOU (colisao/margem/projecao/conectividade/minimapa/regioes/orgaos/spawns)"
                            : "RESULTADO: FALHOU");
     return fail==0 ? 0 : 1;
 }

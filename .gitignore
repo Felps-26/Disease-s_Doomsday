@@ -8,9 +8,28 @@ Disease's Doomsday/test_core_spawns
 Disease's Doomsday/test_map_body
 Disease's Doomsday/test_rifle_range
 Disease's Doomsday/test_cosmetics
+Disease's Doomsday/test_virus_waves
+
+# Ferramentas de preview compiladas (fontes em tools/*.c ficam versionadas)
+Disease's Doomsday/anatomy_preview
+Disease's Doomsday/virus_preview
+Disease's Doomsday/scene_preview
+Disease's Doomsday/screen_preview
+Disease's Doomsday/export_playable_map
+Disease's Doomsday/bg_capture
+Disease's Doomsday/bg_metric
+Disease's Doomsday/gameplay_capture
+Disease's Doomsday/bake_collision_mask
 
 # Configuracoes e progresso locais
 Disease's Doomsday/Saves/
 
-# Preview gerado pelos scripts de extracao
+# Previews/imagens geradas pelos scripts e ferramentas (nao versionar)
 Disease's Doomsday/tools/_organisms_preview.png
+Disease's Doomsday/tools/anat_*.png
+Disease's Doomsday/tools/preview_*.png
+Disease's Doomsday/tools/virus_roster.png
+Disease's Doomsday/tools/scene_virus.png
+Disease's Doomsday/tools/bg_*.png
+Disease's Doomsday/tools/gameplay_*.png
+Disease's Doomsday/tools/mask_*.png

@@ -78,7 +78,6 @@ void UpdateStateMachine(GameState *game)
 
         case SCREEN_SETTINGS:
             UpdateButtonsSettings(game, g_virtualMouse, settingsBackScreen);
-            SetMasterVolume(game->masterVolume);
             break;
 
         case SCREEN_GAMEPLAY:

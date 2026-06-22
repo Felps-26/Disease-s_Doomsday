@@ -83,10 +83,11 @@ int main(void)
     GameState game;
     memset(&game, 0, sizeof(GameState));
     game.currentScreen = SCREEN_MENU;
-    game.masterVolume = 1.0f; // Default volume
+    game.musicVolume = 1.0f;
+    game.sfxVolume = 1.0f;
     game.difficulty = DIFFICULTY_MEDIUM; // padrão antes de ler config
-    LoadPlayerConfig(&game);  // Restaura volume, skins e dificuldade (Saves/config.txt)
-    SetMasterVolume(game.masterVolume);
+    LoadPlayerConfig(&game);  // Restaura audio, skins e dificuldade (Saves/config.txt)
+    ApplySfxVolume(game.sfxVolume);
     
     GameScreen previousScreen = SCREEN_MENU;
 
@@ -103,7 +104,7 @@ int main(void)
         musicA.looping = false;
         musicB.looping = false;
         PlayMusicStream(musicA);
-        SetMusicVolume(musicA, 1.0f);
+        SetMusicVolume(musicA, game.musicVolume);
         SetMusicVolume(musicB, 0.0f);
     }
 
@@ -137,12 +138,12 @@ int main(void)
                     if (fadeProgress > 1.0f) fadeProgress = 1.0f;
                     if (fadeProgress < 0.0f) fadeProgress = 0.0f;
                     
-                    SetMusicVolume(musicA, 1.0f - fadeProgress);
-                    SetMusicVolume(musicB, fadeProgress);
+                    SetMusicVolume(musicA, (1.0f - fadeProgress) * game.musicVolume);
+                    SetMusicVolume(musicB, fadeProgress * game.musicVolume);
                 }
                 else
                 {
-                    SetMusicVolume(musicA, 1.0f);
+                    SetMusicVolume(musicA, game.musicVolume);
                     SetMusicVolume(musicB, 0.0f);
                     crossfadeActive = false;
                 }
@@ -152,7 +153,7 @@ int main(void)
                     StopMusicStream(musicA);
                     streamAPlaying = false;
                     crossfadeActive = false;
-                    SetMusicVolume(musicB, 1.0f);
+                    SetMusicVolume(musicB, game.musicVolume);
                 }
             }
             else
@@ -173,12 +174,12 @@ int main(void)
                     if (fadeProgress > 1.0f) fadeProgress = 1.0f;
                     if (fadeProgress < 0.0f) fadeProgress = 0.0f;
                     
-                    SetMusicVolume(musicB, 1.0f - fadeProgress);
-                    SetMusicVolume(musicA, fadeProgress);
+                    SetMusicVolume(musicB, (1.0f - fadeProgress) * game.musicVolume);
+                    SetMusicVolume(musicA, fadeProgress * game.musicVolume);
                 }
                 else
                 {
-                    SetMusicVolume(musicB, 1.0f);
+                    SetMusicVolume(musicB, game.musicVolume);
                     SetMusicVolume(musicA, 0.0f);
                     crossfadeActive = false;
                 }
@@ -188,7 +189,7 @@ int main(void)
                     StopMusicStream(musicB);
                     streamAPlaying = true;
                     crossfadeActive = false;
-                    SetMusicVolume(musicA, 1.0f);
+                    SetMusicVolume(musicA, game.musicVolume);
                 }
             }
         }

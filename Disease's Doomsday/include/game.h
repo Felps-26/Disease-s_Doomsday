@@ -286,8 +286,9 @@ typedef struct GameState
     // Metadados dos slots carregados na tela de seleção
     SaveSlotMeta slotsMeta[3];
     
-    // Configurações
-    float masterVolume;
+    // Configuracoes de audio independentes (persistidas em Saves/config.txt).
+    float musicVolume;
+    float sfxVolume;
 
     // ---- Estado do Tutorial (Seringa de Vacina) ----
     bool inTutorial;            // true = jogador está dentro da seringa
@@ -337,6 +338,7 @@ typedef struct GameState
     int   adminLevel;
     int   adminSus;
     bool  adminApply;         // true = aplicar os valores configurados ao começar
+    bool  debugCollision;     // overlay de depuração da colisão (admin/debug; transitório, NÃO salvo)
 
     // ---- Dificuldade ----
     int   difficulty;         // Difficulty (EASY/MEDIUM/HARD)

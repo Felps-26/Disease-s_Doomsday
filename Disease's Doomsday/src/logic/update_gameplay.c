@@ -187,28 +187,50 @@ void LoadPlayerConfig(GameState *game)
     FILE *f = fopen("Saves/config.txt", "r");
     if (f != NULL)
     {
-        float vol = 1.0f;
+        char line[512] = {0};
+        float musicVol = 1.0f, sfxVol = 1.0f;
         int skin = 0, wskin = 0, diff = DIFFICULTY_MEDIUM;
-        int got = fscanf(f, "%f %d %d %d", &vol, &skin, &wskin, &diff);
+        int consumed = 0;
+        int got = 0;
+
+        if (fgets(line, sizeof(line), f) != NULL)
+        {
+            // AUDIO2: musica, efeitos, skins e dificuldade. O formato anterior
+            // comecava por um unico float; nesse caso ele alimenta os dois canais.
+            got = sscanf(line, "AUDIO2 %f %f %d %d %d%n",
+                         &musicVol, &sfxVol, &skin, &wskin, &diff, &consumed);
+            if (got != 5)
+            {
+                float legacyVol = 1.0f;
+                got = sscanf(line, "%f %d %d %d%n", &legacyVol, &skin, &wskin, &diff, &consumed);
+                musicVol = legacyVol;
+                sfxVol = legacyVol;
+            }
+        }
+
         if (got >= 3)
         {
-            if (vol < 0.0f) vol = 0.0f;
-            if (vol > 1.0f) vol = 1.0f;
+            musicVol = Clamp(musicVol, 0.0f, 1.0f);
+            sfxVol = Clamp(sfxVol, 0.0f, 1.0f);
             if (skin < 0 || skin >= SKIN_COUNT) skin = 0;
             if (wskin < 0 || wskin >= WEAPON_SKIN_COUNT) wskin = 0;
-            game->masterVolume = vol;
+            game->musicVolume = musicVol;
+            game->sfxVolume = sfxVol;
             game->player.skinId = skin;
             game->player.weaponSkinId = wskin;
             if (got >= 4 && diff >= DIFFICULTY_EASY && diff <= DIFFICULTY_HARD)
                 game->difficulty = diff;
         }
-        // Guarda-roupa modular (append no fim da linha). Configs antigos não têm
-        // estes campos: o fscanf simplesmente falha e cada slot fica em 0 (padrão).
+
+        // Guarda-roupa modular fica no restante da mesma linha, tanto no formato
+        // legado quanto em AUDIO2.
+        const char *cursor = line + consumed;
         for (int s = 0; s < COS_SLOT_COUNT; s++)
         {
-            int v = 0;
-            if (fscanf(f, "%d", &v) == 1) game->player.cosmetics[s] = (v > 0 ? v : 0);
-            else                          game->player.cosmetics[s] = 0;
+            char *end = NULL;
+            long v = strtol(cursor, &end, 10);
+            if (end != cursor) { game->player.cosmetics[s] = (v > 0 ? (int)v : 0); cursor = end; }
+            else               { game->player.cosmetics[s] = 0; }
         }
         // Categoria "Traseiro" foi removida do jogo: ignora qualquer item
         // traseiro de saves/config antigos (mantém a largura para compat.).
@@ -223,8 +245,8 @@ void SavePlayerConfig(GameState *game)
 {
     FILE *f = fopen("Saves/config.txt", "w");
     if (f == NULL) return;
-    fprintf(f, "%f %d %d %d", game->masterVolume, game->player.skinId,
-            game->player.weaponSkinId, game->difficulty);
+    fprintf(f, "AUDIO2 %.6f %.6f %d %d %d", game->musicVolume, game->sfxVolume,
+            game->player.skinId, game->player.weaponSkinId, game->difficulty);
     // Guarda-roupa modular (mesma linha, na ordem do enum CosmeticSlot).
     for (int s = 0; s < COS_SLOT_COUNT; s++)
         fprintf(f, " %d", game->player.cosmetics[s]);
@@ -443,7 +465,8 @@ bool EnemyIsBacterial(int type)
 bool EnemyIsViral(int type)
 {
     return (type == ETYPE_SARS || type == ETYPE_DENGUE_OLD ||
-            type == ETYPE_VIRUS_MELEE || type == ETYPE_VIRUS_RANGED || type == ETYPE_VIRUS_BOSS);
+            type == ETYPE_VIRUS_MELEE || type == ETYPE_VIRUS_RANGED || type == ETYPE_VIRUS_BOSS ||
+            type == ETYPE_VIRUS_SWARM || type == ETYPE_VIRUS_ELITE);
 }
 
 // Aplica a afinidade da arma ao dano: o Rifle de Bacteriófagos é muito eficaz
@@ -488,7 +511,7 @@ int ApplyPlayerDamageToEnemy(GameState *game, Enemy *enemy, int dmg, bool isBFG)
             // "estilhaço" do capsídeo ao quebrar (+ som)
             SpawnParticleExplosion(game, enemy->position, (Color){ 150, 220, 255, 255 }, 18, 80.0f, 220.0f, 4.0f, 0.6f);
             game->screenShake = 0.3f;
-            PlaySound(g_assets.sfxEnemyHurt);
+            PlayEnemyDamageSfx(enemy->type, enemy->tier);
         }
         return dmg; // dano aplicado ao ESCUDO (não à vida)
     }
@@ -531,7 +554,7 @@ static void DetonateRNAGrenade(GameState *game, Vector2 center)
     SpawnParticleExplosion(game, center, (Color){ 120, 255, 160, 255 }, 26, 90.0f, 280.0f, 5.0f, 0.7f);
     SpawnParticleExplosion(game, center, ORANGE, 18, 60.0f, 200.0f, 4.0f, 0.5f);
     game->screenShake = 0.5f;
-    PlaySound(g_assets.sfxAttack);
+    PlaySound(g_assets.sfxGrenadeExplode);
 
     for (int i = 0; i < MAX_ENEMIES; i++)
     {
@@ -633,9 +656,9 @@ void ApplyPowerUpEffect(GameState *game, PowerUpType type)
 // ============================================================================
 void InitGame(GameState *game)
 {
-    // Preserva nome, volume, skins, dificuldade e configuração do modo admin
+    // Preserva nome, audio, skins, dificuldade e configuracao do modo admin.
     char tempName[16] = "";
-    float tempVol = 1.0f;
+    float tempMusicVol = 1.0f, tempSfxVol = 1.0f;
     int tempSkin = 0, tempWSkin = 0;
     int tempCos[COS_SLOT_COUNT] = { 0 };   // cosméticos do guarda-roupa (preferência)
     int tempDiff = DIFFICULTY_MEDIUM;
@@ -645,7 +668,8 @@ void InitGame(GameState *game)
     if (game != NULL)
     {
         snprintf(tempName, sizeof(tempName), "%s", game->player.name);
-        tempVol = game->masterVolume;
+        tempMusicVol = game->musicVolume;
+        tempSfxVol = game->sfxVolume;
         tempSkin = game->player.skinId;
         tempWSkin = game->player.weaponSkinId;
         for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
@@ -672,7 +696,8 @@ void InitGame(GameState *game)
     {
         strcpy(game->player.name, "HERO");
     }
-    game->masterVolume = tempVol;
+    game->musicVolume = tempMusicVol;
+    game->sfxVolume = tempSfxVol;
     game->player.skinId = tempSkin;
     game->player.weaponSkinId = tempWSkin;
     for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
@@ -1294,6 +1319,7 @@ void UpdateGameplay(GameState *game, float delta)
                        (Color){ 255, 210, 60, 255 }, 1.2f);
         }
         if (IsKeyPressed(KEY_LEFT_BRACKET) && game->wave > 1) game->wave--; // reduz wave
+        if (IsKeyPressed(KEY_F1)) game->debugCollision = !game->debugCollision; // overlay de colisão (debug)
         if (IsKeyPressed(KEY_H)) game->player.hp = game->player.maxHp;      // cura total
         if (IsKeyPressed(KEY_L)) game->player.xp = game->player.xpNeeded;   // sobe de nível
         if (IsKeyPressed(KEY_P)) game->player.susPoints += 50;              // +SUS
@@ -1541,6 +1567,11 @@ void UpdateGameplay(GameState *game, float delta)
 
         Enemy *enemy = &game->enemies[i];
 
+        // Comportamento do arquétipo (centralizado): a IA ramifica por `beh` em
+        // vez de números mágicos de tipo espalhados (enxame/elite têm IA própria).
+        const EnemyArchetype *arch = EnemyArchetypeFor(enemy->type);
+        EnemyBehavior beh = arch ? arch->behavior : BEHAV_MELEE;
+
         // Relógio de animação por inimigo + "pop-in" de surgimento (tempo/estado,
         // sem aleatoriedade por frame). Posição inicial p/ medir o deslocamento.
         enemy->animTime += delta;
@@ -1609,6 +1640,8 @@ void UpdateGameplay(GameState *game, float delta)
             float chance = game->diff.dodgeChance;
             if (enemy->type == 2) chance *= 0.30f;              // tanque esquiva pouco
             if (enemy->type == 1 || enemy->type == 3) chance *= 1.30f; // rápidos esquivam melhor
+            if (beh == BEHAV_SWARM) chance *= 1.25f;            // enxame ágil esquiva mais
+            if (beh == BEHAV_ELITE) chance *= 0.45f;            // elite resistente esquiva pouco
             if (enemy->tier == TIER_MINIBOSS) chance *= 0.40f;  // mini chefe esquiva pouco
             for (int p = 0; p < MAX_PROJECTILES; p++)
             {
@@ -1655,7 +1688,7 @@ void UpdateGameplay(GameState *game, float delta)
                 enemy->hp = 0;
                 enemy->state = DEATH;
                 enemy->cooldownTimer = 0.5f; // Death animation duration
-                PlaySound(g_assets.sfxEnemyHurt);
+                PlayEnemyDamageSfx(enemy->type, enemy->tier);
                 RegisterEnemyKill(game, enemy);
             }
         }
@@ -1730,26 +1763,17 @@ void UpdateGameplay(GameState *game, float delta)
                                 if (game->cores[c].active) { origin = game->cores[c].position; break; }
                         }
                         float a = (float)GetRandomValue(0, 360) * DEG2RAD;
+                        // Lacaio invocado conforme o Mundo: vírus invoca UNIDADES
+                        // MENORES (enxame); bactéria invoca bacilo atirador. Init
+                        // centralizado garante todos os campos do slot reutilizado.
+                        bool virusW = (game->currentWorld == WORLD_VIRUS);
+                        int mtype = virusW ? ETYPE_VIRUS_SWARM : ETYPE_BACT_RANGED;
+                        EnemyInitFromArchetype(m, mtype, game->wave, hmul);
                         m->position = (Vector2){ origin.x + cosf(a) * 110.0f, origin.y + sinf(a) * 110.0f };
                         m->active = true;
-                        // Lacaio invocado conforme o Mundo (bactéria ou vírus c/ escudo)
-                        bool virusW = (game->currentWorld == WORLD_VIRUS);
-                        m->type = virusW ? ETYPE_VIRUS_RANGED : ETYPE_BACT_RANGED;
-                        m->tier = TIER_2;
-                        int mhp = (int)((20 + game->wave * 5) * hmul); if (mhp < 1) mhp = 1;
-                        m->maxHp = mhp; m->hp = mhp;
-                        if (virusW) { m->shieldMaxHp = 25 + game->wave * 6; m->shieldHp = m->shieldMaxHp; m->shieldActive = true; }
-                        else        { m->shieldMaxHp = 0; m->shieldHp = 0; m->shieldActive = false; }
-                        m->shieldHitFlash = 0.0f;
-                        m->speed = 220.0f; m->isRanged = true; m->state = IDLE;
-                        m->cooldownTimer = 1.5f; m->chargeTimer = 0.0f;
-                        m->patrolTarget = m->position; m->patrolTimer = 3.0f;
-                        m->poisonTimer = 0.0f; m->poisonAccum = 0.0f; m->slowTimer = 0.0f;
-                        m->isTutorialEnemy = false;
+                        m->patrolTarget = m->position;
+                        m->isEscort = true;
                         m->flankSign = (GetRandomValue(0, 1) ? 1.0f : -1.0f);
-                        m->fleeTimer = 0.0f; m->isEscort = true; m->aiPhase = 0; m->summonTimer = 0.0f;
-                        m->hitCooldown = 0.0f; m->aggroMemory = 0.0f; m->dodgeCooldown = 0.0f;
-                        m->velSmooth = (Vector2){ 0.0f, 0.0f }; m->animTime = 0.0f; m->attackAnim = 0.0f; m->spawnAnim = 0.0f;
                         game->enemiesRemaining++;
                         SpawnParticleExplosion(game, m->position, DARKGRAY, 8, 40.0f, 120.0f, 2.0f, 0.4f);
                         minions++;
@@ -1783,9 +1807,10 @@ void UpdateGameplay(GameState *game, float delta)
                 } else if (enemy->type == ETYPE_BACT_RANGED) { // Bactéria atiradora (bacilo)
                     ptype = PROJ_ACID_ARC;
                     dmg = 11;
-                } else if (enemy->type == ETYPE_VIRUS_RANGED || enemy->type == ETYPE_VIRUS_BOSS) { // Vírus atirador
-                    ptype = PROJ_BULLET_SPREAD;
-                    dmg = 12;
+                } else if (enemy->type == ETYPE_VIRUS_RANGED || enemy->type == ETYPE_VIRUS_ELITE ||
+                           enemy->type == ETYPE_VIRUS_BOSS) { // Vírus atirador/elite/chefe: material viral
+                    ptype = PROJ_VIRAL_SPORE;
+                    dmg = (enemy->type == ETYPE_VIRUS_ELITE) ? 16 : 12;
                 }
                 
                 // Antecipação LIMITADA de mira: lidera o alvo conforme a velocidade
@@ -1873,12 +1898,14 @@ void UpdateGameplay(GameState *game, float delta)
             float currentSpeed = enemy->speed * (enemy->slowTimer > 0.0f ? 0.5f : 1.0f) * game->diff.enemySpeedMul;
 
             if (!enemy->isRanged) {
-                // Inimigo melee (SARS type 0, Chagas type 3): cerco + fuga com pouca vida
+                // Inimigo melee: cerco + fuga com pouca vida. O ENXAME viral
+                // investe mais rápido e nunca recua (ataca em grupo).
                 float chaseMult = (enemy->tier == TIER_2) ? 1.25f : 1.05f;
+                if (beh == BEHAV_SWARM) chaseMult = 1.45f;
                 Vector2 perp = { -chaseDir.y, chaseDir.x };
 
-                // Fuga: tipos frágeis recuam quando estão com pouca vida (mas não a escolta).
-                // O limiar depende da dificuldade (fácil recua antes, difícil só no limite).
+                // Fuga: tipos frágeis recuam quando estão com pouca vida (mas não a escolta
+                // nem o enxame). O limiar depende da dificuldade (fácil recua antes).
                 bool frail = (enemy->type == 3 || enemy->type == 0);
                 if (frail && !enemy->isEscort && enemy->hp <= (int)(enemy->maxHp * game->diff.retreatThreshold))
                     enemy->fleeTimer = 1.0f;
@@ -1894,6 +1921,12 @@ void UpdateGameplay(GameState *game, float delta)
                     // A intensidade do flanqueamento cresce com a dificuldade.
                     float flankAmount = (distSqrToPlayer > 130.0f * 130.0f) ? game->diff.flankAmount : 0.0f;
                     Vector2 desired = Vector2Normalize(Vector2Add(chaseDir, Vector2Scale(perp, enemy->flankSign * flankAmount)));
+                    // Enxame: leve zigue-zague (investida imprevisível, difícil de acertar).
+                    if (beh == BEHAV_SWARM)
+                    {
+                        float wig = sinf(enemy->animTime * 9.0f + enemy->flankSign) * 0.5f;
+                        desired = Vector2Normalize(Vector2Add(desired, Vector2Scale(perp, wig)));
+                    }
                     enemy->position = Vector2Add(enemy->position, Vector2Scale(desired, currentSpeed * chaseMult * delta));
                 }
             } else {
@@ -1915,8 +1948,14 @@ void UpdateGameplay(GameState *game, float delta)
                     if (distSqrToPlayer > 250.0f * 250.0f) {
                         enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, currentSpeed * 0.8f * bossSpeedMult * delta));
                     }
+                } else if (beh == BEHAV_ELITE && fmodf(enemy->animTime, 7.0f) >= 4.0f) {
+                    // ELITE/MUTANTE: ALTERNA comportamento. Por ~3s a cada 7s entra em
+                    // INVESTIDA agressiva (avança como um bruto), depois volta ao kiting
+                    // (ramo abaixo). Torna o elite reconhecível e diferente do atirador.
+                    if (distSqrToPlayer > 90.0f * 90.0f)
+                        enemy->position = Vector2Add(enemy->position, Vector2Scale(chaseDir, currentSpeed * 1.1f * delta));
                 } else {
-                    // RANGED GENÉRICO (bactéria/vírus atirador, mini chefe viral):
+                    // RANGED GENÉRICO (bactéria/vírus atirador, elite em kiting, mini chefe):
                     // KITING + STRAFE. Mantém uma distância preferida e ORBITA o
                     // jogador (circle-strafe), reduzindo o tempo ocioso e ficando
                     // mais difícil de acertar. O sentido da órbita (flankSign) é
@@ -1987,13 +2026,14 @@ void UpdateGameplay(GameState *game, float delta)
         // --------------------------------------------------------------------
         // FÍSICA DE COLISÃO DESLIZANTE (SEPARAÇÃO ENTRE INIMIGOS)
         // --------------------------------------------------------------------
-        float enemyRadius = (enemy->type == 2) ? 35.0f : 20.0f;
+        // Raio de corpo: tanques (KPC) e o ELITE/mutante viral (maiores) ocupam mais.
+        float enemyRadius = (enemy->type == 2 || enemy->type == ETYPE_VIRUS_ELITE) ? 35.0f : 20.0f;
         int nearEnemies[MAX_ENEMIES];
         int nearCount = GetEnemiesInRadius(game, enemy->position, 70.0f, nearEnemies);
         for (int k = 0; k < nearCount; k++) {
             int j = nearEnemies[k];
             if (i != j && game->enemies[j].active && game->enemies[j].state != DEATH) {
-                float otherRadius = (game->enemies[j].type == 2) ? 35.0f : 20.0f;
+                float otherRadius = (game->enemies[j].type == 2 || game->enemies[j].type == ETYPE_VIRUS_ELITE) ? 35.0f : 20.0f;
                 float distSqr = Vector2DistanceSqr(enemy->position, game->enemies[j].position);
                 float minDist = enemyRadius + otherRadius;
                 if (distSqr < minDist * minDist && distSqr > 0.0001f) {
@@ -2015,7 +2055,7 @@ void UpdateGameplay(GameState *game, float delta)
         // O chefe (corpo de 140px) usa um alcance maior para que encostar nele doa.
         float colRange = (enemy->tier == TIER_3_BOSS) ? 110.0f
                        : (enemy->tier == TIER_MINIBOSS) ? 75.0f
-                       : (enemy->type == 2) ? 65.0f : 45.0f;
+                       : (enemy->type == 2 || enemy->type == ETYPE_VIRUS_ELITE) ? 65.0f : 45.0f;
         if (distSqrToPlayer < colRange * colRange)
         {
             HandlePlayerEnemyCollision(game, enemy);
@@ -2085,7 +2125,7 @@ void UpdateGameplay(GameState *game, float delta)
                 if (game->projectiles[i].type == PROJ_PLAYER_GRENADE && game->projectiles[i].lifeTime <= 0.0f) {
                     game->projectiles[i].active = false;
                     SpawnParticleExplosion(game, game->projectiles[i].position, ORANGE, 25, 150.0f, 400.0f, 4.0f, 0.6f);
-                    PlaySound(g_assets.sfxAttack); // reused as explosion
+                    PlaySound(g_assets.sfxGrenadeExplode);
                     game->screenShake = 0.5f;
                     
                     int collIndices[MAX_ENEMIES];
@@ -2145,7 +2185,8 @@ void UpdateGameplay(GameState *game, float delta)
                                     int effDmg = ScaleAffinityDamage(game->projectiles[i].damage, game->projectiles[i].type, game->enemies[j].type);
                                     int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[j], effDmg, isBFG);
                                     if (applied > 0) {
-                                        PlaySound(g_assets.sfxEnemyHurt);
+                                        if (isBFG) PlaySound(g_assets.sfxBFGDamage);
+                                        else PlayEnemyDamageSfx(game->enemies[j].type, game->enemies[j].tier);
                                         SpawnParticleExplosion(game, game->enemies[j].position, WeaponSkinPrimary(game->player.weaponSkinId), 10, 50.0f, 150.0f, 3.0f, 0.4f);
                                         SpawnDamageText(game, game->enemies[j].position, applied, WeaponSkinSecondary(game->player.weaponSkinId));
 
@@ -2450,7 +2491,8 @@ void CarregarJogoSlot(GameState *game, int slot)
         // Reseta primeiro para evitar lixo nas partículas e power-ups
         float shakeOld = game->screenShake;
         GameScreen oldScreen = game->currentScreen;
-        float tempVol = game->masterVolume;
+        float tempMusicVol = game->musicVolume;
+        float tempSfxVol = game->sfxVolume;
         int tempSkin = game->player.skinId;
         int tempWSkin = game->player.weaponSkinId;
         int tempCos[COS_SLOT_COUNT];   // cosméticos persistem ao carregar um save
@@ -2461,7 +2503,8 @@ void CarregarJogoSlot(GameState *game, int slot)
 
         game->currentScreen = oldScreen;
         game->screenShake = shakeOld;
-        game->masterVolume = tempVol;
+        game->musicVolume = tempMusicVol;
+        game->sfxVolume = tempSfxVol;
         game->player.skinId = tempSkin;
         game->player.weaponSkinId = tempWSkin;
         for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
@@ -2530,7 +2573,7 @@ void CarregarJogoSlot(GameState *game, int slot)
                 game->enemiesRemaining = i;
                 break;
             }
-            if (t < 0 || t > TIER_3_BOSS) t = TIER_1;
+            if (t < 0 || t > TIER_MINIBOSS) t = TIER_1; // aceita mini chefe salvo
             game->enemies[i].tier = (EnemyTier)t;
             game->enemies[i].isRanged = (bool)isR;
 
@@ -2564,7 +2607,9 @@ void CarregarJogoSlot(GameState *game, int slot)
             {
                 Enemy *e = &game->enemies[i];
                 if (!e->active) continue;
-                if (e->type == ETYPE_VIRUS_MELEE || e->type == ETYPE_VIRUS_RANGED || e->type == ETYPE_VIRUS_BOSS)
+                // Todos os vírus comuns/elite têm capsídeo; o CHEFE usa o sistema
+                // de Núcleos de Infecção (não tem escudo de capsídeo próprio).
+                if (EnemyIsViral(e->type) && e->tier != TIER_3_BOSS)
                 {
                     e->shieldMaxHp = (e->maxHp / 3) + 20;
                     e->shieldHp = e->shieldMaxHp;
@@ -2925,14 +2970,14 @@ void DrawTelaTransicao(GameState *game, Font font)
         "   - Use antibioticos so com prescricao e ate o fim do tratamento.",
         "   - Higiene das maos reduz infeccoes hospitalares.",
         "",
-        "AGORA: o paciente enfrenta VIRUS DE RNA (dengue e influenza).",
-        "Os virus tem um CAPSIDEO (capa proteica) que protege o material genetico.",
-        "Como combater no jogo:",
-        "   - Quebre o ESCUDO (capsideo) antes de ferir o virus.",
-        "   - Escalpelizador Estatico quebra o capsideo rapido (corpo a corpo).",
-        "   - Rifle de Vacina e eficaz contra virus (imunizacao).",
-        "Na vida real: vacine-se (influenza), elimine criadouros do Aedes aegypti",
-        "(agua parada) contra a dengue, e procure atendimento ao ter sintomas.",
+        "AGORA: cinco ameacas virais surgem progressivamente:",
+        "   Rinovirus (enxame), Dengue (contato), Influenza (atirador),",
+        "   Sarampo mutante (elite) e o chefe Coronavirus na onda 5.",
+        "Todos possuem CAPSIDEO: quebre o escudo antes de atingir a vida.",
+        "Escalpelizador rompe capsideos; Rifle de Vacina causa bonus em virus.",
+        "Observe tamanho e silhueta: cada virus exige uma resposta diferente.",
+        "Na vida real: mantenha vacinas em dia, elimine agua parada contra dengue",
+        "e procure atendimento de saude ao apresentar sintomas importantes.",
     };
     int n = (int)(sizeof(lines) / sizeof(lines[0]));
     float y = 130.0f;

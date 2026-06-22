@@ -39,6 +39,8 @@ typedef enum SpriteID
     SPR_VIRUS_RANGED,
     SPR_VIRUS_BOSS,
     SPR_VIRUS_SHIELD,        // overlay do escudo de capsídeo
+    SPR_VIRUS_SWARM,         // vírus de enxame (rinovírus)
+    SPR_VIRUS_ELITE,         // vírus elite/mutante (sarampo)
 
     // ---- Armas ----
     SPR_WEAPON_SYRINGE_SWORD, // Espada-Seringa (Mundo 1, melee)

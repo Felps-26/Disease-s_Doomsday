@@ -1,8 +1,31 @@
 #include "../../include/asset_manager.h"
 #include "../../include/sprite_manager.h"
+#include "../entities/enemy.h"
 #include <stdio.h>
 
 GameAssets g_assets = {0};
+
+static Sound LoadGameSound(const char *path, float volume)
+{
+    Sound sound = LoadSound(path);
+    if (sound.frameCount > 0) SetSoundVolume(sound, volume);
+    return sound;
+}
+
+static void UnloadGameSound(Sound sound)
+{
+    if (sound.stream.buffer != NULL) UnloadSound(sound);
+}
+
+static void PlayLoadedSound(Sound sound)
+{
+    if (sound.frameCount > 0) PlaySound(sound);
+}
+
+static void SetLoadedSoundVolume(Sound sound, float volume)
+{
+    if (sound.frameCount > 0) SetSoundVolume(sound, volume);
+}
 
 void LoadGameAssets(void)
 {
@@ -28,17 +51,27 @@ void LoadGameAssets(void)
     // Carrega Música
     g_assets.musicMain = LoadMusicStream("Assets/Musica/DeepVoid.mp3");
     g_assets.musicB = LoadMusicStream("Assets/Musica/DeepVoid.mp3");
-    g_assets.sfxAttack = LoadSound("Assets/Musica/Ataque_Pulse.mp3");
-    g_assets.sfxHurt = LoadSound("Assets/Musica/Dano_Heroi.mp3");
-    // BUGFIX: Assets/SFX/*.wav nunca existiram, deixando coleta de itens e morte
-    // sem nenhum retorno sonoro. Reaproveitamos SFX existentes para restaurar o
-    // feedback (idealmente substituir por sons dedicados de pickup/morte).
-    g_assets.sfxPickup = LoadSound("Assets/Musica/Ataque_Pulse.mp3");
-    g_assets.sfxDeath = LoadSound("Assets/Musica/Dano_Heroi.mp3");
-    
-    // Novos efeitos de inimigos
-    g_assets.sfxEnemyHurt = LoadSound("Assets/Musica/Dano_enemy.mp3");
-    g_assets.sfxEnemyShoot = LoadSound("Assets/Musica/Projétil_enemy.mp3");
+    // Efeitos nomeados por evento. Mantê-los em Assets/SFX separa efeitos
+    // curtos das trilhas em Assets/Musica.
+    g_assets.sfxSwordSlice        = LoadGameSound("Assets/SFX/Sword_Slice.mp3",                 0.72f);
+    g_assets.sfxRifleShoot        = LoadGameSound("Assets/SFX/RifleShooting.mp3",               0.62f);
+    g_assets.sfxGrenadeLaunch     = LoadGameSound("Assets/SFX/GranadeLauncher.mp3",             0.68f);
+    g_assets.sfxGrenadeExplode    = LoadGameSound("Assets/SFX/Granade_exploding.mp3",           0.78f);
+    g_assets.sfxBFGShoot          = LoadGameSound("Assets/SFX/BFGLauncher_Shoot.mp3",            0.78f);
+    g_assets.sfxBFGDamage         = LoadGameSound("Assets/SFX/BFGProjectile_Damaging.mp3",       0.70f);
+    g_assets.sfxHeroHurt          = LoadGameSound("Assets/SFX/DamageTaken_Hero.mp3",             0.72f);
+    g_assets.sfxBacteriaHurt      = LoadGameSound("Assets/SFX/DamageTaken_Bacteria.mp3",         0.62f);
+    g_assets.sfxVirusHurt         = LoadGameSound("Assets/SFX/DamageTaken_Virus.mp3",            0.62f);
+    g_assets.sfxBacteriaBossHurt  = LoadGameSound("Assets/SFX/DamageTaken_BossBacteria.mp3",     0.72f);
+    g_assets.sfxVirusBossHurt     = LoadGameSound("Assets/SFX/DamageTaking_BossVirus.mp3",       0.72f);
+    g_assets.sfxEnemyShoot        = LoadGameSound("Assets/SFX/EnemiesShooting.mp3",              0.58f);
+    g_assets.sfxMenuClick         = LoadGameSound("Assets/SFX/ClickinsoundMenu.mp3",             0.55f);
+    g_assets.sfxMenuHover         = LoadGameSound("Assets/SFX/HoveringMenuButtons.mp3",          0.34f);
+    g_assets.sfxQuizHover         = LoadGameSound("Assets/SFX/QuizPage_hoveringIN_OUT.mp3",      0.40f);
+
+    // O pacote não contém sons próprios para coleta/level-up e morte.
+    g_assets.sfxPickup = LoadGameSound("Assets/Musica/Ataque_Pulse.mp3", 0.45f);
+    g_assets.sfxDeath  = LoadGameSound("Assets/Musica/Dano_Heroi.mp3",   0.75f);
     
     // Shader
     g_assets.biologicalShader = LoadShader(0, "Assets/Shaders/biological.fs");
@@ -63,12 +96,23 @@ void UnloadGameAssets(void)
 
     if (g_assets.musicMain.stream.buffer != NULL) UnloadMusicStream(g_assets.musicMain);
     if (g_assets.musicB.stream.buffer != NULL) UnloadMusicStream(g_assets.musicB);
-    if (g_assets.sfxAttack.stream.buffer != NULL) UnloadSound(g_assets.sfxAttack);
-    if (g_assets.sfxHurt.stream.buffer != NULL) UnloadSound(g_assets.sfxHurt);
-    if (g_assets.sfxPickup.stream.buffer != NULL) UnloadSound(g_assets.sfxPickup);
-    if (g_assets.sfxDeath.stream.buffer != NULL) UnloadSound(g_assets.sfxDeath);
-    if (g_assets.sfxEnemyHurt.stream.buffer != NULL) UnloadSound(g_assets.sfxEnemyHurt);
-    if (g_assets.sfxEnemyShoot.stream.buffer != NULL) UnloadSound(g_assets.sfxEnemyShoot);
+    UnloadGameSound(g_assets.sfxSwordSlice);
+    UnloadGameSound(g_assets.sfxRifleShoot);
+    UnloadGameSound(g_assets.sfxGrenadeLaunch);
+    UnloadGameSound(g_assets.sfxGrenadeExplode);
+    UnloadGameSound(g_assets.sfxBFGShoot);
+    UnloadGameSound(g_assets.sfxBFGDamage);
+    UnloadGameSound(g_assets.sfxHeroHurt);
+    UnloadGameSound(g_assets.sfxBacteriaHurt);
+    UnloadGameSound(g_assets.sfxVirusHurt);
+    UnloadGameSound(g_assets.sfxBacteriaBossHurt);
+    UnloadGameSound(g_assets.sfxVirusBossHurt);
+    UnloadGameSound(g_assets.sfxEnemyShoot);
+    UnloadGameSound(g_assets.sfxMenuClick);
+    UnloadGameSound(g_assets.sfxMenuHover);
+    UnloadGameSound(g_assets.sfxQuizHover);
+    UnloadGameSound(g_assets.sfxPickup);
+    UnloadGameSound(g_assets.sfxDeath);
 
     if (g_assets.shaderLoaded) {
         UnloadShader(g_assets.biologicalShader);
@@ -79,4 +123,55 @@ void UnloadGameAssets(void)
     UnloadSprites();
 
     CloseAudioDevice();
+}
+
+void PlayWeaponAttackSfx(int weapon)
+{
+    switch (weapon)
+    {
+        case 1: PlayLoadedSound(g_assets.sfxSwordSlice);     break;
+        case 2: PlayLoadedSound(g_assets.sfxRifleShoot);     break;
+        case 3: PlayLoadedSound(g_assets.sfxGrenadeLaunch);  break;
+        case 4: PlayLoadedSound(g_assets.sfxBFGShoot);       break;
+        default: break;
+    }
+}
+
+void PlayEnemyDamageSfx(int enemyType, int enemyTier)
+{
+    bool boss = (enemyTier == TIER_3_BOSS || enemyTier == TIER_MINIBOSS);
+    bool virus = (enemyType == ETYPE_SARS || enemyType == ETYPE_DENGUE_OLD ||
+                  enemyType == ETYPE_VIRUS_MELEE || enemyType == ETYPE_VIRUS_RANGED ||
+                  enemyType == ETYPE_VIRUS_BOSS || enemyType == ETYPE_VIRUS_SWARM ||
+                  enemyType == ETYPE_VIRUS_ELITE);
+
+    if (boss)
+        PlayLoadedSound(virus ? g_assets.sfxVirusBossHurt : g_assets.sfxBacteriaBossHurt);
+    else
+        PlayLoadedSound(virus ? g_assets.sfxVirusHurt : g_assets.sfxBacteriaHurt);
+}
+
+void ApplySfxVolume(float volume)
+{
+    if (volume < 0.0f) volume = 0.0f;
+    if (volume > 1.0f) volume = 1.0f;
+
+    // Multiplicadores preservam o mix definido no carregamento dos assets.
+    SetLoadedSoundVolume(g_assets.sfxSwordSlice,       0.72f * volume);
+    SetLoadedSoundVolume(g_assets.sfxRifleShoot,       0.62f * volume);
+    SetLoadedSoundVolume(g_assets.sfxGrenadeLaunch,    0.68f * volume);
+    SetLoadedSoundVolume(g_assets.sfxGrenadeExplode,   0.78f * volume);
+    SetLoadedSoundVolume(g_assets.sfxBFGShoot,         0.78f * volume);
+    SetLoadedSoundVolume(g_assets.sfxBFGDamage,        0.70f * volume);
+    SetLoadedSoundVolume(g_assets.sfxHeroHurt,         0.72f * volume);
+    SetLoadedSoundVolume(g_assets.sfxBacteriaHurt,     0.62f * volume);
+    SetLoadedSoundVolume(g_assets.sfxVirusHurt,        0.62f * volume);
+    SetLoadedSoundVolume(g_assets.sfxBacteriaBossHurt, 0.72f * volume);
+    SetLoadedSoundVolume(g_assets.sfxVirusBossHurt,    0.72f * volume);
+    SetLoadedSoundVolume(g_assets.sfxEnemyShoot,       0.58f * volume);
+    SetLoadedSoundVolume(g_assets.sfxMenuClick,        0.55f * volume);
+    SetLoadedSoundVolume(g_assets.sfxMenuHover,        0.34f * volume);
+    SetLoadedSoundVolume(g_assets.sfxQuizHover,        0.40f * volume);
+    SetLoadedSoundVolume(g_assets.sfxPickup,           0.45f * volume);
+    SetLoadedSoundVolume(g_assets.sfxDeath,            0.75f * volume);
 }

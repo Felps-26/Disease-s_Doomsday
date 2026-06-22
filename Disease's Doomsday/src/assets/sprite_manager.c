@@ -29,6 +29,8 @@ static const char *SPRITE_PATHS[SPRITE_COUNT] = {
     [SPR_VIRUS_RANGED] = "Assets/Sprites/Enemies/Virus/ranged.png",
     [SPR_VIRUS_BOSS]   = "Assets/Sprites/Enemies/Virus/boss.png",
     [SPR_VIRUS_SHIELD] = "Assets/Sprites/Enemies/Virus/shield.png",
+    [SPR_VIRUS_SWARM]  = "Assets/Sprites/Enemies/Virus/swarm.png",
+    [SPR_VIRUS_ELITE]  = "Assets/Sprites/Enemies/Virus/elite.png",
 
     // Armas
     [SPR_WEAPON_SYRINGE_SWORD] = "Assets/Sprites/Weapons/espada_seringa.png",

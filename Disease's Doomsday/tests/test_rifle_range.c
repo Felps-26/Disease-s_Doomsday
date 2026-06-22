@@ -32,6 +32,7 @@ Color Fade(Color c, float a) { (void)a; return c; }
 int GetRandomValue(int mn, int mx) { return mn + rand() % (mx - mn + 1); }
 bool SpriteAvailable(int id) { (void)id; return false; }
 void DrawSpriteCentered(int id, Vector2 c, Vector2 s, float r, Color col) { (void)id;(void)c;(void)s;(void)r;(void)col; }
+Texture2D GetSprite(int id) { (void)id; return (Texture2D){0}; }
 
 static float frand(float a, float b){ return a + (b-a)*((float)rand()/(float)RAND_MAX); }
 static float dist(Vector2 a, Vector2 b){ return sqrtf((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)); }

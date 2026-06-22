@@ -24,14 +24,14 @@ void HandlePlayerEnemyCollision(GameState *game, Enemy *enemy)
     {
         // Escala o dano base pela onda
         int dmgBase = 8 + game->wave * 2;
-        if (enemy->type == 1) {
-            dmgBase += 4; // Aedes
-            game->player.poisonTimer = 3.0f;
-        }
-        if (enemy->type == 2) {
-            dmgBase += 14; // KPC
-            game->player.slowTimer = 2.0f;
-        }
+        // Bônus de dano de contato por ARQUÉTIPO (centralizado em enemy.c), em
+        // vez de números mágicos por tipo. Mantém Aedes(+4)/KPC(+14) e adiciona
+        // variedade aos vírus (enxame fraco, elite forte).
+        const EnemyArchetype *arch = EnemyArchetypeFor(enemy->type);
+        if (arch) dmgBase += arch->contactDmgBonus;
+        // Status de contato (mantidos): Aedes (legado) -> veneno; KPC -> lentidão.
+        if (enemy->type == ETYPE_DENGUE_OLD) game->player.poisonTimer = 3.0f;
+        if (enemy->type == ETYPE_KPC)        game->player.slowTimer = 2.0f;
         if (enemy->tier == TIER_MINIBOSS) dmgBase += 10;
         if (enemy->tier == TIER_3_BOSS)   dmgBase += 18;
 
@@ -59,7 +59,7 @@ void HandlePlayerEnemyCollision(GameState *game, Enemy *enemy)
             game->currentScreen = SCREEN_GAMEOVER;
             return;
         } else {
-            PlaySound(g_assets.sfxHurt);
+            PlaySound(g_assets.sfxHeroHurt);
         }
     }
 
@@ -110,7 +110,7 @@ void HandleProjectileCollision(GameState *game, Projectile *proj)
             game->currentScreen = SCREEN_GAMEOVER;
             return;
         } else {
-            PlaySound(g_assets.sfxHurt);
+            PlaySound(g_assets.sfxHeroHurt);
         }
     }
 }
