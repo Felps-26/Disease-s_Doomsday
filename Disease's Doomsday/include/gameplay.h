@@ -84,6 +84,7 @@ typedef struct WeaponInfo
     int         unlockLevel; // Nível mínimo para usar
     int         key;      // Tecla (1..4)
     Color       color;    // Cor representativa
+    float       maxRange; // Alcance efetivo em px (0 = corpo a corpo / sem alcance)
 } WeaponInfo;
 
 // Retorna as informações da arma (weapon = 1..4). Fora do intervalo => Lâmina.

@@ -33,6 +33,47 @@ void DrawSpriteCentered(int id, Vector2 c, Vector2 s, float r, Color col) { (voi
 
 static float dist(Vector2 a, Vector2 b){ return sqrtf((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)); }
 
+// Amostra a arena em células de 40 px e confirma que toda célula onde o disco
+// do jogador cabe pertence à mesma região alcançável do centro seguro.
+static int disconnected_player_cells(void)
+{
+    enum { STEP = 40, COLS = MAP_WIDTH / STEP, ROWS = MAP_HEIGHT / STEP, CELLS = COLS * ROWS };
+    static unsigned char passable[CELLS];
+    static unsigned char visited[CELLS];
+    static int queue[CELLS];
+    int passableCount = 0, reached = 0, start = -1;
+    Vector2 safe = MapBody_GetSafeCenter();
+
+    for (int y = 0; y < ROWS; y++)
+        for (int x = 0; x < COLS; x++)
+        {
+            int i = y * COLS + x;
+            Vector2 p = { x * STEP + STEP * 0.5f, y * STEP + STEP * 0.5f };
+            passable[i] = MapBody_ContainsWithMargin(p, BODY_PLAYER_RADIUS);
+            if (passable[i]) passableCount++;
+            if (fabsf(p.x - safe.x) <= STEP * 0.5f && fabsf(p.y - safe.y) <= STEP * 0.5f) start = i;
+        }
+
+    if (start < 0 || !passable[start]) return passableCount;
+    int head = 0, tail = 0;
+    queue[tail++] = start;
+    visited[start] = 1;
+    while (head < tail)
+    {
+        int i = queue[head++], x = i % COLS, y = i / COLS;
+        reached++;
+        const int nx[4] = { x - 1, x + 1, x, x };
+        const int ny[4] = { y, y, y - 1, y + 1 };
+        for (int d = 0; d < 4; d++)
+        {
+            if (nx[d] < 0 || nx[d] >= COLS || ny[d] < 0 || ny[d] >= ROWS) continue;
+            int n = ny[d] * COLS + nx[d];
+            if (passable[n] && !visited[n]) { visited[n] = 1; queue[tail++] = n; }
+        }
+    }
+    return passableCount - reached;
+}
+
 // Melee é possível se existe um ponto de pé do herói (disco de raio do player
 // dentro do corpo) dentro do alcance do golpe a partir do núcleo.
 static int melee_reachable(Vector2 core)
@@ -54,6 +95,7 @@ int main(void)
     srand(12345);
     const int TRIALS = 20000;
     int outMargin = 0, unreachable = 0, bossOverlap = 0, interOverlap = 0, totalCores = 0;
+    int disconnected = disconnected_player_cells();
 
     for (int t = 0; t < TRIALS; t++)
     {
@@ -88,8 +130,9 @@ int main(void)
     printf("Inalcancaveis por melee : %d\n", unreachable);
     printf("Sobrepostos ao chefe    : %d\n", bossOverlap);
     printf("Sobrepostos entre si    : %d\n", interOverlap);
+    printf("Celulas desconectadas   : %d\n", disconnected);
 
-    int fail = outMargin + unreachable + bossOverlap + interOverlap;
+    int fail = outMargin + unreachable + bossOverlap + interOverlap + disconnected;
     printf("%s\n", fail == 0 ? "RESULTADO: PASSOU (todos os nucleos validos e alcancaveis por melee)"
                              : "RESULTADO: FALHOU");
     return fail == 0 ? 0 : 1;

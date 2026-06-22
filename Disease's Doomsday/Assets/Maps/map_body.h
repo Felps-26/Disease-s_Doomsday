@@ -75,6 +75,8 @@ Vector2 MapBody_RandomPointInside(Vector2 avoid, float minDistFromAvoid);
 // ---- Helpers de spawn reutilizáveis (chefe, lacaios, núcleos, power-ups) ----
 // Centro seguro do tórax (ponto de folga máxima usado como fallback determinístico).
 Vector2 MapBody_GetSafeCenter(void);
+// Caixa delimitadora (px de mundo) da silhueta do corpo — enquadra o minimapa.
+Rectangle MapBody_WorldBounds(void);
 // Procura, de forma DETERMINÍSTICA, um ponto com "disco livre" de raio `margin`
 // próximo de `preferred`; se falhar, caminha em direção a `fallback` e por fim
 // usa o centro seguro do tórax. Retorna true se encontrou (out preenchido).

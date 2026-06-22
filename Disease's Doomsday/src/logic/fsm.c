@@ -137,6 +137,7 @@ void UpdateStateMachine(GameState *game)
                 else if (slotSelected == -1)
                 {
                     game->currentScreen = SCREEN_PAUSE;
+                    game->uiAnimTimer = 0.0f; // reanima a entrada do menu de pausa
                 }
             }
             break;
@@ -152,6 +153,8 @@ void UpdateStateMachine(GameState *game)
                 else if (slotSelected == -1)
                 {
                     game->currentScreen = loadSelectBackScreen;
+                    if (loadSelectBackScreen == SCREEN_PAUSE)
+                        game->uiAnimTimer = 0.0f; // reanima a entrada do menu de pausa
                 }
             }
             break;
@@ -184,7 +187,11 @@ void DrawStateMachine(GameState *game)
             break;
 
         case SCREEN_TUTORIAL:
-            DrawTelaTutorial(game, g_gameFont);
+            // O mundo do tutorial já foi para a textura virtual (com letterbox)
+            // no loop principal; aqui desenhamos só o HUD/overlay em resolução
+            // nativa. Sem ClearBackground (que apagaria o blit) e sem redesenhar
+            // a cena — corrige o fundo de pausa e elimina o desenho duplicado.
+            DrawTutorialHUD(game, g_gameFont);
             break;
 
         case SCREEN_LOADING:

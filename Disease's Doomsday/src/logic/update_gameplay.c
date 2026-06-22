@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../../include/asset_manager.h"
+#include "../../include/telas.h"
 #include <string.h>
 #include <time.h>
 #ifdef _WIN32
@@ -201,6 +202,17 @@ void LoadPlayerConfig(GameState *game)
             if (got >= 4 && diff >= DIFFICULTY_EASY && diff <= DIFFICULTY_HARD)
                 game->difficulty = diff;
         }
+        // Guarda-roupa modular (append no fim da linha). Configs antigos não têm
+        // estes campos: o fscanf simplesmente falha e cada slot fica em 0 (padrão).
+        for (int s = 0; s < COS_SLOT_COUNT; s++)
+        {
+            int v = 0;
+            if (fscanf(f, "%d", &v) == 1) game->player.cosmetics[s] = (v > 0 ? v : 0);
+            else                          game->player.cosmetics[s] = 0;
+        }
+        // Categoria "Traseiro" foi removida do jogo: ignora qualquer item
+        // traseiro de saves/config antigos (mantém a largura para compat.).
+        game->player.cosmetics[COS_BACK] = 0;
         fclose(f);
     }
     // Sempre garante uma configuração de dificuldade válida (mesmo sem arquivo).
@@ -211,8 +223,12 @@ void SavePlayerConfig(GameState *game)
 {
     FILE *f = fopen("Saves/config.txt", "w");
     if (f == NULL) return;
-    fprintf(f, "%f %d %d %d\n", game->masterVolume, game->player.skinId,
+    fprintf(f, "%f %d %d %d", game->masterVolume, game->player.skinId,
             game->player.weaponSkinId, game->difficulty);
+    // Guarda-roupa modular (mesma linha, na ordem do enum CosmeticSlot).
+    for (int s = 0; s < COS_SLOT_COUNT; s++)
+        fprintf(f, " %d", game->player.cosmetics[s]);
+    fprintf(f, "\n");
     fclose(f);
 }
 
@@ -621,6 +637,7 @@ void InitGame(GameState *game)
     char tempName[16] = "";
     float tempVol = 1.0f;
     int tempSkin = 0, tempWSkin = 0;
+    int tempCos[COS_SLOT_COUNT] = { 0 };   // cosméticos do guarda-roupa (preferência)
     int tempDiff = DIFFICULTY_MEDIUM;
     bool tAdmin = false, tAdminApply = false;
     int tAdmMaxHp = 0, tAdmDmg = 0, tAdmLevel = 0, tAdmSus = 0;
@@ -631,6 +648,7 @@ void InitGame(GameState *game)
         tempVol = game->masterVolume;
         tempSkin = game->player.skinId;
         tempWSkin = game->player.weaponSkinId;
+        for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
         tempDiff = game->difficulty;
         tAdmin = game->adminMode; tAdminApply = game->adminApply;
         tAdmMaxHp = game->adminMaxHp; tAdmDmg = game->adminDamage;
@@ -657,6 +675,7 @@ void InitGame(GameState *game)
     game->masterVolume = tempVol;
     game->player.skinId = tempSkin;
     game->player.weaponSkinId = tempWSkin;
+    for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
 
     // Jogador inicial
     game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
@@ -792,6 +811,11 @@ void UpdateTutorial(GameState *game, float delta)
     // ========================================================================
     if (dlg->active)
     {
+        // Debounce de ataque: enquanto o diálogo está aberto, "trava" o ataque.
+        // Só será liberado quando o jogador SOLTAR a tecla/botão (ver passo 1).
+        // Assim o mesmo SPACE/clique que avança/fecha o texto não ataca a bactéria.
+        game->attackInputLatched = true;
+
         // BUGFIX: durante um diálogo bloqueante o jogador deve PARAR imediatamente.
         // Antes, se ele estava andando ao abrir o diálogo, a flag isMoving ficava
         // true e o modelo continuava com a animação de caminhada parado no lugar.
@@ -838,11 +862,16 @@ void UpdateTutorial(GameState *game, float delta)
                 }
                 else
                 {
-                    // Última página do passo: fecha o diálogo e libera a gameplay
+                    // Última página do passo: fecha o diálogo e libera a gameplay.
                     dlg->active    = false;
                     dlg->page      = 0;
                     dlg->charShown = 0;
                     dlg->charTimer = 0.0f;
+                    // Limpa estado de ataque ao trocar de etapa: nada de ataque
+                    // pendente, slash residual ou cooldown herdado. O ataque segue
+                    // travado (attackInputLatched) até o jogador soltar o input.
+                    game->player.attackCooldown = 0.0f;
+                    game->slashAnimTimer        = 0.0f;
                 }
             }
         }
@@ -1073,8 +1102,14 @@ void UpdateTutorial(GameState *game, float delta)
             }
         }
 
-        // Ataque com ESPAÇO ou clique segurado (Q está reservado para diálogo)
-        if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+        // Ataque com ESPAÇO ou clique segurado (Q está reservado para diálogo).
+        // DEBOUNCE: o mesmo SPACE/clique que fechou a última página de diálogo NÃO
+        // pode atacar. O latch (setado enquanto o diálogo estava ativo) só é
+        // liberado quando o jogador SOLTA a tecla/botão; a bactéria recém-spawnada
+        // só recebe dano após um comando NOVO do jogador.
+        bool attackHeld = IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+        if (game->attackInputLatched && !attackHeld) game->attackInputLatched = false;
+        if (!game->attackInputLatched && attackHeld)
         {
             extern Vector2 g_virtualMouse;
             Vector2 worldMouse = GetScreenToWorld2D(g_virtualMouse, game->camera);
@@ -2033,10 +2068,15 @@ void UpdateGameplay(GameState *game, float delta)
     {
         if (game->projectiles[i].active)
         {
-            game->projectiles[i].position = Vector2Add(game->projectiles[i].position, Vector2Scale(game->projectiles[i].velocity, delta));
-            game->projectiles[i].hitbox.x = game->projectiles[i].position.x - 10;
-            game->projectiles[i].hitbox.y = game->projectiles[i].position.y - 10;
-            
+            // Move + aplica limites de alcance/void (Fase 5). Se o rifle estourou
+            // o alcance ou saiu para o void, apenas se dissipa (sem dano).
+            if (!Projectile_Advance(&game->projectiles[i], delta)) {
+                if (game->projectiles[i].isPlayerProjectile)
+                    SpawnParticle(game, game->projectiles[i].position, (Vector2){ 0, 0 },
+                                  WeaponSkinPrimary(game->player.weaponSkinId), 3.0f, 0.22f);
+                continue;
+            }
+
             if (game->projectiles[i].isPlayerProjectile) {
                 // Diminui o tempo de vida para explosivos
                 game->projectiles[i].lifeTime -= delta;
@@ -2148,6 +2188,14 @@ void UpdateGameplay(GameState *game, float delta)
             if (game->projectiles[i].type == PROJ_PLAYER_BFG && game->projectiles[i].lifeTime <= 0.0f) {
                 game->projectiles[i].active = false;
                 SpawnParticleExplosion(game, game->projectiles[i].position, GREEN, 30, 100.0f, 300.0f, 5.0f, 0.8f);
+            }
+
+            // Rifles retos: backstop por lifetime (proteção SECUNDÁRIA ao alcance).
+            if (game->projectiles[i].active && game->projectiles[i].lifeTime <= 0.0f &&
+                (game->projectiles[i].type == PROJ_PLAYER_PHAGE ||
+                 game->projectiles[i].type == PROJ_PLAYER_VACCINE ||
+                 game->projectiles[i].type == PROJ_PLAYER_RIFLE)) {
+                game->projectiles[i].active = false;
             }
             
             // Remove se sair do mapa
@@ -2405,6 +2453,8 @@ void CarregarJogoSlot(GameState *game, int slot)
         float tempVol = game->masterVolume;
         int tempSkin = game->player.skinId;
         int tempWSkin = game->player.weaponSkinId;
+        int tempCos[COS_SLOT_COUNT];   // cosméticos persistem ao carregar um save
+        for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
 
         // Limpa estados de buffs temporários
         memset(game, 0, sizeof(GameState));
@@ -2414,6 +2464,7 @@ void CarregarJogoSlot(GameState *game, int slot)
         game->masterVolume = tempVol;
         game->player.skinId = tempSkin;
         game->player.weaponSkinId = tempWSkin;
+        for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
         InitParticlePool(game);
 
         // Pular/Ler metadados iniciais
@@ -2648,7 +2699,8 @@ void RequestLoadingScreen(GameState *game, LoadTarget target, float duration)
     game->loadTarget = target;
     game->loadingTimer = 0.0f;
     game->loadingDuration = duration;
-    game->loadingTip = GetRandomValue(0, LOADING_TIP_COUNT - 1);
+    int tipCount = GetLoadingTipCount();
+    game->loadingTip = tipCount > 0 ? GetRandomValue(0, tipCount - 1) : 0;
     game->screenShake = 0.0f;
 }
 

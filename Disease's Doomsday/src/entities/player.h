@@ -4,6 +4,23 @@
 #include "raylib.h"
 #include <stdbool.h>
 
+// Slots do guarda-roupa modular (cosméticos). Cada slot guarda o índice do item
+// equipado; o índice 0 é sempre "nenhum/padrão". O catálogo (nomes, descrições,
+// desbloqueios) vive em Assets/@models/cosmetics.{h,c} — DATA-DRIVEN, sem
+// condicionais espalhadas. memset(0) no GameState => tudo no padrão (back-compat
+// com saves/config antigos).
+typedef enum CosmeticSlot {
+    COS_HELMET = 0, // Capacete
+    COS_FACE,       // Máscara / acessório facial
+    COS_CHEST,      // Peitoral
+    COS_ARMS,       // Braços / luvas
+    COS_LEGS,       // Calças
+    COS_BOOTS,      // Botas
+    COS_BACK,       // Acessório traseiro
+    COS_FX,         // Efeito visual
+    COS_SLOT_COUNT
+} CosmeticSlot;
+
 typedef struct Player
 {
     char name[16];        // Nome do jogador
@@ -49,8 +66,11 @@ typedef struct Player
     int healthPotions; // Poções de vida
 
     // Skins (visuais, sem efeito de balanceamento)
-    int skinId;       // 0 = Padrão, 1 = Médica, 2 = Infectada
+    int skinId;       // 0 = Padrão, 1 = Médica, 2 = Infectada (paleta/material)
     int weaponSkinId; // 0 = Padrão, 1 = Plasma, 2 = Tóxica
+
+    // Guarda-roupa modular: item equipado por slot (0 = nenhum/padrão).
+    int cosmetics[COS_SLOT_COUNT];
 
 } Player;
 

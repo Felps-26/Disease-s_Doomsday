@@ -37,9 +37,10 @@ static void DrawStatBar(Font font, float x, float y, float w, const char *label,
 
 // Desenha o PREVIEW da arma (modelo real) centrado em `center`, com flutuação,
 // pulso de energia, partículas e brilho/silhueta conforme desbloqueio.
-static void DrawWeaponPreview(int weapon, Vector2 center, bool unlocked, float highlight,
+static void DrawWeaponPreview(int weapon, Rectangle area, bool unlocked, float highlight,
                               Color primary, Color secondary, float time)
 {
+    Vector2 center = { area.x + area.width * 0.5f, area.y + area.height * 0.5f };
     float bob = sinf(time * 2.0f) * 7.0f;
     float sway = sinf(time * 1.3f) * 8.0f;            // leve balanço (graus)
     Vector2 c = { center.x, center.y + bob };
@@ -61,9 +62,11 @@ static void DrawWeaponPreview(int weapon, Vector2 center, bool unlocked, float h
         DrawCircleV(p, unlocked ? 4.0f : 2.5f, Fade(secondary, 0.5f + 0.3f * sinf(time * 4.0f + i)));
     }
 
-    // MODELO REAL da arma (mesmo renderer do gameplay). size em px.
-    float size = 96.0f;
-    DrawHeldWeapon(weapon, c, size, sway, primary, secondary);
+    // MODELO REAL da arma, ENQUADRADO no retângulo útil do preview: centralizado
+    // e deslocado p/ baixo conforme a extensão real da arma — a agulha/cano nunca
+    // vazam do painel. Acompanha a flutuação (bob) junto da aura.
+    Rectangle wframe = { area.x, area.y + bob, area.width, area.height };
+    DrawHeldWeaponFramed(weapon, wframe, 96.0f, sway, primary, secondary);
 
     // Bloqueada: escurece (silhueta) e desenha um cadeado.
     if (!unlocked)
@@ -111,8 +114,9 @@ void DrawTelaArsenal(GameState *game, Font font)
         // acento lateral
         DrawRectangle((int)drawc.x, (int)drawc.y + 8, 5, (int)drawc.height - 16, Fade(accent, entry));
 
-        // mini-preview real da arma (modelo do jogo, escala pequena)
-        DrawHeldWeapon(s + 1, (Vector2){ drawc.x + 48, drawc.y + drawc.height / 2.0f + 12 }, 30.0f,
+        // mini-preview real da arma, enquadrado na zona esquerda do card (sem
+        // vazar o topo: a agulha/cano são contidos pelo enquadramento).
+        DrawHeldWeaponFramed(s + 1, (Rectangle){ drawc.x + 10, drawc.y + 8, 74, drawc.height - 16 }, 30.0f,
                        sinf(time * 1.5f + s) * 6.0f,
                        unlocked ? skinPrim : (Color){ 120,124,134,255 },
                        unlocked ? skinSec : (Color){ 90,94,104,255 });
@@ -138,8 +142,7 @@ void DrawTelaArsenal(GameState *game, Font font)
     DrawRectangleRounded(prevArea, 0.08f, 8, Fade((Color){ 6, 8, 12, 255 }, 0.55f));
     DrawRectangleRoundedLines(prevArea, 0.08f, 8, Fade(wi.color, 0.35f));
     g_unlockPulse[g_arsenalSel] = Lerp(g_unlockPulse[g_arsenalSel], 0.0f, 3.0f * GetFrameTime());
-    DrawWeaponPreview(g_arsenalSel + 1,
-                      (Vector2){ prevArea.x + prevArea.width / 2.0f, prevArea.y + prevArea.height / 2.0f },
+    DrawWeaponPreview(g_arsenalSel + 1, prevArea,
                       unlocked, g_unlockPulse[g_arsenalSel], skinPrim, skinSec, time);
 
     // Coluna de texto/estatísticas (metade direita).
@@ -155,11 +158,19 @@ void DrawTelaArsenal(GameState *game, Font font)
 
     // Barras: Dano / Cadência / Cooldown (valores normalizados).
     float dano01 = (float)wi.baseDamage / 100.0f;
-    float cad01  = (0.15f / wi.cooldown);                 // mais rápido => barra cheia
+    float cad01  = (0.22f / wi.cooldown);                 // referência: arma mais rápida (0.22s)
+    if (cad01 > 1.0f) cad01 = 1.0f;
     float cd01   = (wi.cooldown / 5.0f);                  // recarga longa => barra cheia
     DrawStatBar(font, tx, ty, tw, "Dano base", dano01, TextFormat("%d (+ATK)", wi.baseDamage), GOLD); ty += 46;
     DrawStatBar(font, tx, ty, tw, "Cadencia", cad01, wi.speedTxt, THEME_COLOR_MAIN); ty += 46;
-    DrawStatBar(font, tx, ty, tw, "Recarga (cooldown)", cd01, TextFormat("%.2fs", wi.cooldown), (Color){ 255, 150, 80, 255 }); ty += 50;
+    DrawStatBar(font, tx, ty, tw, "Recarga (cooldown)", cd01, TextFormat("%.2fs", wi.cooldown), (Color){ 255, 150, 80, 255 }); ty += 46;
+    // Alcance real (somente armas de projétil com limite de alcance — Fase 5).
+    if (wi.maxRange > 0.0f)
+    {
+        DrawTextEx(font, TextFormat("Alcance efetivo: %.0f px", wi.maxRange),
+                   (Vector2){ tx, ty }, 15.0f, 1.0f, (Color){ 120, 200, 255, 255 }); ty += 24;
+    }
+    else ty += 4;
 
     // Requisito de nível / status claro.
     Rectangle foot = { tx, ty, tw, 30 };

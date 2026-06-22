@@ -23,13 +23,6 @@ static float EaseOutCubic(float t) {
     return t * t * t + 1.0f;
 }
 
-// Smoothstep clássico (para o efeito de compressão na transição)
-static float SmoothStep01(float t) {
-    if (t < 0.0f) t = 0.0f;
-    if (t > 1.0f) t = 1.0f;
-    return t * t * (3.0f - 2.0f * t);
-}
-
 // ============================================================================
 // CACHE: EXISTE ALGUM SAVE? (evita fopen em disco a cada frame no menu)
 // ============================================================================
@@ -998,6 +991,24 @@ static void MenuFX_DrawTitle(Font font, float centerX, float topY, float screenA
     }
 }
 
+// Fundo animado COMPARTILHADO (menu + loading): vírus/bactérias sendo
+// destruídos por seringas, em camadas por profundidade. `entry` (0..1) controla
+// o fade de entrada. Centraliza a estética para que a tela de carregamento use
+// exatamente a mesma identidade do menu principal, sem duplicar a lógica do FX.
+void DrawMenuFXBackground(float time, float entry)
+{
+    float dt = GetFrameTime();
+    if (!MFX.init) MenuFX_Init();
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, (Color){ 9, 13, 30, 255 }, (Color){ 4, 6, 16, 255 });
+    MenuFX_Update(dt, time);
+    MenuFX_DrawOrganisms(0.00f, 0.60f, time, entry);   // organismos distantes
+    MenuFX_DrawSyringes(0.00f, 0.70f, entry);          // seringas distantes
+    MenuFX_DrawOrganisms(0.60f, 0.85f, time, entry);   // intermediários
+    MenuFX_DrawParticles();                            // mini-explosões
+    MenuFX_DrawOrganisms(0.85f, 1.01f, time, entry);   // próximos
+    MenuFX_DrawSyringes(0.70f, 1.01f, entry);          // seringas próximas
+}
+
 // ---- Layout ÚNICO do menu (desenho e input compartilham os retângulos) ----
 extern UIButton menuButtons[8];
 static Rectangle g_menuName = { 0, 0, 0, 0 };
@@ -1556,27 +1567,36 @@ void DrawTelaControles(GameState *game, Font font)
         float ce = UIEase((game->screenAnim - i*0.04f) / 0.4f);
         Rectangle dr = tr; dr.x -= (1.0f-ce)*34.0f;
         DrawUICard(dr, tabAccent, hover, active, ce);
-        DrawTutorialIcon(i, (Vector2){dr.x+31.0f, dr.y+28.0f}, 29.0f,
+        // A faixa de destaque do card ocupa o TOPO (y+10..15). Todo o conteúdo
+        // (ícone, contador, nome, marcador) fica em ZONAS SEPARADAS abaixo dela,
+        // com padding real — nada sobrepõe a faixa nem os textos entre si.
+        // Zona do ícone (coluna esquerda, centrada na área de conteúdo).
+        DrawTutorialIcon(i, (Vector2){dr.x+30.0f, dr.y+33.0f}, 25.0f,
                          active ? tabAccent : Fade(tabAccent, 0.72f), time);
+        // Zona do contador (NN), logo abaixo da faixa, à direita do ícone.
         DrawTextEx(font, TextFormat("%02d", i+1),
-                   (Vector2){dr.x+57.0f, dr.y+8.0f}, 12.0f, 1.0f,
-                   Fade(tabAccent, 0.75f*ce));
-        Rectangle tabName = { dr.x+78.0f, dr.y+8.0f, dr.width-90.0f, 38.0f };
-        DrawTextFitCentered(font, g_tutTabNames[i], tabName, 17.0f,
+                   (Vector2){dr.x+52.0f, dr.y+26.0f}, 13.0f, 1.0f,
+                   Fade(tabAccent, 0.8f*ce));
+        // Zona do nome (medida e centrada verticalmente, sem invadir a faixa).
+        Rectangle tabName = { dr.x+76.0f, dr.y+21.0f, dr.width-88.0f, 26.0f };
+        DrawTextFitCentered(font, g_tutTabNames[i], tabName, 16.0f,
                             active ? tabAccent : Fade(WHITE, hover ? 0.95f : 0.76f), true);
+        // Marcador de seleção (faixa vertical à esquerda, dentro da zona).
         if (active)
-            DrawRectangleRounded((Rectangle){dr.x+4.0f,dr.y+10.0f,4.0f,dr.height-20.0f},0.8f,4,tabAccent);
+            DrawRectangleRounded((Rectangle){dr.x+4.0f,dr.y+20.0f,4.0f,dr.height-28.0f},0.8f,4,tabAccent);
     }
 
     // Painel principal de detalhes, equivalente ao preview amplo do Arsenal.
     Rectangle detail = { 338.0f, 116.0f, 882.0f, 500.0f };
     DrawUICard(detail, acc, false, true, entry);
 
-    // Cabeçalho visual da categoria selecionada.
-    DrawTutorialIcon(g_tutTab, (Vector2){390.0f, 160.0f}, 54.0f, acc, time);
-    DrawTextEx(font, g_tutTabNames[g_tutTab], (Vector2){ 434.0f, 132.0f },
-               27.0f, 1.0f, Fade(acc, entry));
-    DrawTextEx(font, g_tutTabSub[g_tutTab], (Vector2){ 434.0f, 166.0f },
+    // Cabeçalho visual da categoria selecionada. Posicionado ABAIXO da faixa de
+    // destaque do painel (y+10..15) para que ícone, título e subtítulo não sejam
+    // invadidos por ela nem pelo badge de progresso (à direita).
+    DrawTutorialIcon(g_tutTab, (Vector2){392.0f, 168.0f}, 48.0f, acc, time);
+    DrawTextEx(font, g_tutTabNames[g_tutTab], (Vector2){ 438.0f, 137.0f },
+               26.0f, 1.0f, Fade(acc, entry));
+    DrawTextEx(font, g_tutTabSub[g_tutTab], (Vector2){ 438.0f, 170.0f },
                15.0f, 1.0f, Fade(WHITE, 0.68f*entry));
 
     // Indicador integrado ao cabeçalho do painel, longe dos seletores.
@@ -2125,38 +2145,36 @@ static const char *loadingTips[] = {
     "CURIOSIDADE: O capsideo e a capa proteica que protege o material genetico do virus. Neutraliza-lo e essencial para conter a infeccao."
 };
 
+int GetLoadingTipCount(void)
+{
+    return (int)(sizeof(loadingTips) / sizeof(loadingTips[0]));
+}
+
+const char *GetLoadingTipText(int index)
+{
+    int count = GetLoadingTipCount();
+    if (index < 0 || index >= count) index = 0;
+    return count > 0 ? loadingTips[index] : "CARREGANDO...";
+}
+
 void DrawTelaLoading(GameState *game, Font font)
 {
-    // ------------------------------------------------------------------------
-    // EFEITO "INJEÇÃO": na transição tutorial -> gameplay o personagem é
-    // comprimido pela ampola e a tela treme progressivamente (smoothstep).
-    // ------------------------------------------------------------------------
-    float fxProgress = 0.0f;
+    // Transição tutorial -> gameplay: a animação de injeção acontece NA CENA DA
+    // SERINGA (êmbolo empurrando — cutscene do tutorial em map_seringa.c). Aqui a
+    // tela de loading fica LIMPA: removidas a antiga "cápsula em Y comprimida
+    // entre placas cinzas", o tremor e o flash branco. fxActive apenas ajusta o
+    // texto do título.
     bool fxActive = game->syringeTransitionFX;
-    if (fxActive && game->loadingDuration > 0.0f)
-    {
-        fxProgress = game->loadingTimer / game->loadingDuration;
-        if (fxProgress > 1.0f) fxProgress = 1.0f;
-    }
 
-    // shakeIntensity = smoothstep(0,1,progress) * maxShake
-    float maxShake = 14.0f;
-    float shakeIntensity = fxActive ? SmoothStep01(fxProgress) * maxShake : 0.0f;
-    Vector2 shakeOff = { 0.0f, 0.0f };
-    if (shakeIntensity > 0.1f)
-    {
-        shakeOff.x = (float)GetRandomValue(-100, 100) / 100.0f * shakeIntensity;
-        shakeOff.y = (float)GetRandomValue(-100, 100) / 100.0f * shakeIntensity;
-    }
+    // Fundo: MESMA estética do menu principal (seringas destruindo patógenos),
+    // com fade de entrada suave para não dar flash preto.
+    float entry = game->loadingTimer / 0.35f; if (entry > 1.0f) entry = 1.0f;
+    DrawMenuFXBackground((float)GetTime(), entry);
+    // Escurecimento da faixa central/inferior para legibilidade de texto.
+    DrawRectangleGradientV(0, 180, SCREEN_WIDTH, 220, Fade(BLACK, 0.0f), Fade(BLACK, 0.45f));
+    DrawRectangleGradientV(0, 400, SCREEN_WIDTH, SCREEN_HEIGHT - 400, Fade(BLACK, 0.45f), Fade(BLACK, 0.6f));
 
-    rlPushMatrix();
-    rlTranslatef(shakeOff.x, shakeOff.y, 0.0f);
-
-    // Fundo verde-petróleo biológico escuro degradê
-    DrawRectangleGradientV(-20, -20, SCREEN_WIDTH + 40, SCREEN_HEIGHT + 40,
-                           (Color){ 8, 20, 12, 255 }, (Color){ 10, 28, 20, 255 });
-
-    // Células/partículas decorativas de fundo que simulam o sangue/tecido
+    // Partículas decorativas de tecido por cima do fundo (muito sutis).
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         if (game->particles[i].active)
@@ -2166,56 +2184,24 @@ void DrawTelaLoading(GameState *game, Font font)
         }
     }
 
-    // Título (muda durante a injeção da seringa)
-    const char *titulo = fxActive ? "INJETANDO NA CORRENTE SANGUINEA..."
-                                  : "CARREGANDO SISTEMA IMUNOLOGICO...";
-    Vector2 titleSz = MeasureTextEx(font, titulo, 26.0f, 1.2f);
-    DrawTextEx(font, titulo, (Vector2){ (SCREEN_WIDTH / 2.0f) - (titleSz.x / 2.0f), 240.0f }, 26.0f, 1.2f, THEME_COLOR_MAIN);
-
-    // ------------------------------------------------------------------------
-    // CENA DA COMPRESSÃO: ampola apertando o herói (apenas no efeito de injeção)
-    // ------------------------------------------------------------------------
-    if (fxActive)
-    {
-        float cx = SCREEN_WIDTH / 2.0f;
-        float cy = 140.0f;
-        float ease = SmoothStep01(fxProgress);
-
-        // Paredes da ampola convergindo (de 180px de abertura para 36px)
-        float gap = 90.0f - ease * 72.0f;
-        Color wallCol = (Color){ 155, 175, 192, 255 };
-        DrawRectangleRounded((Rectangle){ cx - 160.0f, cy - gap - 26.0f, 320.0f, 22.0f }, 0.5f, 6, wallCol);
-        DrawRectangleRounded((Rectangle){ cx - 160.0f, cy + gap + 4.0f, 320.0f, 22.0f }, 0.5f, 6, wallCol);
-        DrawRectangleLinesEx((Rectangle){ cx - 160.0f, cy - gap - 26.0f, 320.0f, gap * 2.0f + 52.0f }, 2.0f, Fade(THEME_COLOR_MAIN, 0.35f));
-
-        // BUGFIX VISUAL: antes o "heroi" era uma elipse com squash extremo
-        // (1.85 x 0.38), parecendo uma figura estranha esmagada. Agora e uma
-        // CAPSULA/anticorpo que permanece arredondada, apenas pulsando e
-        // descendo suavemente pela agulha — leitura limpa e tematica.
-        float t = (float)GetTime();
-        float pulse = 1.0f + sinf(t * 8.0f) * 0.05f;          // pulsacao sutil
-        float capR = (26.0f - ease * 6.0f) * pulse;            // encolhe pouco ao injetar
-        Color capCol = (Color){ 235, 245, 255, 255 };
-        // Halo de energia
-        DrawCircleV((Vector2){ cx, cy }, capR + 8.0f, Fade(THEME_COLOR_MAIN, 0.18f));
-        // Corpo arredondado do anticorpo
-        DrawCircleV((Vector2){ cx, cy }, capR, capCol);
-        DrawCircleLines((int)cx, (int)cy, capR, THEME_COLOR_MAIN);
-        // Marca em "Y" do anticorpo
-        DrawLineEx((Vector2){ cx, cy + capR * 0.2f }, (Vector2){ cx, cy + capR * 0.6f }, 3.0f, Fade(THEME_COLOR_MAIN, 0.8f));
-        DrawLineEx((Vector2){ cx, cy + capR * 0.2f }, (Vector2){ cx - capR * 0.45f, cy - capR * 0.4f }, 3.0f, Fade(THEME_COLOR_MAIN, 0.8f));
-        DrawLineEx((Vector2){ cx, cy + capR * 0.2f }, (Vector2){ cx + capR * 0.45f, cy - capR * 0.4f }, 3.0f, Fade(THEME_COLOR_MAIN, 0.8f));
-
-        // Gotículas de energia descendo pela agulha (sentido da injecao)
-        if (ease > 0.2f)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                float dy = fmodf(t * 120.0f + i * 40.0f, 120.0f);
-                DrawCircleV((Vector2){ cx, cy + gap + 10.0f + dy }, 2.5f, Fade((Color){ 0, 200, 255, 255 }, 0.5f * ease));
-            }
-        }
-    }
+    // Título: fonte de identidade do jogo, com brilho, contorno (contraste sobre
+    // o fundo animado), leve oscilação e reticências animadas.
+    float ttime = (float)GetTime();
+    const char *base = fxActive ? "INJETANDO NA CORRENTE SANGUINEA"
+                                : "CARREGANDO SISTEMA IMUNOLOGICO";
+    int dots = 1 + ((int)(ttime * 2.0f)) % 3;            // 1..3 reticências
+    char titulo[96];
+    snprintf(titulo, sizeof(titulo), "%s%.*s", base, dots, "...");
+    float tfs = 30.0f;
+    Vector2 titleSz = MeasureTextEx(font, titulo, tfs, 1.5f);
+    float tbob = sinf(ttime * 2.2f) * 3.0f;
+    Vector2 tpos = { (SCREEN_WIDTH / 2.0f) - (titleSz.x / 2.0f), 232.0f + tbob };
+    Color tAccent = fxActive ? (Color){ 255, 120, 120, 255 } : THEME_COLOR_MAIN;
+    // brilho
+    DrawTextEx(font, titulo, (Vector2){ tpos.x, tpos.y }, tfs, 1.5f, Fade(tAccent, 0.18f));
+    // contorno escuro
+    DrawTextEx(font, titulo, (Vector2){ tpos.x + 2, tpos.y + 2 }, tfs, 1.5f, Fade(BLACK, 0.6f));
+    DrawTextEx(font, titulo, tpos, tfs, 1.5f, tAccent);
 
     // Barra de progresso (Fundo)
     Rectangle progressBg = { 340, 310, 600, 30 };
@@ -2223,8 +2209,9 @@ void DrawTelaLoading(GameState *game, Font font)
     DrawRectangleRoundedLines(progressBg, 0.4f, 6, THEME_COLOR_BORDER);
 
     // Barra de progresso (Preenchimento)
-    float pct = game->loadingDuration > 0.0f ? (game->loadingTimer / game->loadingDuration) : 0.0f;
+    float pct = game->loadingDuration > 0.0f ? (game->loadingTimer / game->loadingDuration) : 1.0f;
     if (pct > 1.0f) pct = 1.0f;
+    if (pct < 0.0f) pct = 0.0f;
     Rectangle progressFill = { 340, 310, 600 * pct, 30 };
     if (pct > 0.02f)
     {
@@ -2247,23 +2234,25 @@ void DrawTelaLoading(GameState *game, Font font)
     DrawTextEx(font, tipTitle, (Vector2){ (SCREEN_WIDTH / 2.0f) - (tipTitleSz.x / 2.0f), 500.0f }, 16.0f, 1.0f, (Color){ 0, 220, 120, 255 });
 
     // Texto da dica (com wrapping em 2 linhas)
-    int tipIndex = game->loadingTip;
-    if (tipIndex < 0 || tipIndex >= LOADING_TIP_COUNT) tipIndex = 0;
-    const char *tipText = loadingTips[tipIndex];
+    const char *tipText = GetLoadingTipText(game->loadingTip);
     
     char line1[256] = {0};
     char line2[256] = {0};
-    int len = strlen(tipText);
+    int len = (int)strlen(tipText);
     int splitIdx = len / 2;
     // Encontra o espaço mais próximo do meio
     while (splitIdx > 0 && tipText[splitIdx] != ' ') {
         splitIdx--;
     }
-    if (splitIdx > 0) {
-        strncpy(line1, tipText, splitIdx);
-        strcpy(line2, tipText + splitIdx + 1);
+    // Cópia SEMPRE limitada ao tamanho do buffer (robusto a dicas longas).
+    if (splitIdx > 0 && splitIdx < len) {
+        int n1 = splitIdx;
+        if (n1 > (int)sizeof(line1) - 1) n1 = (int)sizeof(line1) - 1;
+        memcpy(line1, tipText, (size_t)n1);
+        line1[n1] = '\0';
+        snprintf(line2, sizeof(line2), "%s", tipText + splitIdx + 1);
     } else {
-        strcpy(line1, tipText);
+        snprintf(line1, sizeof(line1), "%s", tipText);
     }
 
     Vector2 line1Sz = MeasureTextEx(font, line1, 15.0f, 1.0f);
@@ -2274,12 +2263,4 @@ void DrawTelaLoading(GameState *game, Font font)
         DrawTextEx(font, line2, (Vector2){ (SCREEN_WIDTH / 2.0f) - (line2Sz.x / 2.0f), 565.0f }, 15.0f, 1.0f, WHITE);
     }
 
-    rlPopMatrix();
-
-    // Flash branco final da injeção (últimos 12% do loading), sem tremor
-    if (fxActive && fxProgress > 0.88f)
-    {
-        float flash = (fxProgress - 0.88f) / 0.12f;
-        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(WHITE, flash * 0.85f));
-    }
 }

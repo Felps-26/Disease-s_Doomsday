@@ -105,10 +105,23 @@ void UpdateButtonsVitoria(GameState *game, Vector2 mouse);
 void UpdateButtonsSkins(GameState *game, Vector2 mouse);
 
 // Tela de Tutorial (Seringa de Vacina)
+// O mundo (cena da seringa) vai para a textura virtual; o HUD é desenhado por
+// cima em resolução nativa. DrawTelaTutorial mantém a chamada combinada.
+void DrawTutorialWorld(GameState *game, Font font);
+void DrawTutorialHUD(GameState *game, Font font);
 void DrawTelaTutorial(GameState *game, Font font);
+
+// Libera recursos de GPU criados sob demanda pela gameplay/HUD (biossensor).
+void UnloadGameplayResources(void);
+
+// Fundo animado compartilhado (menu + loading): patógenos destruídos por
+// seringas. entry (0..1) controla o fade de entrada.
+void DrawMenuFXBackground(float time, float entry);
 
 // Tela de Carregamento (Loading)
 void DrawTelaLoading(GameState *game, Font font);
+int GetLoadingTipCount(void);
+const char *GetLoadingTipText(int index);
 
 // Tela de Configurações
 void DrawTelaSettings(GameState *game, Font font);

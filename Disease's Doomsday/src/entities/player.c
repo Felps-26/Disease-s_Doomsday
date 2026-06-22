@@ -113,7 +113,9 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
         HitInfectionCores(game, game->player.position, game->slashAnimRadius, 15 + danoBase);
     }
     else if (wpn == 2) {
-        game->player.attackCooldown = 0.15f;
+        // Cadência (Fase 5): 0.28s — antes 0.15s permitia spray contínuo. Agora
+        // o alcance (~1050px) e a cadência limitam a "limpeza" sem mirar.
+        game->player.attackCooldown = 0.28f;
         PlaySound(g_assets.sfxAttack);
         game->screenShake = 0.1f;
         // Arma de projétil do Mundo atual: Rifle de Bacteriófagos (Mundo 1, bônus
@@ -155,11 +157,11 @@ WeaponInfo GetWeaponInfo(int weapon)
             if (virus) return (WeaponInfo){
                 "Rifle de Vacina", "Doses de imunizacao em linha reta.",
                 "+60% de dano contra VIRUS", "Imuniza: eficaz contra virus (vacinas treinam o sistema imune).",
-                8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 200, 255, 255 } };
+                8, "Rapida (0.28s)", 0.28f, 2, 2, (Color){ 120, 200, 255, 255 }, 1050.0f };
             return (WeaponInfo){
                 "Rifle de Bacteriofagos", "Dispara bacteriofagos em linha reta.",
                 "+60% de dano contra BACTERIAS", "Bacteriofagos sao virus que infectam bacterias; otimo no Mundo 1.",
-                8, "Muito rapida", 0.15f, 2, 2, (Color){ 120, 255, 160, 255 } };
+                8, "Rapida (0.28s)", 0.28f, 2, 2, (Color){ 120, 255, 160, 255 }, 1050.0f };
         case 3: return (WeaponInfo){
             "Desestabilizador de RNA", "Granada que ataca o RNA em area.",
             "Dano em area + VENENO (ignora capsideo)", "Controle de grupos; forte vs. bacterias e virus.",

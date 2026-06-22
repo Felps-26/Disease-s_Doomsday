@@ -48,10 +48,6 @@
 #define WAVES_PER_WORLD 5    // Ondas em cada Mundo (a 5ª é sempre o chefe)
 #define WORLD_COUNT 2        // Total de Mundos da campanha
 
-// Quantidade de dicas educativas exibidas na tela de carregamento (mantenha em
-// sincronia com o array loadingTips[] em telas.c).
-#define LOADING_TIP_COUNT 12
-
 // Skins disponíveis (player e armas)
 #define SKIN_COUNT 3
 #define WEAPON_SKIN_COUNT 3
@@ -299,6 +295,11 @@ typedef struct GameState
     float tutorialTimer;        // Cronômetro acumulador para o passo de movimento
     bool tutorialEnemySpawned;  // Garante que apenas 1 bactéria tutorial seja criada
     DialogState tutorialDialog; // Estado do sistema de diálogo do tutorial
+    // Debounce de ataque do tutorial: enquanto um diálogo está ativo este latch
+    // fica TRUE; o ataque (SPACE/clique) só dispara depois que o jogador SOLTAR a
+    // tecla/botão que fechou a última página — evita atacar a bactéria que acabou
+    // de spawnar usando o mesmo input que avançou o texto. (Transitório; não salvo.)
+    bool attackInputLatched;
     bool injectionCutscene;     // Cutscene de injeção na seringa
     float injectionTimer;       // Timer da cutscene
 
