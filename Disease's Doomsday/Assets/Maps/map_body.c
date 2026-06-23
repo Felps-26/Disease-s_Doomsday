@@ -30,49 +30,59 @@
 #endif
 
 // ============================================================================
-// GEOMETRIA DO CORPO (coordenadas de mundo, MAP 4000x4000)
-// Geometria alinhada a Assets/Sprites/Map/corpo.png (arte 1254x1254 escalada
-// para o mundo 4000x4000). As cápsulas atravessam as divisões escuras da arte
-// para manter cabeça, tronco e membros como uma única área jogável conexa.
+// GEOMETRIA DO CORPO — autorada no MUNDO-BASE 4000x4000 (alinhada a corpo.png,
+// arte 1254x1254), REESCALADA automaticamente para o MAP_WIDTH/HEIGHT atual pelos
+// macros MBX/MBY/MBR. Assim a silhueta de colisão (fallback), os spawns-sobre-
+// órgão e o minimapa acompanham qualquer tamanho de mundo sem reescrever cada
+// número à mão. corpo.png é desenhado com altura = MAP_HEIGHT*IMG_SCALE centrado
+// no mundo, então a MESMA escala (MAP_WIDTH/4000) vale para imagem e geometria.
+//   MBX/MBY: coordenada de mundo (base 4000, centro 2000) -> mundo atual.
+//   MBR:     raio / distância / tamanho -> escala linear.
 // ============================================================================
-#define BODY_CX 2000.0f
+#define MB_BASE_WORLD 4000.0f
+#define MB_K   ((float)MAP_WIDTH / MB_BASE_WORLD)
+#define MBX(v) ((float)MAP_WIDTH  * 0.5f + ((v) - 2000.0f) * MB_K)
+#define MBY(v) ((float)MAP_HEIGHT * 0.5f + ((v) - 2000.0f) * MB_K)
+#define MBR(v) ((v) * MB_K)
+
+#define BODY_CX MBX(2000.0f)   // eixo central do corpo (= centro X do mundo atual)
 
 typedef struct BodyPart { Vector2 a, b; float r; } BodyPart;
 
 // União de cápsulas que forma a silhueta. Partes adjacentes se sobrepõem para
 // que o interior seja um espaço contínuo (o herói transita entre elas).
 static const BodyPart BODY[] = {
-    { { BODY_CX, 482.0f },  { BODY_CX, 482.0f },  315.0f }, // cabeça
-    { { BODY_CX, 770.0f },  { BODY_CX, 955.0f },  165.0f }, // pescoço
-    { { 1570.0f, 1110.0f }, { 2430.0f, 1110.0f }, 255.0f }, // ombros/peitoral
-    { { 1570.0f, 1370.0f }, { 2430.0f, 1370.0f }, 250.0f }, // tórax
-    { { 1580.0f, 1780.0f }, { 2420.0f, 1780.0f }, 330.0f }, // abdome superior
-    { { 1560.0f, 2220.0f }, { 2440.0f, 2220.0f }, 315.0f }, // abdome inferior/pelve
-    { { BODY_CX, 1260.0f }, { BODY_CX, 2280.0f }, 420.0f }, // núcleo contínuo do tronco
-    { { 1510.0f, 1080.0f }, { 1300.0f, 1650.0f }, 170.0f }, // braço esq. superior
-    { { 1300.0f, 1650.0f }, { 1140.0f, 2520.0f }, 145.0f }, // antebraço esq.
-    { { 2490.0f, 1080.0f }, { 2700.0f, 1650.0f }, 170.0f }, // braço dir. superior
-    { { 2700.0f, 1650.0f }, { 2860.0f, 2520.0f }, 145.0f }, // antebraço dir.
-    { { 1740.0f, 2390.0f }, { 1680.0f, 2940.0f }, 220.0f }, // coxa esq.
-    { { 1680.0f, 2940.0f }, { 1645.0f, 3370.0f }, 165.0f }, // canela esq.
-    { { 1645.0f, 3370.0f }, { 1625.0f, 3715.0f }, 160.0f }, // pé esq.
-    { { 2260.0f, 2390.0f }, { 2320.0f, 2940.0f }, 220.0f }, // coxa dir.
-    { { 2320.0f, 2940.0f }, { 2355.0f, 3370.0f }, 165.0f }, // canela dir.
-    { { 2355.0f, 3370.0f }, { 2375.0f, 3715.0f }, 160.0f }, // pé dir.
+    { { BODY_CX, MBY(482.0f) },       { BODY_CX, MBY(482.0f) },       MBR(315.0f) }, // cabeça
+    { { BODY_CX, MBY(770.0f) },       { BODY_CX, MBY(955.0f) },       MBR(165.0f) }, // pescoço
+    { { MBX(1570.0f), MBY(1110.0f) }, { MBX(2430.0f), MBY(1110.0f) }, MBR(255.0f) }, // ombros/peitoral
+    { { MBX(1570.0f), MBY(1370.0f) }, { MBX(2430.0f), MBY(1370.0f) }, MBR(250.0f) }, // tórax
+    { { MBX(1580.0f), MBY(1780.0f) }, { MBX(2420.0f), MBY(1780.0f) }, MBR(330.0f) }, // abdome superior
+    { { MBX(1560.0f), MBY(2220.0f) }, { MBX(2440.0f), MBY(2220.0f) }, MBR(315.0f) }, // abdome inferior/pelve
+    { { BODY_CX, MBY(1260.0f) },      { BODY_CX, MBY(2280.0f) },      MBR(420.0f) }, // núcleo contínuo do tronco
+    { { MBX(1510.0f), MBY(1080.0f) }, { MBX(1300.0f), MBY(1650.0f) }, MBR(170.0f) }, // braço esq. superior
+    { { MBX(1300.0f), MBY(1650.0f) }, { MBX(1140.0f), MBY(2520.0f) }, MBR(145.0f) }, // antebraço esq.
+    { { MBX(2490.0f), MBY(1080.0f) }, { MBX(2700.0f), MBY(1650.0f) }, MBR(170.0f) }, // braço dir. superior
+    { { MBX(2700.0f), MBY(1650.0f) }, { MBX(2860.0f), MBY(2520.0f) }, MBR(145.0f) }, // antebraço dir.
+    { { MBX(1740.0f), MBY(2390.0f) }, { MBX(1680.0f), MBY(2940.0f) }, MBR(220.0f) }, // coxa esq.
+    { { MBX(1680.0f), MBY(2940.0f) }, { MBX(1645.0f), MBY(3370.0f) }, MBR(165.0f) }, // canela esq.
+    { { MBX(1645.0f), MBY(3370.0f) }, { MBX(1625.0f), MBY(3715.0f) }, MBR(160.0f) }, // pé esq.
+    { { MBX(2260.0f), MBY(2390.0f) }, { MBX(2320.0f), MBY(2940.0f) }, MBR(220.0f) }, // coxa dir.
+    { { MBX(2320.0f), MBY(2940.0f) }, { MBX(2355.0f), MBY(3370.0f) }, MBR(165.0f) }, // canela dir.
+    { { MBX(2355.0f), MBY(3370.0f) }, { MBX(2375.0f), MBY(3715.0f) }, MBR(160.0f) }, // pé dir.
 };
 static const int BODY_N = (int)(sizeof(BODY) / sizeof(BODY[0]));
 
 // Órgãos-alvo (centros), em escala grande, dentro do tórax/abdome.
 #define LUNGS_CX   BODY_CX
-#define LUNGS_CY   1320.0f
-#define LUNG_OFFSET 300.0f
+#define LUNGS_CY   MBY(1320.0f)
+#define LUNG_OFFSET MBR(300.0f)
 #define BLOOD_CX   BODY_CX
-#define BLOOD_CY   1660.0f
+#define BLOOD_CY   MBY(1660.0f)
 #define HOSP_CX    BODY_CX        // foco da superbactéria: colonização intestinal (abdome)
-#define HOSP_CY    2180.0f
+#define HOSP_CY    MBY(2180.0f)
 // Centro seguro do tórax (folga máxima) — fallback determinístico de spawns.
 #define THORAX_SAFE_X BODY_CX
-#define THORAX_SAFE_Y 1780.0f
+#define THORAX_SAFE_Y MBY(1780.0f)
 
 // ============================================================================
 // ÂNCORAS ANATÔMICAS — SOMENTE DECORATIVAS (não influenciam colisão/spawn).
@@ -82,20 +92,20 @@ static const int BODY_N = (int)(sizeof(BODY) / sizeof(BODY[0]));
 // fonte autoritativa de colisão continua sendo a máscara baked / cápsulas.
 // ============================================================================
 #define ORG_BRAIN_X     BODY_CX
-#define ORG_BRAIN_Y     470.0f
-#define ORG_TRACHEA_TOP 800.0f     // topo da traqueia no pescoço
-#define ORG_HEART_X     (BODY_CX - 70.0f)  // coração levemente à esquerda
+#define ORG_BRAIN_Y     MBY(470.0f)
+#define ORG_TRACHEA_TOP MBY(800.0f)     // topo da traqueia no pescoço
+#define ORG_HEART_X     (BODY_CX - MBR(70.0f))  // coração levemente à esquerda
 #define ORG_HEART_Y     BLOOD_CY
-#define ORG_LIVER_X     (BODY_CX + 185.0f) // fígado: abdome superior direito (tela)
-#define ORG_LIVER_Y     1890.0f
-#define ORG_STOMACH_X   (BODY_CX - 200.0f) // estômago: abdome superior esquerdo (tela)
-#define ORG_STOMACH_Y   1885.0f
-#define ORG_KIDNEY_DX   248.0f             // afastamento dos rins do eixo central
-#define ORG_KIDNEY_Y    2035.0f            // rins na região lombar
+#define ORG_LIVER_X     (BODY_CX + MBR(185.0f)) // fígado: abdome superior direito (tela)
+#define ORG_LIVER_Y     MBY(1890.0f)
+#define ORG_STOMACH_X   (BODY_CX - MBR(200.0f)) // estômago: abdome superior esquerdo (tela)
+#define ORG_STOMACH_Y   MBY(1885.0f)
+#define ORG_KIDNEY_DX   MBR(248.0f)             // afastamento dos rins do eixo central
+#define ORG_KIDNEY_Y    MBY(2035.0f)            // rins na região lombar
 #define ORG_GUT_X       BODY_CX            // intestinos centralizados
 #define ORG_GUT_Y       HOSP_CY
 #define ORG_BLADDER_X   BODY_CX
-#define ORG_BLADDER_Y   2470.0f            // bexiga na parte inferior da pelve
+#define ORG_BLADDER_Y   MBY(2470.0f)            // bexiga na parte inferior da pelve
 
 // A transformação imagem->mundo (MAPBODY_IMG_SCALE / DX / DY) é definida em
 // map_body.h (fonte única, compartilhada com o baker da colisão). Quando a
@@ -112,10 +122,10 @@ static const int BODY_N = (int)(sizeof(BODY) / sizeof(BODY[0]));
 // PULMÕES — parâmetros centralizados (cor / escala / respiração / efeitos).
 // Tudo que controla a aparência do órgão vive aqui, para ajuste fácil.
 // ============================================================================
-#define LUNG_SCALE_X    168.0f   // meia-largura de um lobo (px de mundo)
-#define LUNG_SCALE_Y    214.0f   // meia-altura de um lobo
-#define LUNG_SPREAD     26.0f    // afastamento do lobo a partir do hilo
-#define LUNG_CENTER_DY  120.0f   // deslocamento vertical do centro do lobo abaixo do hilo
+#define LUNG_SCALE_X    MBR(168.0f)   // meia-largura de um lobo (px de mundo)
+#define LUNG_SCALE_Y    MBR(214.0f)   // meia-altura de um lobo
+#define LUNG_SPREAD     MBR(26.0f)    // afastamento do lobo a partir do hilo
+#define LUNG_CENTER_DY  MBR(120.0f)   // deslocamento vertical do centro do lobo abaixo do hilo
 #define LUNG_BREATH_AMP 0.055f   // amplitude da respiração (fração da escala)
 
 // Estado clínico do órgão (cor/efeito derivados do estado REAL do foco da onda).
@@ -454,7 +464,7 @@ Rectangle MapBody_WorldBounds(void)
 #ifdef MAPBODY_HAVE_MASK
     if (MapBody_EnsureInit()) return gBounds;
 #endif
-    return (Rectangle){ 1080.0f, 150.0f, 1840.0f, 3620.0f };
+    return (Rectangle){ MBX(1080.0f), MBY(150.0f), MBR(1840.0f), MBR(3620.0f) };
 }
 
 Vector2 MapBody_RandomPointInside(Vector2 avoid, float minDistFromAvoid)
@@ -479,7 +489,7 @@ bool MapBody_FindClearPoint(Vector2 preferred, Vector2 fallback, float margin, V
     if (MapBody_ContainsWithMargin(preferred, margin)) { *out = preferred; return true; }
 
     // 1) Busca em espiral ao redor do ponto preferido (determinística).
-    for (float rad = 40.0f; rad < 1470.0f; rad += 30.0f)
+    for (float rad = MBR(40.0f); rad < MBR(1470.0f); rad += MBR(30.0f))
     {
         for (int a = 0; a < 360; a += 15)
         {
@@ -513,7 +523,7 @@ int MapBody_PlaceCores(Vector2 bossCenter, Vector2 *out, int maxCores,
 {
     Vector2 center = MapBody_GetSafeCenter();
     float base = atan2f(bossCenter.y - center.y, bossCenter.x - center.x);
-    const float dists[6] = { 320.0f, 280.0f, 240.0f, 200.0f, 360.0f, 160.0f };
+    const float dists[6] = { MBR(320.0f), MBR(280.0f), MBR(240.0f), MBR(200.0f), MBR(360.0f), MBR(160.0f) };
     int placed = 0;
 
     for (int i = 0; i < maxCores; i++)
@@ -543,7 +553,7 @@ int MapBody_PlaceCores(Vector2 bossCenter, Vector2 *out, int maxCores,
             for (int k = 0; k < 360 && !done; k += 7)
             {
                 float aa = (float)(k + i * 53) * DEG2RAD;
-                float rr = 260.0f + (float)i * 20.0f;
+                float rr = MBR(260.0f) + (float)i * MBR(20.0f);
                 Vector2 c = { center.x + cosf(aa) * rr, center.y + sinf(aa) * rr };
                 if (!MapBody_ContainsWithMargin(c, coreMargin)) continue;
                 bool overlap = false;
@@ -974,11 +984,11 @@ static void DrawFocusEffects(int currentWorld, int wave, float time, BodyRegion 
                   : (focus == REGION_BLOODSTREAM)  ? (Color){ 255, 120, 130, 255 }
                                                    : (Color){ 255, 225, 120, 255 };
     // Indicação discreta da região infectada (tinte suave pulsante sobre o órgão).
-    DrawCircleV(fc, 300.0f, Fade(ringCol, 0.05f + 0.05f * pulse));
+    DrawCircleV(fc, MBR(300.0f), Fade(ringCol, 0.05f + 0.05f * pulse));
     // Destaque pulsante do órgão da fase (anel translúcido = marcador do objetivo).
-    float ringR = 320.0f + pulse * 26.0f;
+    float ringR = MBR(320.0f) + pulse * MBR(26.0f);
     DrawCircleLines((int)fc.x, (int)fc.y, ringR, Fade(ringCol, 0.25f + 0.20f * pulse));
-    DrawCircleLines((int)fc.x, (int)fc.y, ringR + 8.0f, Fade(ringCol, 0.12f));
+    DrawCircleLines((int)fc.x, (int)fc.y, ringR + MBR(8.0f), Fade(ringCol, 0.12f));
     (void)currentWorld; (void)wave; (void)time;
 }
 

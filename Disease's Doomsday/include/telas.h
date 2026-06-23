@@ -25,6 +25,20 @@ void DrawTitleText(Font font, const char *text, float centerX, float y, float fo
 // Texto com quebra de linha (word-wrap) dentro de `area`; encolhe a fonte se
 // preciso para caber na altura. Retorna a altura usada.
 float DrawTextWrapped(Font font, const char *text, Rectangle area, float fontSize, float spacing, Color color);
+
+// ---- Cutscene do CIENTISTA (reutilizada na transição de Mundo e na vitória) ----
+// Avança o typewriter e processa input (SPACE/ENTER/Q/clique) de uma página.
+// Retorna 0 = digitando/aguardando; 1 = avançou de página; 2 = concluiu (última
+// página confirmada). Compartilhado pela transição pós-Mundo 1 e pela tela final.
+int ScientistDialogAdvance(DialogState *dlg, const char *pageText, int pageCount);
+// Desenha a cena: cientista em destaque (círculo grande, mesma arte do tutorial)
+// + caixa de diálogo grande com efeito typewriter (o texto nunca vaza). `entry`
+// (0..1) anima a entrada; `header` rotula a transmissão.
+void DrawScientistDialog(Font font, DialogState *dlg, const char *header,
+                         const char *pageText, int pageCount, Color accent, float entry);
+// Páginas do diálogo final do cientista (a 2a inclui score/nível/abates). Preenche
+// `out` (capacidade >= 3) e retorna a contagem. Buffer estável durante a tela.
+int VictoryDialogPages(GameState *game, const char **out);
 // Tooltip (painel pequeno) ancorado perto de um ponto, mantido dentro da tela.
 void DrawTooltip(Font font, const char *text, Vector2 anchor);
 // Fundo temático por tela (gradiente + células biológicas flutuantes). `entry`

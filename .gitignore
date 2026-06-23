@@ -20,6 +20,7 @@ Disease's Doomsday/bg_capture
 Disease's Doomsday/bg_metric
 Disease's Doomsday/gameplay_capture
 Disease's Doomsday/bake_collision_mask
+Disease's Doomsday/ui_preview
 
 # Configuracoes e progresso locais
 Disease's Doomsday/Saves/
@@ -33,3 +34,4 @@ Disease's Doomsday/tools/scene_virus.png
 Disease's Doomsday/tools/bg_*.png
 Disease's Doomsday/tools/gameplay_*.png
 Disease's Doomsday/tools/mask_*.png
+Disease's Doomsday/tools/ui_*.png

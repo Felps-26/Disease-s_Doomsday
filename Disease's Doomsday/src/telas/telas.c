@@ -11,6 +11,7 @@
 #include "../../Assets/Maps/map_seringa.h"
 #include "../../Assets/@models/player_model.h"
 #include "../../Assets/@models/enemy_model.h"
+#include "../../Assets/@models/doctor_model.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -84,8 +85,8 @@ UIButton gameOverButtons[] = {
 };
 
 UIButton victoryButtons[] = {
-    { { 490, 390, 300, 50 }, "NEW JOURNEY", false, false },
-    { { 490, 460, 300, 50 }, "MAIN MENU", false, false }
+    { { 490, 390, 300, 50 }, "JOGAR NOVAMENTE", false, false },
+    { { 490, 460, 300, 50 }, "MENU PRINCIPAL", false, false }
 };
 
 // ============================================================================
@@ -1470,6 +1471,9 @@ static void DrawEnemyGuideRow(Font font, Rectangle row, int type,
     // aproximadamente 1.8x esse valor. O orçamento abaixo mantém inclusive a
     // silhueta externa dentro da coluna de 46 px reservada ao preview.
     float previewRadius = (row.height >= 70.0f) ? 20.0f : 11.5f;
+    // O bacilo e um bastonete horizontal: suas extremidades e espessura
+    // ultrapassam o raio nominal, portanto usa escala propria no card.
+    if (type == ETYPE_BACT_RANGED) previewRadius = 13.5f;
     DrawTutorialEnemyPreview(type, (Vector2){ row.x + 27.0f, row.y + row.height*0.5f },
                              previewRadius, false);
     DrawTextEx(font, name, (Vector2){ row.x + 54.0f, row.y + 7.0f },
@@ -1477,8 +1481,18 @@ static void DrawEnemyGuideRow(Font font, Rectangle row, int type,
     Vector2 ws = MeasureTextEx(font, wave, 11.0f, 1.0f);
     DrawTextEx(font, wave, (Vector2){ row.x + row.width - ws.x - 9.0f, row.y + 9.0f },
                11.0f, 1.0f, Fade(GOLD, 0.9f));
-    DrawTextEx(font, role, (Vector2){ row.x + 54.0f, row.y + 29.0f },
-               12.0f, 1.0f, Fade(WHITE, 0.78f));
+    if (row.height >= 70.0f)
+    {
+        DrawTextWrapped(font, role,
+                        (Rectangle){ row.x + 54.0f, row.y + 29.0f,
+                                     row.width - 64.0f, row.height - 35.0f },
+                        12.0f, 1.0f, Fade(WHITE, 0.78f));
+    }
+    else
+    {
+        DrawTextEx(font, role, (Vector2){ row.x + 54.0f, row.y + 29.0f },
+                   12.0f, 1.0f, Fade(WHITE, 0.78f));
+    }
 }
 
 static void DrawTutContent(GameState *game, Font font, Rectangle panel)
@@ -1505,7 +1519,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
             break;
 
         case 1: // ARMAS
-            DrawTextEx(font, "Troque a qualquer momento com 1-4. Cada arma muda a jogabilidade:", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f));
+            DrawTextEx(font, "Troque a qualquer momento com 1-5. Cada arma muda a jogabilidade:", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f));
             y += 36.0f;
             for (int w = 1; w <= 4; w++)
             {
@@ -1584,7 +1598,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
             DrawTextEx(font, "Fase 1  Quebre o escudo protetor", (Vector2){ virusCard.x + 18, virusCard.y + 124 }, 14.0f, 1.0f, Fade(WHITE, .78f));
             DrawTextEx(font, "Fase 2  Invoca enxames de rinovirus", (Vector2){ virusCard.x + 18, virusCard.y + 151 }, 14.0f, 1.0f, Fade(WHITE, .78f));
             DrawTextEx(font, "Fase 3  RNA exposto e rajada radial", (Vector2){ virusCard.x + 18, virusCard.y + 178 }, 14.0f, 1.0f, Fade(WHITE, .78f));
-            DrawTextEx(font, "Escalpelizador rompe o capsideo mais rapido.", (Vector2){ virusCard.x + 18, virusCard.y + 226 }, 13.0f, 1.0f, (Color){ 120, 220, 140, 255 });
+            DrawTextEx(font, "Lamina Bioeletrica rompe o capsideo.", (Vector2){ virusCard.x + 18, virusCard.y + 226 }, 13.0f, 1.0f, (Color){ 120, 220, 140, 255 });
 
             DrawTextEx(font, "Ambos aparecem sempre na onda 5, protegidos por lacaios. Elimine os Nucleos de Infeccao.",
                        (Vector2){ x, y + 307.0f }, 14.0f, 1.0f, Fade(accent, 0.92f));
@@ -1825,8 +1839,88 @@ void DrawTelaGameOver(GameState *game, Font font)
 
 
 // ============================================================================
-// 5. TELA: VITÓRIA
+// CUTSCENE DO CIENTISTA — reutilizada pela transição pós-Mundo 1 e pela vitória.
+// Cientista em destaque (mesma arte do tutorial, grande) + caixa de diálogo grande
+// com typewriter. O texto faz wrap e nunca vaza. Avança com SPACE/ENTER/Q/clique.
 // ============================================================================
+int ScientistDialogAdvance(DialogState *dlg, const char *pageText, int pageCount)
+{
+    int totalLen = (int)strlen(pageText);
+    float speed = 0.018f; // s/caractere (texto maior que o do tutorial)
+    dlg->charTimer += GetFrameTime();
+    while (dlg->charTimer >= speed && dlg->charShown < totalLen) { dlg->charTimer -= speed; dlg->charShown++; }
+
+    bool confirm = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
+                   IsKeyPressed(KEY_Q) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    if (!confirm) return 0;
+    if (dlg->charShown < totalLen) { dlg->charShown = totalLen; return 0; } // 1o input: revela tudo
+    if (dlg->page < pageCount - 1) { dlg->page++; dlg->charShown = 0; dlg->charTimer = 0.0f; return 1; }
+    return 2; // última página confirmada
+}
+
+void DrawScientistDialog(Font font, DialogState *dlg, const char *header,
+                         const char *pageText, int pageCount, Color accent, float entry)
+{
+    float t = (float)GetTime();
+    int totalLen = (int)strlen(pageText);
+
+    // --- Cientista em destaque (círculo grande à esquerda) ---
+    Vector2 dc = { 290.0f, 348.0f };
+    float dr = 168.0f;
+    DrawCircleV(dc, (dr + 26.0f) * (0.98f + 0.02f * sinf(t * 2.0f)), Fade(accent, 0.10f * entry)); // halo "transmissão"
+    DrawCircleLines((int)dc.x, (int)dc.y, dr + 14.0f, Fade(accent, 0.35f * entry));
+    bool talking = (dlg->charShown < totalLen);
+    float reactT = (dlg->charShown < 10) ? 1.0f : 0.0f;
+    DrawTutorialDoctor(dc, dr, t, talking, reactT);
+    const char *who = "CIENTISTA-CHEFE";
+    Vector2 ws = MeasureTextEx(font, who, 22.0f, 1.0f);
+    DrawTextEx(font, who, (Vector2){ dc.x - ws.x * 0.5f, dc.y + dr + 22.0f }, 22.0f, 1.0f, Fade(accent, entry));
+
+    // --- Caixa de diálogo grande (direita) ---
+    Rectangle box = { 520.0f, 152.0f, 706.0f, 392.0f };
+    DrawPanel(box, Fade(accent, entry), 0.85f * entry);
+    DrawTextEx(font, header, (Vector2){ box.x + 28.0f, box.y + 20.0f }, 22.0f, 1.0f, Fade(accent, entry));
+    DrawLineEx((Vector2){ box.x + 28.0f, box.y + 52.0f }, (Vector2){ box.x + box.width - 28.0f, box.y + 52.0f },
+               2.0f, Fade(accent, 0.4f * entry));
+
+    // Texto revelado (typewriter) com WRAP — nunca vaza da caixa.
+    char shown[1024];
+    int n = dlg->charShown; if (n > totalLen) n = totalLen; if (n > 1023) n = 1023;
+    memcpy(shown, pageText, (size_t)n); shown[n] = '\0';
+    Rectangle textArea = { box.x + 28.0f, box.y + 66.0f, box.width - 56.0f, box.height - 128.0f };
+    DrawTextWrapped(font, shown, textArea, 21.0f, 1.0f, Fade(WHITE, entry));
+
+    // Indicadores de página + prompt pulsante.
+    for (int i = 0; i < pageCount; i++)
+        DrawCircleV((Vector2){ box.x + 28.0f + i * 18.0f, box.y + box.height - 28.0f }, 5.0f,
+                    (i == dlg->page) ? accent : Fade(accent, 0.3f));
+    const char *prompt = (dlg->charShown < totalLen) ? "[ESPACO] revelar"
+                       : (dlg->page < pageCount - 1) ? "[ESPACO] continuar >" : "[ESPACO] avancar >";
+    float a = 0.55f + 0.45f * sinf(t * 4.0f);
+    Vector2 ps = MeasureTextEx(font, prompt, 16.0f, 1.0f);
+    DrawTextEx(font, prompt, (Vector2){ box.x + box.width - ps.x - 26.0f, box.y + box.height - 32.0f },
+               16.0f, 1.0f, Fade(accent, a * entry));
+}
+
+// ============================================================================
+// 5. TELA: VITÓRIA — cena final do cientista + relatório (score/nível/abates)
+// ============================================================================
+int VictoryDialogPages(GameState *game, const char **out)
+{
+    static char statsPage[300];
+    snprintf(statsPage, sizeof statsPage,
+        "Relatorio final da missao: pontuacao de %d, nivel %d alcancado e %d "
+        "patogenos eliminados. Esses numeros nao sao so estatisticas: mostram "
+        "quantas ameacas voce impediu de avancar pelo organismo.",
+        game->player.score, game->player.level, game->totalEnemiesKilled);
+    out[0] = "Voce conseguiu, Anticorpo. Contra todas as previsoes, o organismo foi "
+             "estabilizado: as bacterias foram contidas, as ameacas virais eliminadas "
+             "e a infeccao nao conseguiu se espalhar.";
+    out[1] = statsPage;
+    out[2] = "Em nome de toda a equipe medica, obrigado. Transmissao encerrada.";
+    return 3;
+}
+
 void DrawTelaVitoria(GameState *game, Font font)
 {
     float time = (float)GetTime();
@@ -1843,6 +1937,20 @@ void DrawTelaVitoria(GameState *game, Font font)
     }
 
     float entry = UIEase(game->screenAnim / 0.5f);
+
+    // -------- FASE 0: o cientista narra o encerramento (relatório integrado) --------
+    if (game->sceneDialog.active)
+    {
+        DrawTitleText(font, "ORGANISMO CURADO!", SCREEN_WIDTH / 2.0f, 54.0f, 30.0f, Fade(THEME_COLOR_TEXT, entry));
+        const char *pages[4];
+        int pc = VictoryDialogPages(game, pages);
+        if (game->sceneDialog.page >= pc) game->sceneDialog.page = pc - 1;
+        DrawScientistDialog(font, &game->sceneDialog, "TRANSMISSAO // RELATORIO FINAL",
+                            pages[game->sceneDialog.page], pc, GOLD, entry);
+        return;
+    }
+
+    // -------- FASE 1: encerrada a transmissão, mostra stats + apenas 2 opções --------
     float slide = (1.0f - entry) * 46.0f;
 
     // Raios celebratórios irradiando atrás do título (tema imunológico).

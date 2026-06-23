@@ -43,7 +43,7 @@ int main(void)
     GameState g; memset(&g, 0, sizeof(g));
     strcpy(g.player.name, "DR. AB");
     g.player.hp = 82; g.player.maxHp = 100; g.player.level = 5; g.player.xp = 40; g.player.xpNeeded = 100;
-    g.player.equippedWeapon = 2; g.player.speed = 300; g.masterVolume = 1.0f;
+    g.player.equippedWeapon = 2; g.player.speed = 300; g.musicVolume = 1.0f; g.sfxVolume = 1.0f;
     g.player.squashX = 1.0f; g.player.squashY = 1.0f; g.player.facingDir = 1;
     g.difficulty = DIFFICULTY_MEDIUM; g.screenAnim = 1.0f;
     g.currentScreen = SCREEN_GAMEPLAY;

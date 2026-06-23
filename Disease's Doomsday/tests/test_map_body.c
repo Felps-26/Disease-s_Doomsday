@@ -13,6 +13,13 @@
 #include <math.h>
 #include <stdlib.h>
 
+// Reescala coordenadas autoradas no MUNDO-BASE 4000 (centro 2000) para o
+// MAP_WIDTH/HEIGHT atual — mesma transformação dos macros MBX/MBY/MBR em
+// map_body.c. Mantém as âncoras anatômicas válidas em qualquer tamanho de mundo.
+#define TK    ((float)MAP_WIDTH / 4000.0f)
+#define TX(v) ((float)MAP_WIDTH  * 0.5f + ((v) - 2000.0f) * TK)
+#define TY(v) ((float)MAP_HEIGHT * 0.5f + ((v) - 2000.0f) * TK)
+
 // ---- Stubs das funções da raylib referenciadas por map_body.c (desenho) ----
 void DrawLineEx(Vector2 a, Vector2 b, float t, Color c) { (void)a;(void)b;(void)t;(void)c; }
 void DrawCircleV(Vector2 c, float r, Color col) { (void)c;(void)r;(void)col; }
@@ -182,14 +189,16 @@ int main(void)
                 int n=ny[d]*COLS+nx[d]; if(pass[n]&&!seen[n]){seen[n]=1;q[tail++]=n;} } }
         #define REACH(WX,WY) (pass[((int)((WY)/STEP))*COLS+(int)((WX)/STEP)] && seen[((int)((WY)/STEP))*COLS+(int)((WX)/STEP)])
         struct { const char *n; float x, y; } A[] = {
-            {"cabeca",2000,420},{"pescoco",2000,820},{"torax",2000,1300},
-            {"abdome",2000,2050},{"pelve",2000,2700},{"pernaL",1820,3300},{"pernaR",2180,3300},
-            {"pulmao",2000,1320},{"coracao",2000,1660},{"intestino",2000,2180} };
+            {"cabeca",TX(2000),TY(420)},{"pescoco",TX(2000),TY(820)},{"torax",TX(2000),TY(1300)},
+            {"abdome",TX(2000),TY(2050)},{"pelve",TX(2000),TY(2700)},{"pernaL",TX(1820),TY(3300)},{"pernaR",TX(2180),TY(3300)},
+            {"pulmao",TX(2000),TY(1320)},{"coracao",TX(2000),TY(1660)},{"intestino",TX(2000),TY(2180)} };
         int nA = (int)(sizeof(A)/sizeof(A[0])), okA = 0;
         for (int a=0;a<nA;a++) { if (REACH(A[a].x,A[a].y)) okA++; else printf("   inalcancavel: %s (%.0f,%.0f)\n",A[a].n,A[a].x,A[a].y); }
         int armL=0, armR=0;
-        for (int y=1800;y<=2600&&!armL;y+=25) for (int x=950;x<=1350;x+=25) if (REACH((float)x,(float)y)){armL=1;break;}
-        for (int y=1800;y<=2600&&!armR;y+=25) for (int x=2650;x<=3050;x+=25) if (REACH((float)x,(float)y)){armR=1;break;}
+        int aLy0=(int)TY(1800),aLy1=(int)TY(2600),aLx0=(int)TX(950),aLx1=(int)TX(1350);
+        int aRx0=(int)TX(2650),aRx1=(int)TX(3050);
+        for (int y=aLy0;y<=aLy1&&!armL;y+=25) for (int x=aLx0;x<=aLx1;x+=25) if (REACH((float)x,(float)y)){armL=1;break;}
+        for (int y=aLy0;y<=aLy1&&!armR;y+=25) for (int x=aRx0;x<=aRx1;x+=25) if (REACH((float)x,(float)y)){armR=1;break;}
         if (!armL) printf("   braco esquerdo inalcancavel\n");
         if (!armR) printf("   braco direito inalcancavel\n");
         printf("5) Regioes: anchors %d/%d  bracoL=%d bracoR=%d\n", okA, nA, armL, armR);
@@ -223,7 +232,7 @@ int main(void)
     // 7) FORA DA SILHUETA É BLOQUEADO (não dá para sair do corpo).
     // ------------------------------------------------------------------
     {
-        Vector2 outs[] = { {200,200},{3800,200},{200,3800},{3800,3800},{2000,40},{3700,2000},{300,2000} };
+        Vector2 outs[] = { {TX(200),TY(200)},{TX(3800),TY(200)},{TX(200),TY(3800)},{TX(3800),TY(3800)},{TX(2000),TY(40)},{TX(3700),TY(2000)},{TX(300),TY(2000)} };
         int leaks = 0;
         for (int i=0;i<(int)(sizeof(outs)/sizeof(outs[0]));i++) if (MapBody_Contains(outs[i])) leaks++;
         printf("7) Externos bloqueados: vazamentos=%d\n", leaks);

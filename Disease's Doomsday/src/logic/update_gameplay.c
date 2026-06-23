@@ -286,6 +286,20 @@ void RegisterEnemyKill(GameState *game, Enemy *enemy)
     game->totalEnemiesKilled++;
     if (game->enemiesRemaining > 0) game->enemiesRemaining--;
 
+    // DESBLOQUEIO DA LÂMINA BIOELÉTRICA (arma 5) por abates — feedback único e
+    // claro. A arma fica disponível para o resto da campanha (estado deriva de
+    // totalEnemiesKilled, que é salvo, então o desbloqueio sobrevive a save/fase).
+    if (!game->bioBladeAnnounced && !game->inTutorial &&
+        game->totalEnemiesKilled >= BIOBLADE_UNLOCK_KILLS)
+    {
+        game->bioBladeAnnounced = true;
+        WeaponInfo wbi = GetWeaponInfo(WEAPON_BIOBLADE);
+        ShowBanner(game, TextFormat("NOVA ARMA: %s", wbi.name),
+                   "Tecla [5] desbloqueada - quebra capsideos virais", wbi.color, 3.6f);
+        SpawnParticleExplosion(game, game->player.position, wbi.color, 22, 60.0f, 200.0f, 4.0f, 0.6f);
+        if (g_assets.sfxPickup.frameCount > 0) PlaySound(g_assets.sfxPickup);
+    }
+
     // Bônus de recompensa para mini chefes e chefe final
     if (enemy->tier == TIER_MINIBOSS) { game->player.xp += 60; game->player.score += 300; }
     else if (enemy->tier == TIER_3_BOSS) { game->player.xp += 200; game->player.score += 1500; }
@@ -734,6 +748,7 @@ void InitGame(GameState *game)
     // Sistema
     game->wave = 1;
     game->totalEnemiesKilled = 0;
+    game->bioBladeAnnounced = false; // Lâmina Bioelétrica ainda bloqueada (0 abates)
     game->timeElapsed = 0.0f;
     game->screenShake = 0.0f;
     game->slashAnimTimer = 0.0f;
@@ -1470,10 +1485,11 @@ void UpdateGameplay(GameState *game, float delta)
     if (IsKeyPressed(KEY_TWO))   wpnRequest = 2;
     if (IsKeyPressed(KEY_THREE)) wpnRequest = 3;
     if (IsKeyPressed(KEY_FOUR))  wpnRequest = 4;
+    if (IsKeyPressed(KEY_FIVE))  wpnRequest = WEAPON_BIOBLADE; // Lâmina Bioelétrica (abates)
     if (wpnRequest != 0)
     {
         WeaponInfo wi = GetWeaponInfo(wpnRequest);
-        if (game->player.level >= wi.unlockLevel)
+        if (WeaponUnlocked(game, wpnRequest))
         {
             if (wpnRequest != game->player.equippedWeapon)
             {
@@ -1485,10 +1501,12 @@ void UpdateGameplay(GameState *game, float delta)
         }
         else
         {
-            // Arma bloqueada: avisa o requisito de nível em vez de falhar em silêncio.
-            ShowBanner(game, TextFormat("%s BLOQUEADA", wi.name),
-                       TextFormat("Desbloqueia no Nivel %d", wi.unlockLevel),
-                       (Color){ 200, 80, 80, 255 }, 2.0f);
+            // Arma bloqueada: requisito por ABATES (Lâmina Bioelétrica) ou por nível.
+            const char *req = (wpnRequest == WEAPON_BIOBLADE)
+                ? TextFormat("Desbloqueia com %d abates (%d/%d)", BIOBLADE_UNLOCK_KILLS,
+                             game->totalEnemiesKilled, BIOBLADE_UNLOCK_KILLS)
+                : TextFormat("Desbloqueia no Nivel %d", wi.unlockLevel);
+            ShowBanner(game, TextFormat("%s BLOQUEADA", wi.name), req, (Color){ 200, 80, 80, 255 }, 2.0f);
         }
     }
 
@@ -2315,11 +2333,12 @@ void UpdateGameplay(GameState *game, float delta)
             {
                 if (game->currentWorld == WORLD_BACTERIA)
                 {
-                    // Concluiu o Mundo das Bactérias: cutscene educativa de
-                    // transição que leva ao Mundo dos Vírus (Fase 6).
+                    // Concluiu o Mundo das Bactérias: cutscene com o cientista
+                    // (diálogo educativo) que leva ao Mundo dos Vírus (Fase 6).
                     game->worldCompleted = true;
                     game->currentScreen = SCREEN_WORLD_TRANSITION;
                     game->uiAnimTimer = 0.0f;
+                    game->sceneDialog = (DialogState){ true, 0, 0, 0.0f }; // reinicia o diálogo
                 }
                 else
                 {
@@ -2636,11 +2655,13 @@ void CarregarJogoSlot(GameState *game, int slot)
         if (game->wave < 1 || game->wave > 5) game->wave = 1;
 
         // Recalcula as armas desbloqueadas a partir do nível carregado e garante
-        // que a arma equipada não esteja bloqueada.
+        // que a arma equipada não esteja bloqueada. A Lâmina Bioelétrica (5) deriva
+        // dos abates salvos (totalEnemiesKilled) — sem campo novo no save.
         game->maxWeaponUnlocked = 1;
         for (int w = 2; w <= 4; w++)
             if (game->player.level >= WeaponUnlockLevel(w)) game->maxWeaponUnlocked = w;
-        if (game->player.equippedWeapon > game->maxWeaponUnlocked)
+        game->bioBladeAnnounced = (game->totalEnemiesKilled >= BIOBLADE_UNLOCK_KILLS);
+        if (!WeaponUnlocked(game, game->player.equippedWeapon))
             game->player.equippedWeapon = game->maxWeaponUnlocked;
         if (game->player.position.x < 0.0f || game->player.position.x > MAP_WIDTH ||
             game->player.position.y < 0.0f || game->player.position.y > MAP_HEIGHT)
@@ -2851,6 +2872,7 @@ void UpdateTelaLoading(GameState *game, float delta)
 
             case LOAD_TO_VICTORY:
                 game->currentScreen = SCREEN_VICTORY;
+                game->sceneDialog = (DialogState){ true, 0, 0, 0.0f }; // cena final do cientista
                 break;
         }
     }
@@ -2899,7 +2921,7 @@ void GetTutorialDialogText(int step, int page, const char **line1, const char **
         if (page == 0)
         {
             *line1 = "Excelente! Assinatura do patogeno registrada com sucesso.";
-            *line2 = "No organismo: troque de arma com 1-4 e use pocao de vida com E.";
+            *line2 = "No organismo: troque de arma com 1-5 e use pocao de vida com E.";
             *line3 = "[Q ou ESPACO para continuar]";
         }
         else
@@ -2912,43 +2934,66 @@ void GetTutorialDialogText(int step, int page, const char **line1, const char **
 }
 
 // ============================================================================
-// TRANSIÇÃO ENTRE MUNDOS (Fase 6): Bactérias -> Vírus
+// TRANSIÇÃO ENTRE MUNDOS (Fase 6): Bactérias -> Vírus — CENA DO CIENTISTA
+// Substitui a antiga tela puramente textual por um diálogo com o cientista (mesma
+// arte do tutorial, em destaque) que celebra a vitória sobre a KPC, reforça o uso
+// correto de antibióticos/higiene e introduz o Mundo dos Vírus. Texto em páginas
+// com typewriter; na última, inicia o Mundo 2 preservando o progresso do jogador.
 // ============================================================================
+static const char *const WORLD1_PAGES[] = {
+    "Excelente trabalho, agente! A pneumonia bacteriana foi contida e a "
+    "Superbacteria KPC nao vai mais avancar pelo organismo.",
+
+    "Mas preste atencao: bacterias como a KPC sao perigosas justamente porque "
+    "resistem a muitos antibioticos. Nada de automedicacao. Antibiotico so com "
+    "prescricao e sempre ate o fim do tratamento indicado. E nunca subestime a "
+    "higiene das maos: nos hospitais, ela salva vidas.",
+
+    "Ainda nao acabou. Os sensores detectaram uma nova onda de invasores. Agora "
+    "nao sao bacterias, e sim VIRUS: menores, mais rapidos e muito diferentes "
+    "entre si.",
+
+    "Cinco ameacas virais surgirao progressivamente, ate o temivel CORONAVIRUS na "
+    "onda final. Todas tem CAPSIDEO: use a Lamina Bioeletrica para romper o escudo. "
+    "Prepare-se, Anticorpo: o organismo ainda precisa de voce.",
+};
+#define WORLD1_PAGE_COUNT ((int)(sizeof(WORLD1_PAGES) / sizeof(WORLD1_PAGES[0])))
+
 void UpdateTelaTransicao(GameState *game)
 {
     game->uiAnimTimer += GetFrameTime();
+    if (game->uiAnimTimer < 0.35f) return; // breve espera de entrada antes de aceitar input
 
-    // Avança após um curto tempo de leitura, ao confirmar.
-    if (game->uiAnimTimer > 0.6f &&
-        (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_Q) ||
-         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)))
-    {
-        // Inicia o Mundo dos Vírus mantendo nível, armas e skins do jogador.
-        game->currentWorld = WORLD_VIRUS;
-        game->worldCompleted = false;
-        game->wave = 1;
+    int r = ScientistDialogAdvance(&game->sceneDialog,
+                                   WORLD1_PAGES[game->sceneDialog.page], WORLD1_PAGE_COUNT);
+    if (r != 2) return; // ainda digitando ou lendo as paginas
 
-        // Limpa o estado de combate do mundo anterior.
-        for (int i = 0; i < MAX_ENEMIES; i++)    game->enemies[i].active = false;
-        for (int i = 0; i < MAX_POWERUPS; i++)   game->powerUps[i].active = false;
-        for (int i = 0; i < MAX_PROJECTILES; i++) game->projectiles[i].active = false;
-        for (int i = 0; i < MAX_CORES; i++)      game->cores[i].active = false;
-        game->bossShieldActive = false;
-        game->bossCoresSpawned = false;
-        game->enemiesRemaining = 0;
+    // Diálogo concluido: inicia o Mundo dos Vírus mantendo nível, armas e skins.
+    game->sceneDialog.active = false;
+    game->currentWorld = WORLD_VIRUS;
+    game->worldCompleted = false;
+    game->wave = 1;
 
-        // Restaura o herói e remove debuffs/itens temporários.
-        game->player.hp = game->player.maxHp;
-        game->player.poisonTimer = 0.0f; game->player.slowTimer = 0.0f;
-        game->player.damageCooldown = 0.0f; game->poisonTickAccum = 0.0f;
-        game->player.maskTimer = 0.0f; game->player.distancingTimer = 0.0f;
-        game->player.regenTimer = 0.0f; game->player.regenAccum = 0.0f;
-        game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
+    // Limpa o estado de combate do mundo anterior.
+    for (int i = 0; i < MAX_ENEMIES; i++)    game->enemies[i].active = false;
+    for (int i = 0; i < MAX_POWERUPS; i++)   game->powerUps[i].active = false;
+    for (int i = 0; i < MAX_PROJECTILES; i++) game->projectiles[i].active = false;
+    for (int i = 0; i < MAX_CORES; i++)      game->cores[i].active = false;
+    game->bossShieldActive = false;
+    game->bossCoresSpawned = false;
+    game->enemiesRemaining = 0;
 
-        SetWeaponWorld(game->currentWorld);
-        StartNextWave(game);
-        game->currentScreen = SCREEN_GAMEPLAY;
-    }
+    // Restaura o herói e remove debuffs/itens temporários.
+    game->player.hp = game->player.maxHp;
+    game->player.poisonTimer = 0.0f; game->player.slowTimer = 0.0f;
+    game->player.damageCooldown = 0.0f; game->poisonTickAccum = 0.0f;
+    game->player.maskTimer = 0.0f; game->player.distancingTimer = 0.0f;
+    game->player.regenTimer = 0.0f; game->player.regenAccum = 0.0f;
+    game->player.position = (Vector2){ MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
+
+    SetWeaponWorld(game->currentWorld);
+    StartNextWave(game);
+    game->currentScreen = SCREEN_GAMEPLAY;
 }
 
 void DrawTelaTransicao(GameState *game, Font font)
@@ -2958,45 +3003,16 @@ void DrawTelaTransicao(GameState *game, Font font)
     DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
                            Fade((Color){ 20, 40, 80, 255 }, 0.5f), Fade(BLACK, 0.9f));
 
-    const char *title = "MUNDO 1 CONCLUIDO: BACTERIAS DERROTADAS";
-    Vector2 ts = MeasureTextEx(font, title, 30.0f, 2.0f);
-    DrawTextEx(font, title, (Vector2){ SCREEN_WIDTH / 2.0f - ts.x / 2.0f, 70.0f }, 30.0f, 2.0f, GOLD);
+    float entry = UIEase(game->uiAnimTimer / 0.5f);
+    if (entry > 1.0f) entry = 1.0f;
 
-    // Texto educativo em camadas: o que aconteceu, o que vem, e cuidados reais.
-    const char *lines[] = {
-        "Voce conteve a pneumonia bacteriana e a Superbacteria KPC.",
-        "A KPC e resistente a antibioticos e se espalha em hospitais:",
-        "   - Nao se automedique com antibioticos.",
-        "   - Use antibioticos so com prescricao e ate o fim do tratamento.",
-        "   - Higiene das maos reduz infeccoes hospitalares.",
-        "",
-        "AGORA: cinco ameacas virais surgem progressivamente:",
-        "   Rinovirus (enxame), Dengue (contato), Influenza (atirador),",
-        "   Sarampo mutante (elite) e o chefe Coronavirus na onda 5.",
-        "Todos possuem CAPSIDEO: quebre o escudo antes de atingir a vida.",
-        "Escalpelizador rompe capsideos; Rifle de Vacina causa bonus em virus.",
-        "Observe tamanho e silhueta: cada virus exige uma resposta diferente.",
-        "Na vida real: mantenha vacinas em dia, elimine agua parada contra dengue",
-        "e procure atendimento de saude ao apresentar sintomas importantes.",
-    };
-    int n = (int)(sizeof(lines) / sizeof(lines[0]));
-    float y = 130.0f;
-    for (int i = 0; i < n; i++)
-    {
-        Color c = WHITE;
-        if (lines[i][0] == 'A' && lines[i][1] == 'G') c = (Color){ 120, 200, 255, 255 }; // "AGORA:"
-        if (lines[i][0] == 'C' && lines[i][1] == 'o' && lines[i][2] == 'm') c = (Color){ 120, 255, 160, 255 };
-        DrawTextEx(font, lines[i], (Vector2){ 120.0f, y }, 20.0f, 1.5f, c);
-        y += 30.0f;
-    }
+    // Título grande no topo.
+    DrawTitleText(font, "MUNDO 1 CONCLUIDO: BACTERIAS DERROTADAS",
+                  SCREEN_WIDTH / 2.0f, 56.0f, 28.0f, Fade(GOLD, entry));
 
-    // Prompt pulsante para continuar.
-    if (game->uiAnimTimer > 0.6f)
-    {
-        const char *prompt = "[ESPACO / ENTER / clique] Avancar para o Mundo dos Virus";
-        float a = 0.6f + 0.4f * sinf((float)GetTime() * 4.0f);
-        Vector2 ps = MeasureTextEx(font, prompt, 22.0f, 1.5f);
-        DrawTextEx(font, prompt, (Vector2){ SCREEN_WIDTH / 2.0f - ps.x / 2.0f, SCREEN_HEIGHT - 70.0f },
-                   22.0f, 1.5f, Fade((Color){ 120, 255, 200, 255 }, a));
-    }
+    // Cena do cientista: círculo grande (mesma arte do tutorial) + caixa de
+    // diálogo grande com efeito typewriter (texto com wrap, nunca vaza da caixa).
+    DrawScientistDialog(font, &game->sceneDialog, "TRANSMISSAO // ALERTA VIRAL",
+                        WORLD1_PAGES[game->sceneDialog.page], WORLD1_PAGE_COUNT,
+                        (Color){ 120, 200, 255, 255 }, entry);
 }

@@ -11,13 +11,55 @@
 #include <math.h>
 
 static UIButton arsenalBack = { { 60, 648, 300, 48 }, "VOLTAR", false, false };
-static int g_arsenalSel = 0;          // arma selecionada (0..3 => armas 1..4)
-static float g_unlockPulse[4] = {0};  // destaque de "recém-selecionada/desbloqueada"
+static int g_arsenalSel = 0;          // arma selecionada (0..WEAPON_COUNT-1 => armas 1..N)
+static float g_unlockPulse[WEAPON_COUNT] = {0}; // destaque de "recém-selecionada/desbloqueada"
+static float g_arsenalScroll = 0.0f;  // deslocamento de rolagem da coluna de cards
 
-// Retângulo do seletor i (coluna esquerda).
+// Coluna esquerda rolável: viewport (recorte) + layout dos cards. Os cards são
+// desenhados deslocados por g_arsenalScroll dentro de um BeginScissorMode, então
+// o arsenal comporta MAIS armas do que cabe na tela (rola com roda/setas).
+#define ARS_VIEW_X      12.0f    // largo o bastante p/ não cortar o slide de entrada
+#define ARS_VIEW_Y      140.0f
+#define ARS_VIEW_W      420.0f
+#define ARS_VIEW_H      482.0f   // base em 622 (acima do botão VOLTAR, y=648)
+#define ARS_CARD_X      60.0f
+#define ARS_CARD_W      360.0f
+#define ARS_CARD_H      96.0f
+#define ARS_CARD_PITCH  110.0f
+#define ARS_CONTENT_TOP 150.0f
+
+// Rolagem máxima (0 se todos os cards já cabem no viewport).
+static float ArsenalMaxScroll(void)
+{
+    float contentBottom = ARS_CONTENT_TOP + (WEAPON_COUNT - 1) * ARS_CARD_PITCH + ARS_CARD_H;
+    float m = contentBottom - (ARS_VIEW_Y + ARS_VIEW_H);
+    return (m > 0.0f) ? m : 0.0f;
+}
+
+// Retângulo do seletor i (coluna esquerda), já deslocado pela rolagem.
 static Rectangle ArsenalCardRect(int i)
 {
-    return (Rectangle){ 60.0f, 150.0f + i * 110.0f, 360.0f, 96.0f };
+    return (Rectangle){ ARS_CARD_X, ARS_CONTENT_TOP + i * ARS_CARD_PITCH - g_arsenalScroll, ARS_CARD_W, ARS_CARD_H };
+}
+
+// Mantém a rolagem dentro de [0, maxScroll].
+static void ArsenalClampScroll(void)
+{
+    float mx = ArsenalMaxScroll();
+    if (g_arsenalScroll < 0.0f) g_arsenalScroll = 0.0f;
+    if (g_arsenalScroll > mx)   g_arsenalScroll = mx;
+}
+
+// Rola o mínimo necessário para que o card selecionado fique inteiro no viewport
+// (usado quando a seleção muda por teclado/setas).
+static void ArsenalScrollToSelection(void)
+{
+    float cardTop    = ARS_CONTENT_TOP + g_arsenalSel * ARS_CARD_PITCH;
+    float showBottom = cardTop + ARS_CARD_H - (ARS_VIEW_Y + ARS_VIEW_H);
+    float showTop    = cardTop - ARS_VIEW_Y;
+    if (g_arsenalScroll < showBottom) g_arsenalScroll = showBottom;
+    if (g_arsenalScroll > showTop)    g_arsenalScroll = showTop;
+    ArsenalClampScroll();
 }
 
 // Barra de atributo com rótulo e valor 0..1, contida no painel (texto medido).
@@ -88,20 +130,24 @@ void DrawTelaArsenal(GameState *game, Font font)
     DrawThemedBackground(SCREEN_ARSENAL, time, game->screenAnim / 0.4f);
 
     DrawTitleText(font, "ARSENAL DO ANTICORPO", SCREEN_WIDTH / 2.0f, 30.0f, 40.0f, THEME_COLOR_TEXT);
-    const char *sub = "Selecione uma arma. Em jogo, troque com as teclas 1, 2, 3 e 4.";
+    const char *sub = "Selecione uma arma (roda do mouse / setas rolam a lista). Em jogo, troque com 1 a 5.";
     Vector2 sSz = MeasureTextEx(font, sub, 16.0f, 1.0f);
     DrawTextEx(font, sub, (Vector2){ SCREEN_WIDTH / 2.0f - sSz.x / 2.0f, 84.0f }, 16.0f, 1.0f, Fade(WHITE, 0.8f));
 
     Color skinPrim = WeaponSkinPrimary(game->player.weaponSkinId);
     Color skinSec  = WeaponSkinSecondary(game->player.weaponSkinId);
 
-    // ---- COLUNA ESQUERDA: seletores das 4 armas (com mini-preview real) ----
-    for (int s = 0; s < 4; s++)
+    // ---- COLUNA ESQUERDA: seletores das armas (ROLÁVEL, com mini-preview real) ----
+    Rectangle arsView = { ARS_VIEW_X, ARS_VIEW_Y, ARS_VIEW_W, ARS_VIEW_H };
+    BeginScissorMode((int)arsView.x, (int)arsView.y, (int)arsView.width, (int)arsView.height);
+    for (int s = 0; s < WEAPON_COUNT; s++)
     {
         WeaponInfo wi = GetWeaponInfo(s + 1);
-        bool unlocked = (game->player.level >= wi.unlockLevel);
+        bool unlocked = WeaponUnlocked(game, s + 1);
         bool selected = (g_arsenalSel == s);
         Rectangle card = ArsenalCardRect(s);
+        // Pula cards totalmente fora do viewport (recortados pela rolagem).
+        if (card.y + card.height < arsView.y || card.y > arsView.y + arsView.height) continue;
 
         float entry = UIEase((game->screenAnim - s * 0.06f) / 0.4f);
         Rectangle drawc = card; drawc.x -= (1.0f - entry) * 40.0f; // slide de entrada
@@ -125,14 +171,29 @@ void DrawTelaArsenal(GameState *game, Font font)
         // nome ajustado para nunca estourar o card
         Rectangle nameArea = { drawc.x + 86, drawc.y + 34, drawc.width - 96, 30 };
         DrawTextFitCentered(font, wi.name, nameArea, 20.0f, unlocked ? WHITE : Fade(GRAY, 0.85f), true);
-        DrawTextEx(font, unlocked ? "DISPONIVEL" : TextFormat("NIVEL %d", wi.unlockLevel),
-                   (Vector2){ drawc.x + 86, drawc.y + 66 }, 14.0f, 1.0f,
+        // Status: DISPONIVEL, ou requisito (abates p/ a Lâmina; nível p/ as demais).
+        const char *status = unlocked ? "DISPONIVEL"
+                           : (s + 1 == WEAPON_BIOBLADE) ? TextFormat("%d ABATES", BIOBLADE_UNLOCK_KILLS)
+                           : TextFormat("NIVEL %d", wi.unlockLevel);
+        DrawTextEx(font, status, (Vector2){ drawc.x + 86, drawc.y + 66 }, 14.0f, 1.0f,
                    unlocked ? (Color){ 120, 220, 140, 255 } : (Color){ 230, 120, 120, 255 });
+    }
+    EndScissorMode();
+
+    // Barra de rolagem (apenas quando há overflow) à direita do viewport.
+    float maxScroll = ArsenalMaxScroll();
+    if (maxScroll > 0.0f)
+    {
+        float trackX = arsView.x + arsView.width + 4.0f;
+        DrawRectangleRounded((Rectangle){ trackX, arsView.y, 5.0f, arsView.height }, 0.8f, 4, Fade(BLACK, 0.4f));
+        float thumbH = arsView.height * (arsView.height / (arsView.height + maxScroll));
+        float thumbY = arsView.y + (g_arsenalScroll / maxScroll) * (arsView.height - thumbH);
+        DrawRectangleRounded((Rectangle){ trackX, thumbY, 5.0f, thumbH }, 0.8f, 4, Fade(THEME_COLOR_MAIN, 0.7f));
     }
 
     // ---- PAINEL DE DETALHES (direita) com PREVIEW grande ----
     WeaponInfo wi = GetWeaponInfo(g_arsenalSel + 1);
-    bool unlocked = (game->player.level >= wi.unlockLevel);
+    bool unlocked = WeaponUnlocked(game, g_arsenalSel + 1);
     Rectangle panel = { 450, 150, 770, 470 };
     float panelEntry = UIEase(game->screenAnim / 0.5f);
     DrawPanel(panel, Fade(wi.color, panelEntry), 0.72f * panelEntry);
@@ -172,31 +233,47 @@ void DrawTelaArsenal(GameState *game, Font font)
     }
     else ty += 4;
 
-    // Requisito de nível / status claro.
+    // Requisito (abates p/ a Lâmina Bioelétrica; nível p/ as demais) / status claro.
     Rectangle foot = { tx, ty, tw, 30 };
+    bool isBlade = (g_arsenalSel + 1 == WEAPON_BIOBLADE);
     if (unlocked)
     {
-        DrawTextEx(font, (wi.unlockLevel <= 1) ? "DISPONIVEL DESDE O INICIO" : TextFormat("DESBLOQUEADA (Nivel %d)", wi.unlockLevel),
-                   (Vector2){ foot.x, foot.y }, 16.0f, 1.0f, (Color){ 90, 220, 130, 255 });
+        const char *okTxt = isBlade ? TextFormat("DESBLOQUEADA (%d abates)", BIOBLADE_UNLOCK_KILLS)
+                          : (wi.unlockLevel <= 1) ? "DISPONIVEL DESDE O INICIO"
+                          : TextFormat("DESBLOQUEADA (Nivel %d)", wi.unlockLevel);
+        DrawTextEx(font, okTxt, (Vector2){ foot.x, foot.y }, 16.0f, 1.0f, (Color){ 90, 220, 130, 255 });
     }
     else
     {
         DrawRectangleRounded(foot, 0.4f, 6, Fade(RED, 0.14f));
-        DrawTextFitCentered(font, TextFormat("BLOQUEADA - desbloqueia no Nivel %d", wi.unlockLevel),
-                            foot, 16.0f, (Color){ 235, 130, 130, 255 }, true);
+        const char *lockTxt = isBlade
+            ? TextFormat("BLOQUEADA - %d/%d abates", game->totalEnemiesKilled, BIOBLADE_UNLOCK_KILLS)
+            : TextFormat("BLOQUEADA - desbloqueia no Nivel %d", wi.unlockLevel);
+        DrawTextFitCentered(font, lockTxt, foot, 16.0f, (Color){ 235, 130, 130, 255 }, true);
     }
 
     DrawButton(arsenalBack, font, true);
-    DrawTextEx(font, "Use 1-4 ou as setas para escolher  |  ESC para voltar",
+    DrawTextEx(font, "Use 1-5, setas ou a roda do mouse  |  ESC para voltar",
                (Vector2){ 380, SCREEN_HEIGHT - 28 }, 14.0f, 1.0f, DARKGRAY);
 }
 
 void UpdateTelaArsenal(GameState *game, Vector2 mouse)
 {
-    // Seleção por clique nos cards.
-    for (int s = 0; s < 4; s++)
+    Rectangle arsView = { ARS_VIEW_X, ARS_VIEW_Y, ARS_VIEW_W, ARS_VIEW_H };
+
+    // Rolagem por roda do mouse quando o cursor está sobre a lista.
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0.0f && CheckCollisionPointRec(mouse, arsView))
     {
-        if (CheckCollisionPointRec(mouse, ArsenalCardRect(s)))
+        g_arsenalScroll -= wheel * 42.0f;
+        ArsenalClampScroll();
+    }
+
+    // Seleção por clique — apenas em cards efetivamente visíveis no viewport.
+    for (int s = 0; s < WEAPON_COUNT; s++)
+    {
+        if (CheckCollisionPointRec(mouse, ArsenalCardRect(s)) &&
+            CheckCollisionPointRec(mouse, arsView))
         {
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && g_arsenalSel != s)
             {
@@ -205,17 +282,34 @@ void UpdateTelaArsenal(GameState *game, Vector2 mouse)
             }
         }
     }
-    // Seleção por teclado (1-4 e setas).
-    if (IsKeyPressed(KEY_ONE))   { g_arsenalSel = 0; g_unlockPulse[0] = 1.0f; }
-    if (IsKeyPressed(KEY_TWO))   { g_arsenalSel = 1; g_unlockPulse[1] = 1.0f; }
-    if (IsKeyPressed(KEY_THREE)) { g_arsenalSel = 2; g_unlockPulse[2] = 1.0f; }
-    if (IsKeyPressed(KEY_FOUR))  { g_arsenalSel = 3; g_unlockPulse[3] = 1.0f; }
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_RIGHT)) { g_arsenalSel = (g_arsenalSel + 1) % 4; g_unlockPulse[g_arsenalSel] = 1.0f; }
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_LEFT))    { g_arsenalSel = (g_arsenalSel + 3) % 4; g_unlockPulse[g_arsenalSel] = 1.0f; }
+
+    // Seleção por teclado (1-5 e setas) — rola para manter a seleção visível.
+    int prevSel = g_arsenalSel;
+    if (IsKeyPressed(KEY_ONE))   g_arsenalSel = 0;
+    if (IsKeyPressed(KEY_TWO))   g_arsenalSel = 1;
+    if (IsKeyPressed(KEY_THREE)) g_arsenalSel = 2;
+    if (IsKeyPressed(KEY_FOUR))  g_arsenalSel = 3;
+    if (IsKeyPressed(KEY_FIVE))  g_arsenalSel = 4;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_RIGHT)) g_arsenalSel = (g_arsenalSel + 1) % WEAPON_COUNT;
+    if (IsKeyPressed(KEY_UP)   || IsKeyPressed(KEY_LEFT))  g_arsenalSel = (g_arsenalSel + WEAPON_COUNT - 1) % WEAPON_COUNT;
+    if (g_arsenalSel != prevSel)
+    {
+        g_unlockPulse[g_arsenalSel] = 1.0f;
+        ArsenalScrollToSelection();
+    }
 
     arsenalBack.hover = CheckCollisionPointRec(mouse, arsenalBack.bounds);
     if ((arsenalBack.hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) || IsKeyPressed(KEY_ESCAPE))
     {
         game->currentScreen = SCREEN_MENU;
     }
+}
+
+// Somente para ferramentas de preview offline (tools/ui_preview.c): força o
+// estado de rolagem/seleção antes de um DrawTelaArsenal. NÃO é chamado no jogo.
+void ArsenalPreviewSet(float scroll, int sel)
+{
+    g_arsenalScroll = scroll;
+    g_arsenalSel = (sel < 0) ? 0 : (sel >= WEAPON_COUNT ? WEAPON_COUNT - 1 : sel);
+    ArsenalClampScroll();
 }

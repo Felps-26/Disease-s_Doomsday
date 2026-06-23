@@ -12,8 +12,11 @@
 // ============================================================================
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
-#define MAP_WIDTH 4000
-#define MAP_HEIGHT 4000
+// Mundo ~2x a area anterior (4000 -> 5657 ≈ 4000*sqrt(2)). A geometria do corpo
+// em map_body.c e reescalada automaticamente (macros MBX/MBY/MBR) e a mascara de
+// colisao deve ser re-gerada (make collision-mask) sempre que isto mudar.
+#define MAP_WIDTH 5657
+#define MAP_HEIGHT 5657
 
 // ============================================================================
 // CORES GLOBAIS DO TEMA
@@ -296,6 +299,7 @@ typedef struct GameState
     float tutorialTimer;        // Cronômetro acumulador para o passo de movimento
     bool tutorialEnemySpawned;  // Garante que apenas 1 bactéria tutorial seja criada
     DialogState tutorialDialog; // Estado do sistema de diálogo do tutorial
+    DialogState sceneDialog;    // Diálogo das cutscenes do cientista (transição/vitória)
     // Debounce de ataque do tutorial: enquanto um diálogo está ativo este latch
     // fica TRUE; o ataque (SPACE/clique) só dispara depois que o jogador SOLTAR a
     // tecla/botão que fechou a última página — evita atacar a bactéria que acabou
@@ -322,8 +326,11 @@ typedef struct GameState
     Color bannerColor;
 
     // Maior arma já desbloqueada nesta partida (progressão de RPG).
-    // 1=Lâmina, 2=Fuzil, 3=Granada, 4=BFG.
+    // 1=Espada-Seringa, 2=Fuzil, 3=Granada, 4=BFG.
     int   maxWeaponUnlocked;
+    // One-shot: avisamos uma única vez quando a Lâmina Bioelétrica (arma 5) abre
+    // por abates (>= BIOBLADE_UNLOCK_KILLS). Recomputado no load a partir de kills.
+    bool  bioBladeAnnounced;
 
     // ---- Escudo do Chefe (Fase 3): Núcleos de Infecção ----
     InfectionCore cores[MAX_CORES];

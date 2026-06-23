@@ -345,22 +345,23 @@ void DrawHUD(GameState *game, Font font)
     }
 
     // ------------------------------------------------------------------------
-    // HOTBAR DE ARMAS (centro-inferior): mostra SEMPRE as 4 armas, deixando claro
-    // qual está equipada, quais teclas usar (1-4) e quais ainda estão bloqueadas.
+    // HOTBAR DE ARMAS (centro-inferior): mostra SEMPRE as 5 armas, deixando claro
+    // qual está equipada, quais teclas usar (1-5) e quais ainda estão bloqueadas.
+    // A arma 5 (Lâmina Bioelétrica) abre por ABATES; as demais por nível.
     // ------------------------------------------------------------------------
     {
-        const char *shortNames[4] = { "LAMINA", "FUZIL", "GRANADA", "BFG" };
-        float slotW = 150.0f, slotH = 54.0f, gap = 10.0f;
-        float totalW = 4 * slotW + 3 * gap;
+        const char *shortNames[WEAPON_COUNT] = { "SERINGA", "FUZIL", "GRANADA", "BFG", "LAMINA" };
+        float slotW = 138.0f, slotH = 54.0f, gap = 9.0f;
+        float totalW = WEAPON_COUNT * slotW + (WEAPON_COUNT - 1) * gap;
         float startX = (SCREEN_WIDTH - totalW) / 2.0f;
         float y = SCREEN_HEIGHT - slotH - 16.0f;
 
-        DrawTextEx(font, "ARMAS (teclas 1-4):", (Vector2){ startX, y - 20.0f }, 13.0f, 1.0f, Fade(WHITE, 0.7f));
+        DrawTextEx(font, "ARMAS (teclas 1-5):", (Vector2){ startX, y - 20.0f }, 13.0f, 1.0f, Fade(WHITE, 0.7f));
 
-        for (int s = 0; s < 4; s++)
+        for (int s = 0; s < WEAPON_COUNT; s++)
         {
             WeaponInfo wi = GetWeaponInfo(s + 1);
-            bool unlocked = (game->player.level >= wi.unlockLevel);
+            bool unlocked = WeaponUnlocked(game, s + 1);
             bool current  = (game->player.equippedWeapon == s + 1);
             Rectangle r = { startX + s * (slotW + gap), y, slotW, slotH };
 
@@ -374,12 +375,16 @@ void DrawHUD(GameState *game, Font font)
             DrawTextEx(font, TextFormat("%d", s + 1), (Vector2){ r.x + 8, r.y + 5 }, 20.0f, 1.0f,
                        unlocked ? wi.color : Fade(GRAY, 0.6f));
             // Nome curto
-            DrawTextEx(font, shortNames[s], (Vector2){ r.x + 34, r.y + 8 }, 16.0f, 1.0f,
+            DrawTextEx(font, shortNames[s], (Vector2){ r.x + 30, r.y + 8 }, 15.0f, 1.0f,
                        unlocked ? WHITE : Fade(GRAY, 0.7f));
 
             if (!unlocked)
             {
-                DrawTextEx(font, TextFormat("Nivel %d", wi.unlockLevel), (Vector2){ r.x + 34, r.y + 30 }, 13.0f, 1.0f, Fade(RED, 0.9f));
+                // Requisito: abates para a Lâmina Bioelétrica; nível para as demais.
+                const char *lockReq = (s + 1 == WEAPON_BIOBLADE)
+                    ? TextFormat("%d abates", BIOBLADE_UNLOCK_KILLS)
+                    : TextFormat("Nivel %d", wi.unlockLevel);
+                DrawTextEx(font, lockReq, (Vector2){ r.x + 30, r.y + 30 }, 13.0f, 1.0f, Fade(RED, 0.9f));
                 // cadeado simples
                 DrawRectangleRounded((Rectangle){ r.x + slotW - 26, r.y + 8, 16, 14 }, 0.4f, 4, Fade(GRAY, 0.8f));
                 DrawRectangleLines((int)(r.x + slotW - 24), (int)(r.y + 4), 12, 8, Fade(GRAY, 0.8f));
@@ -387,8 +392,9 @@ void DrawHUD(GameState *game, Font font)
             else
             {
                 // efeito especial resumido
-                const char *tag = (s == 0) ? "360 / empurrao" : (s == 1) ? "rapida" : (s == 2) ? "area+veneno" : "perfurante";
-                DrawTextEx(font, tag, (Vector2){ r.x + 34, r.y + 31 }, 12.0f, 1.0f, Fade(wi.color, 0.9f));
+                const char *tag = (s == 0) ? "360 / empurrao" : (s == 1) ? "rapida"
+                                : (s == 2) ? "area+veneno" : (s == 3) ? "perfurante" : "quebra escudo";
+                DrawTextEx(font, tag, (Vector2){ r.x + 30, r.y + 31 }, 12.0f, 1.0f, Fade(wi.color, 0.9f));
 
                 // Barra de cooldown apenas na arma equipada
                 if (current)

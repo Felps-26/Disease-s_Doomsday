@@ -48,9 +48,11 @@
 
 // Parâmetros de GERAÇÃO da máscara de colisão (baker offline; ver Makefile:
 // `make collision-mask`). Não são usados em tempo de execução.
-#define MAPBODY_BAKE_GN     320   // resolução da grade (célula = MAP_WIDTH/GN = 12.5 px)
+#define MAPBODY_BAKE_GN     452   // resolução da grade (célula = MAP_WIDTH/GN ≈ 12.5 px; escala com o mundo)
 #define MAPBODY_BAKE_LUMA   12    // luminância mínima (0-255): pernas escuras ~12-21, fundo ~6-9
-#define MAPBODY_BAKE_CLOSE  4     // fechamento morfológico (células): liga membros ao tronco nas juntas
+#define MAPBODY_BAKE_CLOSE  1     // fechamento morfológico mínimo: só sela anti-aliasing nas juntas
+                                  // (1 em vez de 4 reduz ~4.6x a área jogável sobre o vazio visual,
+                                  //  mantendo membros conectados — ver métrica "vazio-externo" do baker)
 
 // Identificadores de região/órgão-alvo
 typedef enum BodyRegion

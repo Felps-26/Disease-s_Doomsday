@@ -13,7 +13,7 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
 
     // BUGFIX: garante arma válida (após load de save antigo, equippedWeapon
     // podia ficar 0 e o ataque silenciosamente não fazia nada)
-    if (game->player.equippedWeapon < 1 || game->player.equippedWeapon > 4)
+    if (game->player.equippedWeapon < 1 || game->player.equippedWeapon > WEAPON_COUNT)
         game->player.equippedWeapon = 1;
 
     int wpn = game->player.equippedWeapon;
@@ -23,7 +23,9 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
     Color skinPrim = WeaponSkinPrimary(game->player.weaponSkinId);
     Color skinSec  = WeaponSkinSecondary(game->player.weaponSkinId);
 
-    if (wpn == 1) {
+    if (wpn == 1 || wpn == WEAPON_BIOBLADE) {
+        // Ambas as armas melee (Espada-Seringa e Lâmina Bioelétrica) usam o mesmo
+        // golpe em área 360°; a Lâmina adiciona o bônus anti-capsídeo abaixo.
         // Define cooldown base
         game->player.attackCooldown = 0.22f;
         PlayWeaponAttackSfx(wpn);
@@ -54,10 +56,10 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
 
             // Acertou! Causa dano (com proteções anti-melt para chefes/escudo)
             int danoTotal = 15 + danoBase;
-            // Escalpelizador Estático (arma melee do Mundo 2): desestabiliza o
-            // capsídeo — dano muito maior contra o ESCUDO viral, quebrando-o bem
-            // mais rápido que o Rifle de Vacina.
-            if (game->currentWorld == WORLD_VIRUS && game->enemies[i].shieldActive && game->enemies[i].shieldHp > 0)
+            // Lâmina Bioelétrica (arma 5): descarrega corrente no capsídeo — dano
+            // muito maior contra o ESCUDO viral, quebrando-o bem mais rápido. Vale
+            // em QUALQUER Mundo (a arma é desbloqueada por abates na campanha).
+            if (wpn == WEAPON_BIOBLADE && game->enemies[i].shieldActive && game->enemies[i].shieldHp > 0)
                 danoTotal *= 3;
             int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[i], danoTotal, false);
             if (applied <= 0) continue; // bloqueado pelo escudo do chefe
@@ -144,7 +146,7 @@ static int s_weaponWorld = WORLD_BACTERIA;
 void SetWeaponWorld(int world)
 {
     s_weaponWorld = (world == WORLD_VIRUS) ? WORLD_VIRUS : WORLD_BACTERIA;
-    SetWeaponModelWorld(s_weaponWorld); // mantém o modelo melee (espada/escalpelo) em sincronia
+    SetWeaponModelWorld(s_weaponWorld); // legado: modelo melee do slot 1 já não depende do Mundo
 }
 
 WeaponInfo GetWeaponInfo(int weapon)
@@ -170,18 +172,31 @@ WeaponInfo GetWeaponInfo(int weapon)
             "BFG Imunologico", "Projetil pesado que ATRAVESSA inimigos.",
             "Perfurante (atravessa todos)", "Limpa fileiras inteiras; guarde para hordas e chefe.",
             100, "Muito lenta", 5.0f, 4, 4, (Color){ 120, 255, 160, 255 } };
+        case WEAPON_BIOBLADE:
+            // Arma melee desbloqueável (30 abates): a antiga "Escalpelizador
+            // Estatico" promovida a arma própria, disponível na campanha inteira.
+            // Descarrega corrente no capsídeo -> quebra escudos em qualquer Mundo.
+            return (WeaponInfo){
+                "Lamina Bioeletrica", "Golpe em 360 graus que descarrega corrente no capsideo.",
+                "Quebra ESCUDOS (capsideo) muito mais rapido", "Desbloqueia com 30 abates; alterne com a tecla 5.",
+                15, "Rapida", 0.22f, 1, WEAPON_BIOBLADE, (Color){ 180, 120, 255, 255 } };
         case 1:
         default:
-            // Arma corpo a corpo temática por Mundo.
-            if (virus) return (WeaponInfo){
-                "Escalpelizador Estatico", "Golpe em 360 graus que desestabiliza o capsideo.",
-                "Quebra o ESCUDO viral muito mais rapido", "Ferramenta-chave anti-escudo do Mundo 2.",
-                15, "Rapida", 0.22f, 1, 1, (Color){ 180, 120, 255, 255 } };
+            // Arma corpo a corpo inicial — sempre disponível, em qualquer Mundo.
             return (WeaponInfo){
                 "Espada-Seringa", "Golpe corpo a corpo em 360 graus.",
                 "Acerta tudo ao redor + empurrao", "Defesa pessoal; segura inimigos colados em voce.",
                 15, "Rapida", 0.22f, 1, 1, (Color){ 0, 229, 255, 255 } };
     }
+}
+
+// Desbloqueio unificado (troca em jogo + arsenal). Armas 1-4 seguem a progressão
+// de nível (maxWeaponUnlocked); a Lâmina Bioelétrica (5) abre por ABATES.
+bool WeaponUnlocked(GameState *game, int weapon)
+{
+    if (weapon == WEAPON_BIOBLADE)
+        return game->totalEnemiesKilled >= BIOBLADE_UNLOCK_KILLS;
+    return (weapon >= 1 && weapon <= game->maxWeaponUnlocked);
 }
 
 int WeaponUnlockLevel(int weapon)

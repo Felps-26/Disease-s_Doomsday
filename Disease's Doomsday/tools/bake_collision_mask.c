@@ -24,7 +24,7 @@
 #define GN    MAPBODY_BAKE_GN
 #define NCELL (GN * GN)
 
-static unsigned char fg[NCELL], body[NCELL], ext[NCELL], pass_[NCELL], vis[NCELL];
+static unsigned char fg[NCELL], fg0[NCELL], body[NCELL], ext[NCELL], pass_[NCELL], vis[NCELL];
 static unsigned char tmpA[NCELL], tmpB[NCELL];
 static int  comp[NCELL], stk[NCELL];
 static float sdf[NCELL];
@@ -142,6 +142,11 @@ int main(int argc, char **argv)
             fg[gy * GN + gx] = (unsigned char)on;
         }
 
+    // Guarda a silhueta BRUTA (só threshold) para o diagnóstico "jogável sobre
+    // o vazio visual" (amarelo): células marcadas como corpo onde a ARTE não tem
+    // pixel desenhado — exatamente o problema que queremos eliminar.
+    memcpy(fg0, fg, NCELL);
+
     // 1b) Fechamento morfológico: liga os membros ao tronco nas juntas
     //     (ombros/quadris) e fecha frestas finas — evita "bolsões" desconectados.
     if (MAPBODY_BAKE_CLOSE > 0) closeMask(fg, MAPBODY_BAKE_CLOSE);
@@ -189,6 +194,32 @@ int main(int argc, char **argv)
     }
     for (int i = 0; i < NCELL; i++) body[i] = (comp[i] == best) ? 1 : 0;
 
+    // 3b) MÉTRICA DE FIDELIDADE: "vazio externo jogável". Inunda o EXTERIOR da
+    //     ARTE BRUTA (fg0, sem fechamento) a partir da borda por !fg0. Qualquer
+    //     célula de corpo que caia nesse exterior é área caminhável SOBRE o vazio
+    //     visual (ex.: axila/entre-membros que o fechamento ligou indevidamente).
+    //     Buracos internos de órgão NÃO entram aqui (são cercados pela arte).
+    static unsigned char ext0[NCELL];
+    memset(ext0, 0, sizeof ext0);
+    sp = 0;
+    for (int x = 0; x < GN; x++) {
+        int a = x, b = (GN - 1) * GN + x;
+        if (!fg0[a] && !ext0[a]) { ext0[a] = 1; stk[sp++] = a; }
+        if (!fg0[b] && !ext0[b]) { ext0[b] = 1; stk[sp++] = b; }
+    }
+    for (int y = 0; y < GN; y++) {
+        int a = y * GN, b = y * GN + GN - 1;
+        if (!fg0[a] && !ext0[a]) { ext0[a] = 1; stk[sp++] = a; }
+        if (!fg0[b] && !ext0[b]) { ext0[b] = 1; stk[sp++] = b; }
+    }
+    while (sp > 0) {
+        int i = stk[--sp], x = i % GN, y = i / GN;
+        int nb[4] = { x > 0 ? i - 1 : -1, x < GN - 1 ? i + 1 : -1, y > 0 ? i - GN : -1, y < GN - 1 ? i + GN : -1 };
+        for (int k = 0; k < 4; k++) { int n = nb[k]; if (n >= 0 && !fg0[n] && !ext0[n]) { ext0[n] = 1; stk[sp++] = n; } }
+    }
+    int voidWalk = 0;
+    for (int i = 0; i < NCELL; i++) if (body[i] && ext0[i]) voidWalk++;
+
     // 4) SDF (px de mundo), bbox, centro seguro e conectividade do PASSÁVEL
     //    (disco do jogador), exatamente como o runtime/teste validam.
     computeSq(0, sdf); // dist² ao void externo
@@ -231,6 +262,12 @@ int main(int argc, char **argv)
                 Color c = (Color){ 0, 0, 0, 255 };
                 if (body[i]) c = (Color){ 90, 30, 40, 255 };
                 if (pass_[i]) c = vis[i] ? (Color){ 60, 200, 90, 255 } : (Color){ 255, 40, 40, 255 };
+                // AMARELO: corpo onde a arte não desenhou, mas CERCADO pela arte
+                // (buraco interno de órgão preenchido — OK, órgãos não bloqueiam).
+                // LARANJA: corpo sobre o EXTERIOR da arte = vazio visual jogável
+                // (axila/entre-membros indevido) — é o que queremos zerar.
+                if (body[i] && !fg0[i]) c = (Color){ 235, 215, 0, 255 };
+                if (body[i] && ext0[i]) c = (Color){ 255, 120, 0, 255 };
                 ImageDrawPixel(&dbg, x, y, c);
             }
         ImageDrawPixel(&dbg, sbx, sby, (Color){ 0, 229, 255, 255 });
@@ -243,8 +280,18 @@ int main(int argc, char **argv)
            GN, cell, bodyCells, minx, miny, maxx, maxy, (sbx + 0.5f) * cell, (sby + 0.5f) * cell, bestd);
     printf("passaveis(>=%.0fpx)=%d alcancados=%d desconectados=%d\n",
            (float)BODY_PLAYER_RADIUS, passable, reached, disconnected);
+    printf("vazio-externo-jogavel(close=%d): %d celulas (%.2f%% do corpo) [LARANJA no debug]\n",
+           MAPBODY_BAKE_CLOSE, voidWalk, 100.0f * (float)voidWalk / (float)(bodyCells > 0 ? bodyCells : 1));
     if (disconnected != 0) { fprintf(stderr, "ERRO: area caminhavel desconectada (%d celulas); ajuste threshold/transform.\n", disconnected); UnloadImage(img); return 2; }
     if (bodyCells < NCELL / 40) { fprintf(stderr, "ERRO: corpo pequeno demais (%d celulas); threshold/transform?\n", bodyCells); UnloadImage(img); return 3; }
+    // Guarda de fidelidade (hitbox): rejeita bakes com muita área jogável SOBRE o
+    // vazio visual — sintoma de fechamento morfológico exagerado religando axila/
+    // entre-membros ao tronco. Margem folgada acima do residual de anti-aliasing
+    // (~0.33% em CLOSE=1); CLOSE=4 (~1.5%) reprova de propósito.
+    {
+        float voidPct = 100.0f * (float)voidWalk / (float)(bodyCells > 0 ? bodyCells : 1);
+        if (voidPct > 1.2f) { fprintf(stderr, "ERRO: vazio externo jogavel alto (%.2f%% > 1.2%%); reduza MAPBODY_BAKE_CLOSE ou ajuste a arte.\n", voidPct); UnloadImage(img); return 5; }
+    }
 
     // 5) Empacota row-major, LSB-first, e escreve o header com PROVENIÊNCIA.
     int bytes = (NCELL + 7) / 8;

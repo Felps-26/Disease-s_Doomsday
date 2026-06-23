@@ -100,11 +100,11 @@ int main(void)
 
     for (int t = 0; t < TRIALS; t++)
     {
-        // posição de chefe aleatória DENTRO do corpo
+        // posição de chefe aleatória DENTRO do corpo (cobre todo o mundo atual)
         Vector2 boss;
         do {
-            boss.x = (float)GetRandomValue(150, 3850);
-            boss.y = (float)GetRandomValue(150, 3900);
+            boss.x = (float)GetRandomValue(150, MAP_WIDTH - 150);
+            boss.y = (float)GetRandomValue(150, MAP_HEIGHT - 150);
         } while (!MapBody_Contains(boss));
 
         Vector2 pts[MAX_CORES];

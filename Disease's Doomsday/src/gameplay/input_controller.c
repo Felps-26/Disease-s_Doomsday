@@ -283,6 +283,19 @@ void UpdateButtonsVitoria(GameState *game, Vector2 mouse)
         }
     }
 
+    // FASE 0 — o cientista narra o encerramento. Avança o diálogo; só quando ele
+    // termina (transmissão encerrada) liberamos as opções de Jogar novamente/Menu.
+    if (game->sceneDialog.active)
+    {
+        const char *pages[4];
+        int pc = VictoryDialogPages(game, pages);
+        if (game->sceneDialog.page >= pc) game->sceneDialog.page = pc - 1;
+        if (ScientistDialogAdvance(&game->sceneDialog, pages[game->sceneDialog.page], pc) == 2)
+            game->sceneDialog.active = false;
+        return;
+    }
+
+    // FASE 1 — pós-diálogo: apenas as duas opções.
     for (int i = 0; i < 2; i++)
     {
         UpdateBtnState(&victoryButtons[i], mouse);

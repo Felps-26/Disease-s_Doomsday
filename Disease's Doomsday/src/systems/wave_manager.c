@@ -4,10 +4,11 @@
 #include "raymath.h"
 #include <math.h>
 
-// Posiciona um ponto de spawn DENTRO do corpo, longe do jogador (>= 450 px).
+// Posiciona um ponto de spawn DENTRO do corpo, longe do jogador (>= 600 px).
+// Distância aumentada com o mapa maior (~2x área) para espalhar a horda.
 static Vector2 PickSpawnFarFromPlayer(GameState *game)
 {
-    return MapBody_RandomPointInside(game->player.position, 450.0f);
+    return MapBody_RandomPointInside(game->player.position, 600.0f);
 }
 
 // Configura o chefe final (Superbactéria KPC) num índice específico
@@ -106,8 +107,10 @@ void StartNextWave(GameState *game)
     // ------------------------------------------------------------------
     bool bossWave = (game->wave >= 5);
 
-    // Aumenta quantidade a cada onda
-    int numEnemies = bossWave ? 13 : (8 + game->wave * 4); // 1 chefe + 12 lacaios na final
+    // Aumenta quantidade a cada onda. Horda comum ampliada (x4 -> x6) para
+    // acompanhar o mapa maior (~2x area) e nao deixar o corpo vazio. O total
+    // ativo (horda + mini chefe + escolta) fica < MAX_ENEMIES em todas as ondas.
+    int numEnemies = bossWave ? 13 : (8 + game->wave * 6); // 1 chefe + 12 lacaios na final
     if (numEnemies > MAX_ENEMIES) numEnemies = MAX_ENEMIES;
 
     game->enemiesRemaining = numEnemies;

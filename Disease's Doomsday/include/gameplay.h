@@ -71,6 +71,12 @@ void ShowBanner(GameState *game, const char *msg, const char *sub, Color color, 
 void UpdateBanner(GameState *game, float delta);
 
 // ---- Armas / progressão ----
+// Total de armas no arsenal. A arma 5 (Lâmina Bioelétrica) é desbloqueada por
+// ABATES (não por nível), disponível na campanha inteira após o desbloqueio.
+#define WEAPON_COUNT           5
+#define WEAPON_BIOBLADE        5    // Lâmina Bioelétrica (melee anti-capsídeo desbloqueável)
+#define BIOBLADE_UNLOCK_KILLS  30   // abates necessários para desbloquear a Lâmina Bioelétrica
+
 // Informações de uma arma para HUD, Arsenal e Tutorial (fonte única da verdade)
 typedef struct WeaponInfo
 {
@@ -87,15 +93,19 @@ typedef struct WeaponInfo
     float       maxRange; // Alcance efetivo em px (0 = corpo a corpo / sem alcance)
 } WeaponInfo;
 
-// Retorna as informações da arma (weapon = 1..4). Fora do intervalo => Lâmina.
+// Retorna as informações da arma (weapon = 1..5). Fora do intervalo => Espada-Seringa.
 WeaponInfo GetWeaponInfo(int weapon);
-// Nível mínimo do jogador para usar a arma (1=Lâmina ... 4=BFG)
+// Nível mínimo do jogador para usar a arma (1=Espada-Seringa ... 4=BFG; 5=por abates)
 int  WeaponUnlockLevel(int weapon);
-// Nome curto da arma (1..4)
+// Nome curto da arma (1..5)
 const char *WeaponName(int weapon);
-// Define o Mundo atual usado por GetWeaponInfo para nomear/descrever as armas
-// temáticas (Espada-Seringa/Rifle de Bacteriófagos no Mundo 1; Escalpelizador/
-// Rifle de Vacina no Mundo 2). Chamado a cada frame pela gameplay.
+// true se a arma está desbloqueada para este estado de jogo: armas 1-4 por
+// progressão de nível (maxWeaponUnlocked); arma 5 (Lâmina Bioelétrica) por abates
+// (totalEnemiesKilled >= BIOBLADE_UNLOCK_KILLS). Fonte única usada por troca/arsenal.
+bool WeaponUnlocked(GameState *game, int weapon);
+// Define o Mundo atual usado por GetWeaponInfo para nomear/descrever a arma de
+// projétil temática (Rifle de Bacteriófagos no Mundo 1; Rifle de Vacina no Mundo
+// 2). As armas melee (Espada-Seringa e Lâmina Bioelétrica) não dependem do Mundo.
 void SetWeaponWorld(int world);
 
 // ---- Skins ----

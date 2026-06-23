@@ -74,8 +74,8 @@ void DrawSyringeSword(Vector2 handPos, float size, float rotationDeg, Color liqu
 }
 
 // ============================================================================
-// MODELO: ESCALPELIZADOR ESTÁTICO (arma melee anti-escudo do Mundo 2)
-// Bisturi/lâmina larga eletrificada que desestabiliza o capsídeo viral.
+// MODELO: LÂMINA BIOELÉTRICA (arma melee anti-capsídeo desbloqueável; slot 5)
+// Bisturi/lâmina larga eletrificada que descarrega corrente no capsídeo viral.
 // ============================================================================
 void DrawScalpel(Vector2 handPos, float size, float rotationDeg, Color primary, Color secondary)
 {
@@ -130,11 +130,17 @@ void SetWeaponModelWorld(int world) { s_modelWorld = (world == 1) ? 1 : 0; }
 // ============================================================================
 void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, Color primary, Color secondary)
 {
-    // Arma 1 (melee): Espada-Seringa (Mundo 1) ou Escalpelizador (Mundo 2).
+    // Armas melee independentes do Mundo: Lâmina Bioelétrica (slot 5, arcos
+    // elétricos/estática) e Espada-Seringa (slot 1). A Lâmina é desbloqueável por
+    // abates e usável em AMBOS os Mundos, então o modelo não depende mais de s_modelWorld.
+    if (weapon == 5)
+    {
+        DrawScalpel(handPos, size, rotationDeg, primary, secondary);
+        return;
+    }
     if (weapon <= 1)
     {
-        if (s_modelWorld == 1) DrawScalpel(handPos, size, rotationDeg, primary, secondary);
-        else                   DrawSyringeSword(handPos, size, rotationDeg, primary);
+        DrawSyringeSword(handPos, size, rotationDeg, primary);
         return;
     }
 
@@ -216,11 +222,8 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
 // up >> down. Inclui folga para glows/auras. s_modelWorld decide o slot 1.
 static void WeaponVExtent(int weapon, float *up, float *down)
 {
-    if (weapon <= 1)
-    {
-        if (s_modelWorld == 1) { *up = 1.95f; *down = 0.85f; } // escalpelo
-        else                   { *up = 2.95f; *down = 0.70f; } // espada-seringa (agulha longa)
-    }
+    if (weapon == 5)           { *up = 1.95f; *down = 0.85f; } // lâmina bioelétrica
+    else if (weapon <= 1)      { *up = 2.95f; *down = 0.70f; } // espada-seringa (agulha longa)
     else if (weapon == 2)      { *up = 1.98f; *down = 0.76f; } // fuzil (muzzle)
     else if (weapon == 3)      { *up = 1.66f; *down = 0.66f; } // granada
     else                       { *up = 2.10f; *down = 0.66f; } // BFG (orbe/glow)

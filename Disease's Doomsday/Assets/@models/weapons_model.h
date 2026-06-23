@@ -6,11 +6,12 @@
 // Desenha a Espada Seringa (liquidColor varia conforme a skin da arma)
 void DrawSyringeSword(Vector2 handPos, float size, float rotationDeg, Color liquidColor);
 
-// Desenha o Escalpelizador Estático (arma melee anti-escudo do Mundo 2)
+// Desenha a Lâmina Bioelétrica (arma melee anti-capsídeo desbloqueável; slot 5,
+// arcos elétricos). DrawScalpel é o nome interno do modelo (mantido por compat).
 void DrawScalpel(Vector2 handPos, float size, float rotationDeg, Color primary, Color secondary);
 
-// Define o Mundo atual para a aparência da arma melee (slot 1): Espada-Seringa
-// (Mundo 1) ou Escalpelizador Estático (Mundo 2).
+// (Legado) Antes alternava o modelo melee do slot 1 por Mundo. Hoje o slot 1 é
+// sempre a Espada-Seringa e a Lâmina Bioelétrica é a arma 5 — mantido por compat.
 void SetWeaponModelWorld(int world);
 
 // Desenha a arma SEGURADA conforme o tipo equipado (1=melee, 2=projétil,
