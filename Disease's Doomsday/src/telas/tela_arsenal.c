@@ -91,7 +91,7 @@ static void DrawWeaponPreview(int weapon, Rectangle area, bool unlocked, float h
     Color aura = unlocked ? primary : (Color){ 90, 96, 110, 255 };
 
     // Halo / pulso de energia atrás da arma.
-    DrawCircleGradient((int)c.x, (int)c.y, ring, Fade(aura, (unlocked ? 0.22f : 0.10f) + highlight * 0.2f), BLANK);
+    DrawCircleGradient(c, ring, Fade(aura, (unlocked ? 0.22f : 0.10f) + highlight * 0.2f), BLANK);
     DrawCircleLines((int)c.x, (int)c.y, ring, Fade(aura, 0.25f + highlight * 0.4f));
 
     // Partículas orbitando (determinísticas por tempo).

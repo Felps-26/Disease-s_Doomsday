@@ -875,7 +875,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
 
             if (p->type == PROJ_PLAYER_BFG) {
                 srcSize = 30.0f;
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize, pCol, BLANK);
+                DrawCircleGradient(p->position, srcSize, pCol, BLANK);
                 DrawCircleLines(p->position.x, p->position.y, srcSize, wpnSec);
             } else if (p->type == PROJ_PLAYER_GRENADE) {
                 srcSize = 15.0f;

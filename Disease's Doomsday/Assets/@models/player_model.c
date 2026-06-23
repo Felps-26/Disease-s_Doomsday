@@ -119,7 +119,8 @@ static void CosHelmet(int id, PlayerAnchors a, float size, float t)
 
 static void CosFace(int id, PlayerAnchors a, float size, float t)
 {
-    if (id <= 0) return; (void)size;
+    if (id <= 0) return;
+    (void)size;
     Vector2 h = a.head; float r = a.headR; (void)t;
     DrawRectangleRounded((Rectangle){ h.x - r * 0.85f, h.y + r * 0.05f, r * 1.7f, r * 0.7f }, 0.6f, 6,
                          (id == 2) ? (Color){ 70, 30, 70, 255 } : (id == 3) ? (Color){ 40, 120, 70, 255 } : COS_C_WHITE);
@@ -135,7 +136,8 @@ static void CosFace(int id, PlayerAnchors a, float size, float t)
 
 static void CosChest(int id, PlayerAnchors a, float size, float t)
 {
-    if (id <= 0) return; (void)size;
+    if (id <= 0) return;
+    (void)size;
     Vector2 c = a.torsoC; float w = a.torsoW, hh = a.torsoH;
     if (id == 1) { // Placa Celular
         DrawRectangleRounded((Rectangle){ c.x - w * 0.32f, c.y - hh * 0.18f, w * 0.64f, hh * 0.5f }, 0.3f, 6, Fade(COS_C_CYAN, 0.55f));
@@ -157,7 +159,8 @@ static void CosChest(int id, PlayerAnchors a, float size, float t)
 // ancoradas em mão/ombro — acompanham a pose e não viram blocos soltos.
 static void CosArms(int id, PlayerAnchors a, float size, float t)
 {
-    if (id <= 0) return; (void)t;
+    if (id <= 0) return;
+    (void)t;
     for (int s = 0; s < 2; s++) {
         Vector2 hand = s ? a.handR : a.handL;
         Vector2 sh   = s ? a.shoulderR : a.shoulderL;
@@ -179,7 +182,8 @@ static void CosArms(int id, PlayerAnchors a, float size, float t)
 // não aumenta volume), com joelheira e detalhe de costura/fibra por material.
 static void CosLegs(int id, PlayerAnchors a, float size, float t)
 {
-    if (id <= 0) return; (void)t;
+    if (id <= 0) return;
+    (void)t;
     Color col  = (id == 2) ? COS_C_PURP : COS_C_WHITE;
     Color knee = (id == 2) ? (Color){ 96, 54, 150, 255 } : (Color){ 120, 200, 255, 255 };
     for (int s = 0; s < 2; s++) {
@@ -197,7 +201,8 @@ static void CosLegs(int id, PlayerAnchors a, float size, float t)
 // sem flutuar nem inflar o pé. Garra extra no material mutante.
 static void CosBoots(int id, PlayerAnchors a, float size, float t)
 {
-    if (id <= 0) return; (void)t;
+    if (id <= 0) return;
+    (void)t;
     Color col = (id == 2) ? COS_C_GREEN : COS_C_WHITE;
     Color dk  = (id == 2) ? (Color){ 24, 80, 44, 255 } : (Color){ 150, 170, 190, 255 };
     for (int s = 0; s < 2; s++) {
@@ -226,7 +231,7 @@ static void CosFX(int id, PlayerAnchors a, float size, float t)
     if (id == 1) { // Aura de Anticorpos — ultrapassa a silhueta, pulsa, leve
         float pulse = 0.5f + 0.5f * sinf(t * 2.6f);
         float R = bodyR + size * 0.22f + pulse * size * 0.08f;
-        DrawCircleGradient((int)bc.x, (int)bc.y, R, Fade(COS_C_CYAN, 0.10f + 0.05f * pulse), BLANK);
+        DrawCircleGradient(bc, R, Fade(COS_C_CYAN, 0.10f + 0.05f * pulse), BLANK);
         DrawCircleLines((int)bc.x, (int)bc.y, R, Fade(COS_C_CYAN, 0.26f + 0.12f * pulse));
         DrawCircleLines((int)bc.x, (int)bc.y, R * 0.93f, Fade(COS_C_CYAN, 0.13f));
     } else if (id == 2) { // Hélice de DNA — PRESERVADA (só escala/posição responsiva)
