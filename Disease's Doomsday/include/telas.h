@@ -72,8 +72,9 @@ void DrawUIInput(Font font, Rectangle r, const char *text, const char *placehold
 void DrawUISectionPanel(Font font, Rectangle r, const char *title, Color accent, float entry);
 // Toast/feedback flutuante (texto curto), alpha 0..1.
 void DrawUIToast(Font font, const char *text, Color accent, float alpha);
-// Geometria ÚNICA do slider de volume (trilho), compartilhada por desenho e input.
-Rectangle SettingsVolumeTrack(void);
+// Geometria unica dos sliders, compartilhada por desenho e input.
+Rectangle SettingsMusicVolumeTrack(void);
+Rectangle SettingsSfxVolumeTrack(void);
 
 // Tela de SELEÇÃO DE DIFICULDADE (3 cards: Fácil/Médio/Difícil) — abre ao
 // iniciar/reiniciar um jogo; confirma em "INICIAR MISSAO".

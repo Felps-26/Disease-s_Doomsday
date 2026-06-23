@@ -427,7 +427,8 @@ void DrawUIToast(Font font, const char *text, Color accent, float alpha)
     DrawTextEx(font, text, (Vector2){ r.x + pad, r.y + pad / 2.0f }, fs, 1.0f, Fade(WHITE, alpha));
 }
 
-Rectangle SettingsVolumeTrack(void) { return (Rectangle){ 600.0f, 234.0f, 250.0f, 16.0f }; }
+Rectangle SettingsMusicVolumeTrack(void) { return (Rectangle){ 600.0f, 229.0f, 250.0f, 16.0f }; }
+Rectangle SettingsSfxVolumeTrack(void)   { return (Rectangle){ 600.0f, 274.0f, 250.0f, 16.0f }; }
 
 // ============================================================================
 // HELPERS PROCEDURAIS DO MENU (vírus, bactéria, biohazard, fundo, título neon)
@@ -1443,6 +1444,43 @@ static void TutLine(Font font, float x, float y, const char *label, Color lc, co
     }
 }
 
+// Preview usa exatamente o mesmo modelo procedural da gameplay. Assim, o guia
+// permanece sincronizado quando a identidade visual de um arquétipo evoluir.
+static void DrawTutorialEnemyPreview(int type, Vector2 center, float size, bool boss)
+{
+    Enemy preview = {0};
+    EnemyInitFromArchetype(&preview, type, 5, 1.0f);
+    preview.active = true;
+    preview.spawnAnim = 1.0f;
+    preview.animTime = (float)GetTime();
+    if (boss) preview.tier = TIER_3_BOSS;
+    DrawEnemyModel(&preview, center, size, 0.0f, 1.0f, 1.0f);
+}
+
+static void DrawEnemyGuideRow(Font font, Rectangle row, int type,
+                              const char *wave, const char *role)
+{
+    const EnemyArchetype *arch = EnemyArchetypeFor(type);
+    Color color = arch ? arch->palette : SKYBLUE;
+    const char *name = (arch && arch->name) ? arch->name : "Patogeno";
+
+    DrawRectangleRounded(row, 0.18f, 6, Fade((Color){ 5, 13, 20, 255 }, 0.72f));
+    DrawRectangleRoundedLines(row, 0.18f, 6, Fade(color, 0.48f));
+    // DrawEnemyModel recebe um RAIO, e alguns vírus projetam espículas até
+    // aproximadamente 1.8x esse valor. O orçamento abaixo mantém inclusive a
+    // silhueta externa dentro da coluna de 46 px reservada ao preview.
+    float previewRadius = (row.height >= 70.0f) ? 20.0f : 11.5f;
+    DrawTutorialEnemyPreview(type, (Vector2){ row.x + 27.0f, row.y + row.height*0.5f },
+                             previewRadius, false);
+    DrawTextEx(font, name, (Vector2){ row.x + 54.0f, row.y + 7.0f },
+               15.0f, 1.0f, color);
+    Vector2 ws = MeasureTextEx(font, wave, 11.0f, 1.0f);
+    DrawTextEx(font, wave, (Vector2){ row.x + row.width - ws.x - 9.0f, row.y + 9.0f },
+               11.0f, 1.0f, Fade(GOLD, 0.9f));
+    DrawTextEx(font, role, (Vector2){ row.x + 54.0f, row.y + 29.0f },
+               12.0f, 1.0f, Fade(WHITE, 0.78f));
+}
+
 static void DrawTutContent(GameState *game, Font font, Rectangle panel)
 {
     float x = panel.x + 28.0f;
@@ -1483,32 +1521,75 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
 
         case 2: // INIMIGOS
         {
-            const char *en[5][3] = {
-                { "SARS-CoV-2 (verde)", "Melee equilibrado, cerca voce em grupo.", "Use a Lamina em 360 e o empurrao." },
-                { "Dengue / Aedes (cinza)", "Rapido, atira em leque e foge se voce chega perto.", "Persiga com o Fuzil; nao deixe atirar a vontade." },
-                { "KPC Superbacteria (vermelha)", "Lenta, MUITA vida, tiro pesado. Vira CHEFE na onda 5.", "Veneno da Granada e a Vacina BFG." },
-                { "Trypanosoma / Chagas (roxa)", "Muito rapida e fragil; foge com pouca vida.", "Um golpe forte resolve; nao a deixe te cercar." },
-                { "Tuberculose / TB (escura)", "Atirador pesado, lento e resistente.", "Mantenha distancia e foque fogo (BFG perfura)." },
+            const int virusTypes[5] = {
+                ETYPE_VIRUS_SWARM, ETYPE_VIRUS_MELEE, ETYPE_VIRUS_RANGED,
+                ETYPE_VIRUS_ELITE, ETYPE_VIRUS_BOSS
             };
+            const char *virusWave[5] = { "ONDA 1", "ONDA 2", "ONDA 3", "ONDA 4", "ONDA 5" };
+            const char *virusRole[5] = {
+                "Enxame pequeno, veloz e fragil; capsideo fraco.",
+                "Corpo a corpo; investida e dano de contato.",
+                "Atirador; recua e dispara material viral.",
+                "Mutante grande; escudo forte e invoca enxames.",
+                "Chefe multifase; coroa, rajadas e invocacoes."
+            };
+
+            float leftX = x;
+            float rightX = x + 300.0f;
+            DrawTextEx(font, "MUNDO 1 - BACTERIAS", (Vector2){ leftX, y }, 17.0f, 1.0f,
+                       (Color){ 110, 225, 135, 255 });
+            DrawTextEx(font, "MUNDO 2 - VIRUS", (Vector2){ rightX, y }, 17.0f, 1.0f, accent);
+
+            const int bacteriaTypes[3] = { ETYPE_BACT_MELEE, ETYPE_BACT_RANGED, ETYPE_KPC };
+            const char *bacteriaWave[3] = { "ONDAS 1-5", "ONDAS 2-5", "ELITE / CHEFE" };
+            const char *bacteriaRole[3] = {
+                "Coco: persegue e ataca por contato.",
+                "Bacilo: atirador que controla distancia.",
+                "KPC: tanque resistente com tiro pesado."
+            };
+            for (int i = 0; i < 3; i++)
+                DrawEnemyGuideRow(font, (Rectangle){ leftX, y + 27.0f + i*92.0f, 274.0f, 78.0f },
+                                  bacteriaTypes[i], bacteriaWave[i], bacteriaRole[i]);
+
             for (int i = 0; i < 5; i++)
-            {
-                DrawTextEx(font, en[i][0], (Vector2){ x, y }, 19.0f, 1.0f, accent); y += 24.0f;
-                DrawTextEx(font, en[i][1], (Vector2){ x + 16, y }, 15.0f, 1.0f, Fade(WHITE, 0.82f)); y += 21.0f;
-                TutLine(font, x + 16, y, "Dica:", GOLD, en[i][2]); y += 28.0f;
-            }
+                DrawEnemyGuideRow(font, (Rectangle){ rightX, y + 27.0f + i*61.0f, 478.0f, 52.0f },
+                                  virusTypes[i], virusWave[i], virusRole[i]);
             break;
         }
 
         case 3: // CHEFE
-            DrawTextEx(font, "CHEFE: SUPERBACTERIA KPC", (Vector2){ x, y }, 24.0f, 1.0f, (Color){ 255, 80, 90, 255 }); y += 34.0f;
-            DrawTextEx(font, "Aparece SEMPRE na onda 5, com o corpo bem maior e milhares de vida.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
-            DrawTextEx(font, "Surge CERCADO por lacaios que o escoltam e te distraem.", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 26.0f;
-            DrawTextEx(font, "Tem 3 FASES conforme perde vida:", (Vector2){ x, y }, 18.0f, 1.0f, accent); y += 28.0f;
-            TutLine(font, x + 16, y, "Fase 1:", GOLD, "tiros duplos em ritmo normal."); y += 26.0f;
-            TutLine(font, x + 16, y, "Fase 2:", GOLD, "mais rapido e INVOCA lacaios."); y += 26.0f;
-            TutLine(font, x + 16, y, "Fase 3:", GOLD, "enfurecido, dispara rajada em todas as direcoes."); y += 32.0f;
-            DrawTextEx(font, "Prepare-se: suba de nivel antes, leve pocoes e guarde Granada + BFG.", (Vector2){ x, y }, 16.0f, 1.0f, (Color){ 120, 220, 140, 255 });
+        {
+            Rectangle bactCard = { x, y, 378.0f, 287.0f };
+            Rectangle virusCard = { x + 400.0f, y, 378.0f, 287.0f };
+            DrawRectangleRounded(bactCard, 0.08f, 8, Fade((Color){ 35, 10, 14, 255 }, 0.70f));
+            DrawRectangleRoundedLines(bactCard, 0.08f, 8, Fade((Color){ 255, 80, 90, 255 }, 0.55f));
+            DrawRectangleRounded(virusCard, 0.08f, 8, Fade((Color){ 24, 8, 35, 255 }, 0.70f));
+            DrawRectangleRoundedLines(virusCard, 0.08f, 8, Fade((Color){ 210, 90, 225, 255 }, 0.60f));
+
+            DrawTutorialEnemyPreview(ETYPE_KPC, (Vector2){ bactCard.x + 49, bactCard.y + 54 }, 27.0f, true);
+            DrawTextEx(font, "MUNDO 1", (Vector2){ bactCard.x + 92, bactCard.y + 18 }, 13.0f, 1.0f, GOLD);
+            DrawTextEx(font, "SUPERBACTERIA KPC", (Vector2){ bactCard.x + 92, bactCard.y + 40 },
+                       18.0f, 1.0f, (Color){ 255, 80, 90, 255 });
+            DrawTextEx(font, "Tanque resistente a antibioticos.", (Vector2){ bactCard.x + 18, bactCard.y + 91 }, 14.0f, 1.0f, Fade(WHITE, .82f));
+            DrawTextEx(font, "Fase 1  Tiros pesados e escolta", (Vector2){ bactCard.x + 18, bactCard.y + 124 }, 14.0f, 1.0f, Fade(WHITE, .78f));
+            DrawTextEx(font, "Fase 2  Acelera e invoca lacaios", (Vector2){ bactCard.x + 18, bactCard.y + 151 }, 14.0f, 1.0f, Fade(WHITE, .78f));
+            DrawTextEx(font, "Fase 3  Rajada radial enfurecida", (Vector2){ bactCard.x + 18, bactCard.y + 178 }, 14.0f, 1.0f, Fade(WHITE, .78f));
+            DrawTextEx(font, "Granada e BFG ajudam contra sua vida alta.", (Vector2){ bactCard.x + 18, bactCard.y + 226 }, 13.0f, 1.0f, (Color){ 120, 220, 140, 255 });
+
+            DrawTutorialEnemyPreview(ETYPE_VIRUS_BOSS, (Vector2){ virusCard.x + 51, virusCard.y + 54 }, 21.0f, true);
+            DrawTextEx(font, "MUNDO 2", (Vector2){ virusCard.x + 96, virusCard.y + 18 }, 13.0f, 1.0f, GOLD);
+            DrawTextEx(font, "CORONAVIRUS", (Vector2){ virusCard.x + 96, virusCard.y + 40 },
+                       18.0f, 1.0f, (Color){ 220, 90, 220, 255 });
+            DrawTextEx(font, "Chefe viral com capsideo reforcado.", (Vector2){ virusCard.x + 18, virusCard.y + 91 }, 14.0f, 1.0f, Fade(WHITE, .82f));
+            DrawTextEx(font, "Fase 1  Quebre o escudo protetor", (Vector2){ virusCard.x + 18, virusCard.y + 124 }, 14.0f, 1.0f, Fade(WHITE, .78f));
+            DrawTextEx(font, "Fase 2  Invoca enxames de rinovirus", (Vector2){ virusCard.x + 18, virusCard.y + 151 }, 14.0f, 1.0f, Fade(WHITE, .78f));
+            DrawTextEx(font, "Fase 3  RNA exposto e rajada radial", (Vector2){ virusCard.x + 18, virusCard.y + 178 }, 14.0f, 1.0f, Fade(WHITE, .78f));
+            DrawTextEx(font, "Escalpelizador rompe o capsideo mais rapido.", (Vector2){ virusCard.x + 18, virusCard.y + 226 }, 13.0f, 1.0f, (Color){ 120, 220, 140, 255 });
+
+            DrawTextEx(font, "Ambos aparecem sempre na onda 5, protegidos por lacaios. Elimine os Nucleos de Infeccao.",
+                       (Vector2){ x, y + 307.0f }, 14.0f, 1.0f, Fade(accent, 0.92f));
             break;
+        }
 
         case 4: // SKINS
             DrawTextEx(font, "Abra 'SKINS' no menu para escolher (preview ao vivo).", (Vector2){ x, y }, 17.0f, 1.0f, Fade(WHITE, 0.85f)); y += 34.0f;
@@ -2042,6 +2123,34 @@ void DrawTelaLoadSelect(GameState *game, Font font, Vector2 mouse, Texture2D slo
 // ============================================================================
 UIButton settingsBtnVoltar = { { 490, 600, 300, 50 }, "BACK", false, false };
 
+static void DrawSettingsVolumeSlider(Font font, const char *label, Rectangle track, float value)
+{
+    value = Clamp(value, 0.0f, 1.0f);
+    DrawTextEx(font, label, (Vector2){ 380.0f, track.y - 5.0f }, 20.0f, 1.0f, WHITE);
+
+    Rectangle hit = { track.x - 14.0f, track.y - 14.0f, track.width + 28.0f, track.height + 28.0f };
+    bool hover = CheckCollisionPointRec(g_virtualMouse, hit);
+    DrawRectangleRounded(track, 0.8f, 6, Fade(BLACK, 0.6f));
+    DrawRectangleRounded((Rectangle){ track.x, track.y, track.width * value, track.height },
+                         0.8f, 6, THEME_COLOR_MAIN);
+    DrawRectangleRoundedLines(track, 0.8f, 6,
+                              Fade(hover ? THEME_COLOR_MAIN : THEME_COLOR_BORDER, 0.9f));
+
+    float radius = 11.0f;
+    float knobX = track.x + track.width * value;
+    if (knobX < track.x + radius) knobX = track.x + radius;
+    if (knobX > track.x + track.width - radius) knobX = track.x + track.width - radius;
+    float knobY = track.y + track.height * 0.5f;
+    DrawCircleV((Vector2){ knobX, knobY }, radius + 2.0f,
+                Fade(THEME_COLOR_MAIN, 0.3f + (hover ? 0.2f : 0.0f)));
+    DrawCircleV((Vector2){ knobX, knobY }, radius,
+                hover ? THEME_COLOR_MAIN : (Color){ 220, 235, 245, 255 });
+
+    DrawTextEx(font, TextFormat("%d%%", (int)(value * 100.0f + 0.5f)),
+               (Vector2){ track.x + track.width + 16.0f, track.y - 5.0f },
+               20.0f, 1.0f, WHITE);
+}
+
 void DrawTelaSettings(GameState *game, Font font)
 {
     DrawThemedBackground(SCREEN_SETTINGS, (float)GetTime(), game->screenAnim / 0.4f);
@@ -2053,39 +2162,19 @@ void DrawTelaSettings(GameState *game, Font font)
     DrawTextEx(font, "AUDIO", (Vector2){ 380, 170 }, 28.0f, 1.0f, YELLOW);
     DrawLine(380, 205, 900, 205, Fade(YELLOW, 0.5f));
 
-    DrawTextEx(font, "MASTER VOLUME", (Vector2){ 380, 230 }, 24.0f, 1.0f, WHITE);
-
-    // Slider com geometria ÚNICA (trilho), knob SEMPRE dentro das extremidades e
-    // tudo contido no card (340..940). O preenchimento e o knob seguem o trilho.
-    float vol = Clamp(game->masterVolume, 0.0f, 1.0f);
-    Rectangle track = SettingsVolumeTrack();
-    bool sHover = CheckCollisionPointRec(g_virtualMouse, (Rectangle){ track.x - 14, track.y - 14, track.width + 28, track.height + 28 });
-    DrawRectangleRounded(track, 0.8f, 6, Fade(BLACK, 0.6f));
-    DrawRectangleRounded((Rectangle){ track.x, track.y, track.width * vol, track.height }, 0.8f, 6, THEME_COLOR_MAIN);
-    DrawRectangleRoundedLines(track, 0.8f, 6, Fade(sHover ? THEME_COLOR_MAIN : THEME_COLOR_BORDER, 0.9f));
-    // Knob: centro limitado a [x+r, x+w-r] para nunca sair do trilho/card.
-    float kr = 11.0f;
-    float kcx = track.x + track.width * vol;
-    if (kcx < track.x + kr) kcx = track.x + kr;
-    if (kcx > track.x + track.width - kr) kcx = track.x + track.width - kr;
-    float kcy = track.y + track.height / 2.0f;
-    DrawCircleV((Vector2){ kcx, kcy }, kr + 2.0f, Fade(THEME_COLOR_MAIN, 0.3f + (sHover ? 0.2f : 0.0f)));
-    DrawCircleV((Vector2){ kcx, kcy }, kr, sHover ? THEME_COLOR_MAIN : (Color){ 220, 235, 245, 255 });
-
-    char volText[16];
-    sprintf(volText, "%d%%", (int)(vol * 100.0f + 0.5f));
-    DrawTextEx(font, volText, (Vector2){ track.x + track.width + 16.0f, track.y - 6.0f }, 22.0f, 1.0f, WHITE);
+    DrawSettingsVolumeSlider(font, "MUSICA", SettingsMusicVolumeTrack(), game->musicVolume);
+    DrawSettingsVolumeSlider(font, "EFEITOS SONOROS", SettingsSfxVolumeTrack(), game->sfxVolume);
 
     // ------------------------------------------------------------------------
     // SELETORES DE SKIN (personagem e arma)
     // ------------------------------------------------------------------------
-    DrawTextEx(font, "APARENCIA", (Vector2){ 380, 290 }, 28.0f, 1.0f, YELLOW);
-    DrawLine(380, 325, 900, 325, Fade(YELLOW, 0.5f));
+    DrawTextEx(font, "APARENCIA", (Vector2){ 380, 325 }, 28.0f, 1.0f, YELLOW);
+    DrawLine(380, 360, 900, 360, Fade(YELLOW, 0.5f));
 
     const char *rowLabels[2] = { "SKIN DO ANTICORPO", "SKIN DA ARMA" };
     for (int row = 0; row < 2; row++)
     {
-        float y = 355.0f + row * 70.0f;
+        float y = 390.0f + row * 65.0f;
         DrawTextEx(font, rowLabels[row], (Vector2){ 380, y + 8 }, 20.0f, 1.0f, WHITE);
 
         // Setas < >
@@ -2122,7 +2211,7 @@ void DrawTelaSettings(GameState *game, Font font)
         DrawTextEx(font, skinName, (Vector2){ nameBox.x + 110.0f - nameSz.x / 2.0f + 10.0f, y + 11 }, 18.0f, 1.0f, WHITE);
     }
 
-    DrawTextEx(font, "As skins sao salvas automaticamente.", (Vector2){ 380, 505 }, 14.0f, 1.0f, GRAY);
+    DrawTextEx(font, "Audio e skins sao salvos automaticamente.", (Vector2){ 380, 520 }, 14.0f, 1.0f, GRAY);
 
     DrawButton(settingsBtnVoltar, font, true);
 }

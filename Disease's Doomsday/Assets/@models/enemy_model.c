@@ -8,7 +8,8 @@
 // ----------------------------------------------------------------------------
 // Pipeline de sprites (Fase 1): se houver um PNG do tipo do inimigo em
 // Assets/Sprites/Enemies/..., ele é desenhado; caso contrário, recai no desenho
-// procedural abaixo. Os tipos seguem os #define ETYPE_* em enemy.h.
+// procedural abaixo. Os tipos seguem os #define ETYPE_* em enemy.h e a cor base
+// vem do ARQUÉTIPO centralizado (enemy.c), evitando paletas duplicadas aqui.
 // ============================================================================
 
 // Mapeia o tipo do inimigo para o SpriteID correspondente (-1 = sem mapeamento).
@@ -22,7 +23,158 @@ static SpriteID EnemySpriteFor(Enemy *enemy)
         case ETYPE_VIRUS_MELEE:  return SPR_VIRUS_MELEE;
         case ETYPE_VIRUS_RANGED: return SPR_VIRUS_RANGED;
         case ETYPE_VIRUS_BOSS:   return SPR_VIRUS_BOSS;
+        case ETYPE_VIRUS_SWARM:  return SPR_VIRUS_SWARM;
+        case ETYPE_VIRUS_ELITE:  return SPR_VIRUS_ELITE;
         default:                 return (SpriteID)-1;
+    }
+}
+
+// ============================================================================
+// SILHUETAS PROCEDURAIS DOS VÍRUS — cada arquétipo tem forma/tamanho/animação
+// próprios (fallback quando não há PNG). `spin` = relógio global (GetTime), usado
+// para a rotação; `anim` = relógio por inimigo (enemy->animTime) para pulsações.
+// ============================================================================
+
+// 1) Enxame (rinovírus): capsídeo pequeno e compacto, poucas espículas curtas.
+static void DrawVirusSwarm(Vector2 c, float r, float rot, float spin, Color body, Color edge, float alpha)
+{
+    float rr = rot + spin * 50.0f;
+    DrawPoly(c, 6, r * 0.95f, rr, body);
+    DrawPolyLinesEx(c, 6, r * 0.95f, rr, 2.0f, edge);
+    for (int i = 0; i < 6; i++)
+    {
+        float a = (rr + i * 60.0f) * DEG2RAD;
+        Vector2 e = { c.x + cosf(a) * r * 1.2f, c.y + sinf(a) * r * 1.2f };
+        DrawLineEx(c, e, 2.0f, body);
+        DrawCircleV(e, r * 0.14f, edge);
+    }
+    DrawCircleV(c, r * 0.4f, Fade((Color){ 70, 80, 20, 255 }, alpha)); // núcleo
+}
+
+// 2) Envelopado corpo a corpo (dengue): envelope lipídico + espículas em clube +
+//    capsídeo icosaédrico interno + núcleo de RNA pulsante.
+static void DrawVirusEnveloped(Vector2 c, float r, float rot, float spin, float anim, Color body, Color edge, float alpha)
+{
+    float rr = rot + spin * 6.0f;
+    DrawCircleV(c, r * 1.18f, Fade(body, alpha * 0.30f));
+    DrawCircleLines((int)c.x, (int)c.y, r * 1.18f, Fade(edge, alpha * 0.7f));
+    int spk = 16;
+    for (int i = 0; i < spk; i++)
+    {
+        float a = (rr + i * (360.0f / spk)) * DEG2RAD;
+        Vector2 base = { c.x + cosf(a) * r * 1.02f, c.y + sinf(a) * r * 1.02f };
+        Vector2 tip  = { c.x + cosf(a) * r * 1.30f, c.y + sinf(a) * r * 1.30f };
+        DrawLineEx(base, tip, 3.0f, Fade(body, alpha));
+        DrawCircleV(tip, r * 0.09f, Fade(edge, alpha));
+    }
+    DrawPoly(c, 12, r * 0.82f, -rr, body);
+    DrawPolyLinesEx(c, 12, r * 0.82f, -rr, 2.0f, Fade(edge, alpha * 0.8f));
+    float pls = 0.5f + 0.5f * sinf(anim * 3.0f);
+    DrawCircleV(c, r * (0.34f + 0.05f * pls), Fade((Color){ 90, 20, 30, 255 }, alpha));
+}
+
+// 3) Atirador (influenza): dois tipos de espícula (HA pontuda + NA cogumelo) e
+//    8 segmentos de RNA internos girando.
+static void DrawVirusShooter(Vector2 c, float r, float rot, float spin, Color body, Color edge, float alpha)
+{
+    float rr = rot + spin * 7.0f;
+    DrawCircleV(c, r * 0.95f, body);
+    DrawCircleLines((int)c.x, (int)c.y, r * 0.95f, Fade(edge, alpha * 0.7f));
+    int n = 16;
+    for (int i = 0; i < n; i++)
+    {
+        float a = (rr + i * (360.0f / n)) * DEG2RAD;
+        Vector2 base = { c.x + cosf(a) * r * 0.92f, c.y + sinf(a) * r * 0.92f };
+        if (i % 2 == 0)
+        {
+            Vector2 tip = { c.x + cosf(a) * r * 1.40f, c.y + sinf(a) * r * 1.40f }; // HA pontuda
+            DrawLineEx(base, tip, 2.5f, Fade(body, alpha));
+            DrawCircleV(tip, r * 0.07f, Fade(edge, alpha));
+        }
+        else
+        {
+            Vector2 tip = { c.x + cosf(a) * r * 1.22f, c.y + sinf(a) * r * 1.22f }; // NA cogumelo
+            DrawLineEx(base, tip, 2.0f, Fade(body, alpha));
+            DrawCircleV(tip, r * 0.12f, Fade(body, alpha));
+            DrawCircleLines((int)tip.x, (int)tip.y, r * 0.12f, Fade(edge, alpha));
+        }
+    }
+    for (int s = 0; s < 8; s++)
+    {
+        float a = (rr * 1.5f + s * 45.0f) * DEG2RAD;
+        Vector2 p = { c.x + cosf(a) * r * 0.35f, c.y + sinf(a) * r * 0.35f };
+        DrawCircleV(p, r * 0.09f, Fade((Color){ 80, 40, 10, 255 }, alpha));
+    }
+}
+
+// 4) Elite/mutante (sarampo): corpo disforme (polígonos sobrepostos), muitas
+//    espículas de comprimentos variados e núcleo pulsante brilhante (mutação).
+static void DrawVirusElite(Vector2 c, float r, float rot, float spin, float anim, Color body, Color edge, float alpha)
+{
+    float pls = 0.5f + 0.5f * sinf(anim * 4.0f);
+    float rr = rot + spin * 5.0f;
+    DrawCircleV(c, r * 1.55f, Fade(body, alpha * 0.14f)); // halo de elite
+    DrawPoly(c, 11, r * 1.02f, rr, body);
+    DrawPoly(c, 7, r * 0.92f, -rr * 0.6f, Fade(body, alpha * 0.9f));
+    DrawPolyLinesEx(c, 11, r * 1.02f, rr, 3.5f, edge);
+    int n = 20;
+    for (int i = 0; i < n; i++)
+    {
+        float a = (rr + i * (360.0f / n)) * DEG2RAD;
+        float len = 1.20f + (float)(i % 3) * 0.18f + pls * 0.10f;
+        Vector2 base = { c.x + cosf(a) * r * 0.98f, c.y + sinf(a) * r * 0.98f };
+        Vector2 tip  = { c.x + cosf(a) * r * len, c.y + sinf(a) * r * len };
+        DrawLineEx(base, tip, 3.0f, Fade(body, alpha));
+        DrawCircleV(tip, r * 0.10f, Fade(edge, alpha));
+    }
+    DrawCircleV(c, r * (0.42f + 0.10f * pls), Fade((Color){ 255, 180, 255, 255 }, alpha * (0.6f + 0.3f * pls)));
+    DrawCircleV(c, r * 0.26f, Fade((Color){ 90, 20, 60, 255 }, alpha));
+}
+
+// 5) Chefe (coronavírus): coroa de espículas em clube; QUANDO O CAPSÍDEO ROMPE
+//    (vida < 34%, fase final) muda visualmente — espículas quebradas/faltando e
+//    RNA exposto brilhante com rachaduras.
+static void DrawVirusBoss(Vector2 c, float r, float rot, float spin, float anim, Color body, Color edge, float alpha, int hp, int maxHp)
+{
+    float pct = (maxHp > 0) ? (float)hp / (float)maxHp : 1.0f;
+    bool broken = (pct < 0.34f);
+    float pls = 0.5f + 0.5f * sinf(anim * 4.0f);
+    float rr = rot + spin * 4.0f;
+    Color shell = broken ? (Color){ 120, 40, 90, 255 } : body;
+    DrawCircleV(c, r * 1.35f, Fade(broken ? (Color){ 255, 120, 60, 255 } : body, alpha * (0.16f + (broken ? pls * 0.2f : 0.0f))));
+    DrawCircleV(c, r, Fade(shell, alpha));
+    DrawCircleLines((int)c.x, (int)c.y, r, Fade(edge, alpha * 0.8f));
+    int spikes = 18;
+    for (int i = 0; i < spikes; i++)
+    {
+        if (broken && (i % 3 == 0)) continue; // espículas perdidas ao romper
+        float a = (rr + i * (360.0f / spikes)) * DEG2RAD;
+        float len = broken ? 1.16f : 1.34f;
+        Vector2 base = { c.x + cosf(a) * r * 0.98f, c.y + sinf(a) * r * 0.98f };
+        Vector2 tip  = { c.x + cosf(a) * r * len, c.y + sinf(a) * r * len };
+        DrawLineEx(base, tip, broken ? 3.0f : 4.0f, Fade(shell, alpha));
+        DrawCircleV(tip, r * (broken ? 0.10f : 0.14f), Fade(edge, alpha)); // bulbo (clube)
+    }
+    for (int i = 0; i < 6; i++)
+    {
+        float a = (rr * 0.7f + i * 60.0f) * DEG2RAD;
+        Vector2 p = { c.x + cosf(a) * r * 0.5f, c.y + sinf(a) * r * 0.5f };
+        DrawCircleV(p, r * 0.10f, Fade(edge, alpha * 0.25f)); // depressões da superfície
+    }
+    if (broken)
+    {
+        DrawCircleV(c, r * (0.50f + 0.12f * pls), Fade((Color){ 255, 200, 90, 255 }, alpha * (0.5f + 0.4f * pls)));
+        DrawCircleV(c, r * 0.34f, Fade((Color){ 120, 30, 20, 255 }, alpha));
+        for (int i = 0; i < 5; i++)
+        {
+            float a = (i * 72.0f + rr) * DEG2RAD;
+            Vector2 e = { c.x + cosf(a) * r * 0.95f, c.y + sinf(a) * r * 0.95f };
+            DrawLineEx(c, e, 2.5f, Fade((Color){ 255, 220, 120, 255 }, alpha * 0.8f)); // rachadura
+        }
+    }
+    else
+    {
+        DrawCircleV(c, r * 0.42f, Fade((Color){ 60, 20, 40, 255 }, alpha));
     }
 }
 
@@ -34,30 +186,17 @@ void DrawEnemyModel(Enemy *enemy, Vector2 renderPos, float destSize, float rotat
     SpriteID spr = EnemySpriteFor(enemy);
     if (spr != (SpriteID)-1 && SpriteAvailable(spr))
     {
-        Color tint = (enemy->state == HURT) ? Fade(WHITE, alpha) : Fade(WHITE, alpha);
+        Color tint = Fade(WHITE, alpha);
         DrawSpriteCentered(spr, renderPos, (Vector2){ currentDestSize * 2.4f, currentDestSize * 2.4f }, rotation, tint);
         return;
     }
 
-    Color enemyCol = RED;
-    if (enemy->state == HURT) {
-        enemyCol = WHITE;
-    } else {
-        if (enemy->type == ETYPE_SARS)             enemyCol = (Color){ 140, 50, 200, 255 }; // Roxo (SARS-CoV-2)
-        else if (enemy->type == ETYPE_DENGUE_OLD)  enemyCol = (Color){ 80, 80, 80, 255 };   // Cinza escuro (Dengue legado)
-        else if (enemy->type == ETYPE_KPC)         enemyCol = (Color){ 50, 200, 80, 255 };  // Verde toxico (KPC)
-        else if (enemy->type == ETYPE_CHAGAS)      enemyCol = (Color){ 30, 100, 220, 255 }; // Azul (Chagas)
-        else if (enemy->type == ETYPE_TB)          enemyCol = (Color){ 180, 60, 40, 255 };  // Marrom (Tuberculose)
-        else if (enemy->type == ETYPE_BACT_MELEE)  enemyCol = (Color){ 90, 200, 120, 255 }; // Verde (cocos)
-        else if (enemy->type == ETYPE_BACT_RANGED) enemyCol = (Color){ 170, 200, 70, 255 }; // Oliva (bacilo)
-        else if (enemy->type == ETYPE_VIRUS_MELEE) enemyCol = (Color){ 230, 90, 90, 255 };  // Vermelho (dengue)
-        else if (enemy->type == ETYPE_VIRUS_RANGED)enemyCol = (Color){ 240, 160, 60, 255 }; // Laranja (influenza)
-        else if (enemy->type == ETYPE_VIRUS_BOSS)  enemyCol = (Color){ 200, 60, 160, 255 }; // Magenta (chefe viral)
-        else                                       enemyCol = RED;
-    }
-
-    enemyCol = Fade(enemyCol, alpha);
+    // Cor base a partir do arquétipo centralizado (HURT pisca branco).
+    const EnemyArchetype *arch = EnemyArchetypeFor(enemy->type);
+    Color baseCol = arch ? arch->palette : RED;
+    Color enemyCol = Fade((enemy->state == HURT) ? WHITE : baseCol, alpha);
     Color edgeCol = Fade(WHITE, alpha);
+    float spin = (float)GetTime();
 
     // Tipo 0: Vírus (Círculo espinhoso)
     if (enemy->type == ETYPE_SARS) {
@@ -116,18 +255,20 @@ void DrawEnemyModel(Enemy *enemy, Vector2 renderPos, float destSize, float rotat
         DrawCircleV(b, currentDestSize * 0.45f, enemyCol);
         DrawCircleV(renderPos, currentDestSize * 0.3f, Fade(BLACK, alpha * 0.6f));
     }
-    // Tipos 7/8/9: Vírus (círculo espinhoso) — com tamanho/cor por tipo
-    else if (enemy->type == ETYPE_VIRUS_MELEE || enemy->type == ETYPE_VIRUS_RANGED || enemy->type == ETYPE_VIRUS_BOSS) {
-        int spikes = (enemy->type == ETYPE_VIRUS_BOSS) ? 12 : 9;
-        DrawPoly(renderPos, spikes, currentDestSize, rotation + GetTime()*8.0f, enemyCol);
-        DrawPolyLinesEx(renderPos, spikes, currentDestSize, rotation + GetTime()*8.0f, 3.0f, edgeCol);
-        for (int i = 0; i < spikes; i++) {
-            float angle = (rotation + GetTime()*8.0f + i * (360.0f / spikes)) * DEG2RAD;
-            Vector2 end = { renderPos.x + cosf(angle) * currentDestSize * 1.35f, renderPos.y + sinf(angle) * currentDestSize * 1.35f };
-            DrawLineEx(renderPos, end, 2.5f, enemyCol);
-            DrawCircleV(end, currentDestSize * 0.12f, edgeCol);
-        }
-        // núcleo de material genético (RNA)
-        DrawCircleV(renderPos, currentDestSize * 0.45f, Fade((Color){ 60, 20, 30, 255 }, alpha));
+    // --- Mundo 2: cinco identidades virais distintas (silhuetas próprias) ---
+    else if (enemy->type == ETYPE_VIRUS_SWARM) {
+        DrawVirusSwarm(renderPos, currentDestSize, rotation, spin, enemyCol, edgeCol, alpha);
+    }
+    else if (enemy->type == ETYPE_VIRUS_MELEE) {
+        DrawVirusEnveloped(renderPos, currentDestSize, rotation, spin, enemy->animTime, enemyCol, edgeCol, alpha);
+    }
+    else if (enemy->type == ETYPE_VIRUS_RANGED) {
+        DrawVirusShooter(renderPos, currentDestSize, rotation, spin, enemyCol, edgeCol, alpha);
+    }
+    else if (enemy->type == ETYPE_VIRUS_ELITE) {
+        DrawVirusElite(renderPos, currentDestSize, rotation, spin, enemy->animTime, enemyCol, edgeCol, alpha);
+    }
+    else if (enemy->type == ETYPE_VIRUS_BOSS) {
+        DrawVirusBoss(renderPos, currentDestSize, rotation, spin, enemy->animTime, enemyCol, edgeCol, alpha, enemy->hp, enemy->maxHp);
     }
 }

@@ -200,7 +200,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangle((int)(-s*0.40f), (int)(-s*1.72f), (int)(s*0.20f), (int)(s*0.80f), bodyDk);
         DrawRectangle((int)( s*0.20f), (int)(-s*1.72f), (int)(s*0.20f), (int)(s*0.80f), bodyDk);
         // Orbe de energia (glow nas cores da skin)
-        DrawCircleGradient((Vector2){ 0, -s*1.5f }, s*0.52f, primary, BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*1.5f }, s*0.52f, primary, BLANK);
         DrawCircleV((Vector2){ 0, -s*1.5f }, s*0.27f, primary);
         DrawCircleV((Vector2){ 0, -s*1.5f }, s*0.14f, secondary);
         DrawCircleLines(0, (int)(-s*1.5f), s*0.52f, secondary);

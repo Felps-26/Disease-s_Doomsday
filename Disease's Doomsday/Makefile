@@ -66,7 +66,7 @@ else
 endif
 
 # ---------------------------------------------------------------------------
-.PHONY: all run clean test
+.PHONY: all run clean test collision-mask
 all: $(TARGET)
 
 $(TARGET): $(SRCS)
@@ -75,6 +75,14 @@ $(TARGET): $(SRCS)
 
 run: $(TARGET)
 	./$(TARGET)
+
+# Regenera Assets/Maps/map_body_mask.h a partir de Assets/Sprites/Map/corpo.png
+# usando a MESMA transformacao imagem->mundo do renderer (map_body.h). Determinis-
+# tico e reproduzivel: rode sempre que corpo.png ou a transformacao mudar.
+collision-mask:
+	$(CC) -O2 $(CFLAGS) tools/bake_collision_mask.c -o bake_collision_mask $(LIBS)
+	./bake_collision_mask
+	@echo "[OK] map_body_mask.h regenerado a partir de corpo.png"
 
 # Teste de ACEITACAO (Etapa 2): simula muitos spawns de chefe em posicoes
 # aleatorias e valida que TODOS os Nucleos de Infeccao nascem dentro do corpo e
@@ -89,7 +97,9 @@ test:
 	./test_rifle_range
 	$(CC) -O2 $(CFLAGS) tests/test_cosmetics.c Assets/@models/cosmetics.c -o test_cosmetics -lm
 	./test_cosmetics
+	$(CC) -O2 $(CFLAGS) tests/test_virus_waves.c src/systems/wave_manager.c src/entities/enemy.c Assets/Maps/map_body.c -o test_virus_waves -lm
+	./test_virus_waves
 
 clean:
-	rm -f $(TARGET) test_core_spawns test_map_body test_rifle_range test_cosmetics
+	rm -f $(TARGET) test_core_spawns test_map_body test_rifle_range test_cosmetics test_virus_waves bake_collision_mask
 	@echo "[OK] Limpeza concluida."

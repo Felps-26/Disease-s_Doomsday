@@ -30,6 +30,7 @@ int GetRandomValue(int mn, int mx) { return mn + rand() % (mx - mn + 1); }
 // sprite_manager stubs
 bool SpriteAvailable(int id) { (void)id; return false; }
 void DrawSpriteCentered(int id, Vector2 c, Vector2 s, float r, Color col) { (void)id;(void)c;(void)s;(void)r;(void)col; }
+Texture2D GetSprite(int id) { (void)id; return (Texture2D){0}; }
 
 static float dist(Vector2 a, Vector2 b){ return sqrtf((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)); }
 

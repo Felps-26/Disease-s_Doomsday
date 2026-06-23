@@ -1,6 +1,7 @@
 #include "../../include/input_controller.h"
 #include "../../include/telas.h"
 #include "../../include/gameplay.h"
+#include "../../include/asset_manager.h"
 #include "raymath.h"
 #include <stdio.h>
 #include <math.h>
@@ -18,11 +19,15 @@ extern UIButton settingsBtnVoltar;
 
 void UpdateBtnState(UIButton *btn, Vector2 mouse)
 {
+    bool wasHovered = btn->hover;
     btn->hover = CheckCollisionPointRec(mouse, btn->bounds);
     btn->clicked = false;
+    if (btn->hover && !wasHovered && g_assets.sfxMenuHover.frameCount > 0)
+        PlaySound(g_assets.sfxMenuHover);
     if (btn->hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
         btn->clicked = true;
+        if (g_assets.sfxMenuClick.frameCount > 0) PlaySound(g_assets.sfxMenuClick);
     }
 }
 
@@ -405,16 +410,21 @@ void UpdateButtonsSettings(GameState *game, Vector2 mouse, GameScreen backScreen
         return;
     }
 
-    // Slider de volume: MESMA geometria do desenho (SettingsVolumeTrack), com
-    // área clicável inflada e clamp 0..1 — knob/preenchimento nunca saem do card.
-    Rectangle track = SettingsVolumeTrack();
-    Rectangle sliderHit = { track.x - 14, track.y - 16, track.width + 28, track.height + 32 };
-    if (CheckCollisionPointRec(mouse, sliderHit) && IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+    // Sliders independentes; desenho e input compartilham as mesmas geometrias.
+    Rectangle tracks[2] = { SettingsMusicVolumeTrack(), SettingsSfxVolumeTrack() };
+    for (int i = 0; i < 2; i++)
     {
-        float pct = (mouse.x - track.x) / track.width;
-        if (pct < 0.0f) pct = 0.0f;
-        if (pct > 1.0f) pct = 1.0f;
-        game->masterVolume = pct;
+        Rectangle track = tracks[i];
+        Rectangle sliderHit = { track.x - 14, track.y - 16, track.width + 28, track.height + 32 };
+        if (!CheckCollisionPointRec(mouse, sliderHit) || !IsMouseButtonDown(MOUSE_LEFT_BUTTON)) continue;
+
+        float pct = Clamp((mouse.x - track.x) / track.width, 0.0f, 1.0f);
+        if (i == 0) game->musicVolume = pct;
+        else
+        {
+            game->sfxVolume = pct;
+            ApplySfxVolume(pct);
+        }
     }
 
     // Seletores de skin (mesmas posições do DrawTelaSettings)
@@ -422,7 +432,7 @@ void UpdateButtonsSettings(GameState *game, Vector2 mouse, GameScreen backScreen
     {
         for (int row = 0; row < 2; row++)
         {
-            float y = 355.0f + row * 70.0f;
+            float y = 390.0f + row * 65.0f;
             Rectangle btnPrev = { 600, y, 40, 40 };
             Rectangle btnNext = { 860, y, 40, 40 };
 
@@ -443,4 +453,3 @@ void UpdateButtonsSettings(GameState *game, Vector2 mouse, GameScreen backScreen
         }
     }
 }
-

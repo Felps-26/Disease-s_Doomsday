@@ -74,6 +74,34 @@ static const int BODY_N = (int)(sizeof(BODY) / sizeof(BODY[0]));
 #define THORAX_SAFE_X BODY_CX
 #define THORAX_SAFE_Y 1780.0f
 
+// ============================================================================
+// ÂNCORAS ANATÔMICAS — SOMENTE DECORATIVAS (não influenciam colisão/spawn).
+// Coordenadas de mundo derivadas das cápsulas BODY[] (tronco x∈[~1620,2380],
+// centro X = BODY_CX = 2000). Direções "esq./dir." são da perspectiva da TELA.
+// Estes pontos só alimentam o desenho dos órgãos em DrawAnatomyLayer(); a
+// fonte autoritativa de colisão continua sendo a máscara baked / cápsulas.
+// ============================================================================
+#define ORG_BRAIN_X     BODY_CX
+#define ORG_BRAIN_Y     470.0f
+#define ORG_TRACHEA_TOP 800.0f     // topo da traqueia no pescoço
+#define ORG_HEART_X     (BODY_CX - 70.0f)  // coração levemente à esquerda
+#define ORG_HEART_Y     BLOOD_CY
+#define ORG_LIVER_X     (BODY_CX + 185.0f) // fígado: abdome superior direito (tela)
+#define ORG_LIVER_Y     1890.0f
+#define ORG_STOMACH_X   (BODY_CX - 200.0f) // estômago: abdome superior esquerdo (tela)
+#define ORG_STOMACH_Y   1885.0f
+#define ORG_KIDNEY_DX   248.0f             // afastamento dos rins do eixo central
+#define ORG_KIDNEY_Y    2035.0f            // rins na região lombar
+#define ORG_GUT_X       BODY_CX            // intestinos centralizados
+#define ORG_GUT_Y       HOSP_CY
+#define ORG_BLADDER_X   BODY_CX
+#define ORG_BLADDER_Y   2470.0f            // bexiga na parte inferior da pelve
+
+// A transformação imagem->mundo (MAPBODY_IMG_SCALE / DX / DY) é definida em
+// map_body.h (fonte única, compartilhada com o baker da colisão). Quando a
+// textura corpo.png existe, ela é a representação OFICIAL do corpo (silhueta +
+// órgãos + rótulos); a arte procedural abaixo é apenas FALLBACK.
+
 // Cores do tecido (interior do corpo)
 #define COL_MEMBRANE (Color){ 175, 80, 96, 255 }
 #define COL_TISSUE   (Color){ 96, 36, 46, 255 }
@@ -762,6 +790,325 @@ static void DrawTrachea(Vector2 top, Vector2 bif, Vector2 hilumL, Vector2 hilumR
 }
 
 // ============================================================================
+// CAMADA ANATÔMICA DECORATIVA — órgãos abdominais e da cabeça.
+// IMPORTANTE: tudo abaixo é SOMENTE desenho. Nenhuma destas funções é consultada
+// pela colisão, spawns ou pathfinding (essas usam a máscara baked / cápsulas).
+// As posições vêm das âncoras ORG_* (derivadas das dimensões reais do corpo).
+// ============================================================================
+
+// Contornos locais (normalizados [-1..1]) — escalados/posicionados no desenho.
+static const Vector2 LIVER_OUT[] = {
+    { -1.00f, -0.08f }, { -0.52f, -0.44f }, { 0.22f, -0.56f }, { 0.74f, -0.44f },
+    {  1.00f, -0.02f }, {  0.90f,  0.42f }, { 0.44f,  0.62f }, { -0.22f, 0.56f },
+    { -0.70f,  0.34f }, { -0.96f,  0.14f },
+};
+static const Vector2 STOMACH_OUT[] = {
+    { -0.50f, -0.96f }, { 0.20f, -1.00f }, { 0.58f, -0.66f }, { 0.60f, -0.16f },
+    {  0.42f, 0.30f },  { 0.86f,  0.60f }, { 0.52f,  0.92f }, { 0.02f, 0.78f },
+    { -0.34f, 0.40f },  { -0.64f, -0.12f },{ -0.70f, -0.56f },
+};
+static const Vector2 KIDNEY_OUT[] = { // rim direito (hilo no lado interno x<0)
+    { 0.32f, -1.00f }, { 0.86f, -0.76f }, { 1.00f, -0.18f }, { 1.00f, 0.32f },
+    { 0.80f, 0.84f },  { 0.30f, 1.00f },  { -0.08f, 0.66f }, { -0.34f, 0.28f },
+    { -0.06f, 0.00f }, { -0.34f, -0.30f },{ -0.08f, -0.68f },
+};
+static const Vector2 BLADDER_OUT[] = {
+    { -0.88f, -0.52f }, { 0.0f, -0.82f }, { 0.88f, -0.52f }, { 1.00f, 0.12f },
+    {  0.54f, 0.76f },  { 0.0f,  0.96f }, { -0.54f, 0.76f }, { -1.00f, 0.12f },
+};
+
+// Blob orgânico genérico: sombra projetada + corpo + realce + contorno fechado.
+// 'mirror' espelha o contorno em x (para órgãos pares como os rins).
+static void DrawOrganBlob(const Vector2 *local, int n, Vector2 center, Vector2 scale,
+                          Color fill, Color hi, Color outline, float shadowA, int mirror)
+{
+    Vector2 pts[24], sh[24], hiPts[24];
+    float mx = mirror ? -1.0f : 1.0f;
+    for (int i = 0; i < n; i++)
+        pts[i] = (Vector2){ center.x + local[i].x * mx * scale.x, center.y + local[i].y * scale.y };
+    if (shadowA > 0.0f)
+    {
+        for (int i = 0; i < n; i++) sh[i] = (Vector2){ pts[i].x + 10.0f, pts[i].y + 14.0f };
+        FillPolyFan(sh, n, (Vector2){ center.x + 10.0f, center.y + 14.0f }, Fade(BLACK, shadowA));
+    }
+    FillPolyFan(pts, n, center, fill);
+    Vector2 hiC = { center.x - mx * scale.x * 0.16f, center.y - scale.y * 0.18f };
+    for (int i = 0; i < n; i++)
+    {
+        hiPts[i].x = hiC.x + (pts[i].x - center.x) * 0.6f;
+        hiPts[i].y = hiC.y + (pts[i].y - center.y) * 0.6f;
+    }
+    FillPolyFan(hiPts, n, hiC, Fade(hi, 0.5f));
+    for (int i = 0; i < n; i++) DrawLineEx(pts[i], pts[(i + 1) % n], 3.5f, outline);
+}
+
+// Rótulo leve (texto com contorno, sem painel) para órgãos decorativos.
+static void DrawOrganTag(Font font, const char *txt, Vector2 center, Color col, float fs)
+{
+    Vector2 sz = MeasureTextEx(font, txt, fs, 1.5f);
+    Vector2 at = { center.x - sz.x * 0.5f, center.y - sz.y * 0.5f };
+    for (int dx = -2; dx <= 2; dx += 2)
+        for (int dy = -2; dy <= 2; dy += 2)
+            if (dx || dy)
+                DrawTextEx(font, txt, (Vector2){ at.x + dx, at.y + dy }, fs, 1.5f, Fade(BLACK, 0.6f));
+    DrawTextEx(font, txt, at, fs, 1.5f, col);
+}
+
+// Cérebro dentro da cabeça: dois hemisférios + fissura + giros + cerebelo.
+static void DrawBrain(Vector2 c, float pulse, bool focus)
+{
+    float w = 250.0f, h = 280.0f;
+    Color base = (Color){ 206, 150, 158, 255 };
+    Color hi   = (Color){ 234, 186, 192, 255 };
+    Color sulc = (Color){ 150, 92, 104, 255 };
+    Color outl = (Color){ 118, 70, 84, 255 };
+    if (focus) DrawCircleV(c, h * 0.62f, Fade((Color){ 255, 150, 170, 255 }, 0.14f + pulse * 0.14f));
+    DrawEllipse((int)(c.x + 8), (int)(c.y + 12), w * 0.5f, h * 0.5f, Fade(BLACK, 0.26f));
+    DrawEllipse((int)c.x, (int)c.y, w * 0.5f, h * 0.5f, base);
+    DrawEllipse((int)(c.x - w * 0.13f), (int)(c.y - h * 0.16f), w * 0.32f, h * 0.30f, Fade(hi, 0.5f));
+    // fissura longitudinal
+    DrawLineEx((Vector2){ c.x, c.y - h * 0.46f }, (Vector2){ c.x, c.y + h * 0.34f }, 5.0f, Fade(sulc, 0.85f));
+    // giros (sulcos ondulados determinísticos)
+    for (int i = 0; i < 7; i++)
+    {
+        float yy = c.y - h * 0.36f + (float)i * (h * 0.70f / 6.0f);
+        for (int s = -1; s <= 1; s += 2)
+        {
+            Vector2 prev = { c.x + s * 12.0f, yy };
+            for (int k = 1; k <= 6; k++)
+            {
+                float t = (float)k / 6.0f;
+                float xx = c.x + s * (12.0f + t * w * 0.40f);
+                float oy = yy + sinf(t * PI * 2.0f + i) * 9.0f;
+                Vector2 cur = { xx, oy };
+                DrawLineEx(prev, cur, 3.0f, Fade(sulc, 0.5f));
+                prev = cur;
+            }
+        }
+    }
+    // cerebelo / tronco encefálico (lobo inferior)
+    DrawEllipse((int)c.x, (int)(c.y + h * 0.45f), w * 0.30f, h * 0.15f, base);
+    DrawEllipseLines((int)c.x, (int)(c.y + h * 0.45f), w * 0.30f, h * 0.15f, Fade(outl, 0.8f));
+    DrawEllipseLines((int)c.x, (int)c.y, w * 0.5f, h * 0.5f, outl);
+}
+
+// Cólon (intestino grosso) emoldurando o abdome: ascendente + transverso +
+// descendente + sigmoide, com haustrações (bossuras).
+static void DrawLargeIntestine(float cx, float topY, float botY, float halfW, Color base, Color inner, float a)
+{
+    Vector2 path[5] = {
+        { cx + halfW, botY },              // base do cólon ascendente (direita)
+        { cx + halfW, topY },              // cólon ascendente
+        { cx - halfW, topY },              // cólon transverso
+        { cx - halfW, botY },              // cólon descendente
+        { cx - halfW * 0.30f, botY + 78.0f } // sigmoide -> reto
+    };
+    float th = 42.0f;
+    for (int i = 0; i < 4; i++)
+    {
+        DrawLineEx(path[i], path[i + 1], th + 7.0f, Fade(inner, a * 0.9f));
+        DrawLineEx(path[i], path[i + 1], th, Fade(base, a));
+        DrawCircleV(path[i], (th + 7.0f) * 0.5f, Fade(inner, a * 0.9f));
+        DrawCircleV(path[i], th * 0.5f, Fade(base, a));
+    }
+    DrawCircleV(path[4], th * 0.5f, Fade(base, a));
+    for (int i = 0; i < 4; i++)
+    {
+        float len = Vector2Distance(path[i], path[i + 1]);
+        int bumps = (int)(len / 56.0f);
+        for (int k = 1; k < bumps; k++)
+        {
+            float t = (float)k / (float)bumps;
+            Vector2 p = { path[i].x + (path[i + 1].x - path[i].x) * t,
+                          path[i].y + (path[i + 1].y - path[i].y) * t };
+            DrawCircleV(p, th * 0.60f, Fade(inner, a * 0.45f));
+        }
+    }
+}
+
+// Intestino delgado: alças serpenteantes centralizadas dentro do cólon.
+static void DrawSmallIntestine(float cx, float topY, float bottomY, float spread, Color col, float a)
+{
+    Vector2 prev = { cx - spread, topY };
+    for (int s = 1; s <= 40; s++)
+    {
+        float t = (float)s / 40.0f;
+        float xx = cx + sinf(t * PI * 5.0f + 0.4f) * spread;
+        float yy = topY + t * (bottomY - topY);
+        Vector2 cur = { xx, yy };
+        DrawLineEx(prev, cur, 24.0f, Fade(col, a * 0.55f));
+        DrawLineEx(prev, cur, 13.0f, Fade(col, a));
+        prev = cur;
+    }
+}
+
+// Grandes vasos: aorta (artéria) + cava (veia) descendo pelo eixo + ramos.
+static void DrawMainVessels(void)
+{
+    Color art = (Color){ 188, 60, 64, 255 };
+    Color ven = (Color){ 78, 92, 168, 255 };
+    float a = 0.40f;
+    Vector2 aTop = { BODY_CX - 28.0f, 1500.0f }, aBot = { BODY_CX - 28.0f, 2540.0f };
+    Vector2 vTop = { BODY_CX + 28.0f, 1500.0f }, vBot = { BODY_CX + 28.0f, 2540.0f };
+    DrawLineEx(aTop, aBot, 22.0f, Fade(art, a));
+    DrawLineEx(vTop, vBot, 20.0f, Fade(ven, a));
+    // arco aórtico (sobre o coração)
+    DrawLineEx((Vector2){ BODY_CX - 28.0f, 1510.0f }, (Vector2){ BODY_CX + 10.0f, 1432.0f }, 18.0f, Fade(art, a));
+    // bifurcação ilíaca (para as pernas)
+    DrawLineEx(aBot, (Vector2){ BODY_CX - 150.0f, 2660.0f }, 14.0f, Fade(art, a * 0.8f));
+    DrawLineEx(vBot, (Vector2){ BODY_CX + 150.0f, 2660.0f }, 12.0f, Fade(ven, a * 0.8f));
+    // ramos renais
+    DrawLineEx((Vector2){ BODY_CX - 28.0f, ORG_KIDNEY_Y }, (Vector2){ BODY_CX - ORG_KIDNEY_DX + 40.0f, ORG_KIDNEY_Y }, 8.0f, Fade(art, a * 0.7f));
+    DrawLineEx((Vector2){ BODY_CX + 28.0f, ORG_KIDNEY_Y }, (Vector2){ BODY_CX + ORG_KIDNEY_DX - 40.0f, ORG_KIDNEY_Y }, 8.0f, Fade(ven, a * 0.7f));
+}
+
+// ============================================================================
+// DrawFocusEffects — efeitos procedurais que ficam SOBRE a arte (imagem ou
+// fallback): tinte discreto da região infectada + anel pulsante do órgão da
+// fase. SEM redesenhar órgãos/rótulos (a arte já os contém). Tudo translúcido.
+// ============================================================================
+static void DrawFocusEffects(int currentWorld, int wave, float time, BodyRegion focus, float pulse)
+{
+    Vector2 fc = MapBody_GetRegionCenter(focus);
+    Color ringCol = (focus == REGION_LUNGS)       ? (Color){ 120, 220, 255, 255 }
+                  : (focus == REGION_BLOODSTREAM)  ? (Color){ 255, 120, 130, 255 }
+                                                   : (Color){ 255, 225, 120, 255 };
+    // Indicação discreta da região infectada (tinte suave pulsante sobre o órgão).
+    DrawCircleV(fc, 300.0f, Fade(ringCol, 0.05f + 0.05f * pulse));
+    // Destaque pulsante do órgão da fase (anel translúcido = marcador do objetivo).
+    float ringR = 320.0f + pulse * 26.0f;
+    DrawCircleLines((int)fc.x, (int)fc.y, ringR, Fade(ringCol, 0.25f + 0.20f * pulse));
+    DrawCircleLines((int)fc.x, (int)fc.y, ringR + 8.0f, Fade(ringCol, 0.12f));
+    (void)currentWorld; (void)wave; (void)time;
+}
+
+// ============================================================================
+// DrawAnatomyLayer — desenha TODOS os órgãos (camada decorativa) na ordem
+// trás->frente, mantém o destaque pulsante do órgão em foco e os rótulos.
+// Usado APENAS no fallback procedural (quando corpo.png não está disponível).
+// ============================================================================
+static void DrawAnatomyLayer(Font font, int currentWorld, int wave, float time,
+                             BodyRegion focus, float breathe, float pulse)
+{
+    bool fLung  = (focus == REGION_LUNGS);
+    bool fBlood = (focus == REGION_BLOODSTREAM);
+    bool fHosp  = (focus == REGION_HOSPITAL_FOCUS);
+
+    // ---- (0) Grandes vasos (atrás de tudo) ----
+    DrawMainVessels();
+
+    // ---- (1) RINS (lombar, laterais — atrás das alças intestinais) ----
+    {
+        Color kf = (Color){ 158, 66, 62, 255 }, kh = (Color){ 208, 110, 100, 255 }, ko = (Color){ 110, 44, 44, 255 };
+        Vector2 kScale = { 74.0f, 104.0f };
+        DrawOrganBlob(KIDNEY_OUT, (int)(sizeof(KIDNEY_OUT)/sizeof(KIDNEY_OUT[0])),
+                      (Vector2){ BODY_CX - ORG_KIDNEY_DX, ORG_KIDNEY_Y }, kScale, kf, kh, ko, 0.24f, 1); // esquerdo (espelhado)
+        DrawOrganBlob(KIDNEY_OUT, (int)(sizeof(KIDNEY_OUT)/sizeof(KIDNEY_OUT[0])),
+                      (Vector2){ BODY_CX + ORG_KIDNEY_DX, ORG_KIDNEY_Y }, kScale, kf, kh, ko, 0.24f, 0); // direito
+    }
+
+    // ---- (2) INTESTINO GROSSO (cólon) emoldurando + INTESTINO DELGADO ----
+    {
+        Color colBase = fHosp ? (Color){ 220, 180, 90, 255 } : (Color){ 178, 118, 104, 255 };
+        Color colIn   = fHosp ? (Color){ 240, 205, 110, 255 } : (Color){ 150, 92, 84, 255 };
+        float colA = fHosp ? (0.62f + pulse * 0.18f) : 0.72f;
+        DrawLargeIntestine(ORG_GUT_X, ORG_GUT_Y - 150.0f, ORG_GUT_Y + 155.0f, 220.0f, colBase, colIn, colA);
+        Color siCol = fHosp ? (Color){ 245, 215, 120, 255 } : (Color){ 196, 120, 110, 255 };
+        DrawSmallIntestine(ORG_GUT_X, ORG_GUT_Y - 100.0f, ORG_GUT_Y + 115.0f, 138.0f, siCol, fHosp ? (0.7f + pulse * 0.2f) : 0.6f);
+    }
+
+    // ---- (3) FÍGADO (abdome superior direito da tela) ----
+    DrawOrganBlob(LIVER_OUT, (int)(sizeof(LIVER_OUT)/sizeof(LIVER_OUT[0])),
+                  (Vector2){ ORG_LIVER_X, ORG_LIVER_Y }, (Vector2){ 188.0f, 142.0f },
+                  (Color){ 140, 52, 52, 255 }, (Color){ 192, 96, 92, 255 }, (Color){ 96, 34, 38, 255 }, 0.30f, 0);
+    // ligamento falciforme + lobo direito
+    DrawLineEx((Vector2){ ORG_LIVER_X - 60.0f, ORG_LIVER_Y - 120.0f },
+               (Vector2){ ORG_LIVER_X - 40.0f, ORG_LIVER_Y + 100.0f }, 4.0f, Fade((Color){ 96, 34, 38, 255 }, 0.7f));
+
+    // ---- (4) ESTÔMAGO (abdome superior esquerdo da tela) ----
+    DrawOrganBlob(STOMACH_OUT, (int)(sizeof(STOMACH_OUT)/sizeof(STOMACH_OUT[0])),
+                  (Vector2){ ORG_STOMACH_X, ORG_STOMACH_Y }, (Vector2){ 126.0f, 128.0f },
+                  (Color){ 206, 138, 130, 255 }, (Color){ 236, 182, 172, 255 }, (Color){ 150, 84, 84, 255 }, 0.28f, 0);
+    // rugas gástricas
+    for (int i = 0; i < 3; i++)
+    {
+        float yy = ORG_STOMACH_Y - 50.0f + i * 45.0f;
+        DrawLineEx((Vector2){ ORG_STOMACH_X - 70.0f, yy }, (Vector2){ ORG_STOMACH_X + 40.0f, yy + 14.0f },
+                   3.0f, Fade((Color){ 150, 84, 84, 255 }, 0.4f));
+    }
+
+    // ---- (5) PULMÕES + TRAQUEIA (tórax) ----
+    LungCondition cond;
+    if (fLung) cond = LUNG_INFECTED;
+    else
+    {
+        bool lungWasFocus = false;
+        for (int w = 1; w < wave; w++)
+            if (MapBody_GetFocusRegion(currentWorld, w) == REGION_LUNGS) { lungWasFocus = true; break; }
+        cond = lungWasFocus ? LUNG_RECOVERING : LUNG_HEALTHY;
+    }
+    LungStyle st = LungStyleFor(cond, fLung, pulse);
+    Vector2 hilumL = { LUNGS_CX - LUNG_OFFSET * 0.5f, LUNGS_CY - 40.0f };
+    Vector2 hilumR = { LUNGS_CX + LUNG_OFFSET * 0.5f, LUNGS_CY - 40.0f };
+    Vector2 trTop = { LUNGS_CX, ORG_TRACHEA_TOP }, trBif = { LUNGS_CX, 1470.0f };
+    // Pulmão esquerdo da tela = onde fica o coração: 2 lobos com entalhe cardíaco
+    // marcado; pulmão direito da tela = 3 lobos (maior).
+    DrawLungLobe(hilumL, -1, st, breathe, 1.0f, time);
+    DrawLungLobe(hilumR, +1, st, breathe, 0.0f, time);
+    DrawTrachea(trTop, trBif, hilumL, hilumR, st.vessel, breathe);
+
+    // ---- (6) CORAÇÃO (entre os pulmões, levemente à esquerda da tela) ----
+    Color bloodCol = fBlood ? (Color){ 255, 70, 90, 255 } : (Color){ 206, 64, 76, 255 };
+    float bloodGlow = fBlood ? (0.20f + pulse * 0.24f) : 0.12f;
+    float beat = 1.0f + (fBlood ? pulse * 0.10f : breathe * 0.05f);
+    Vector2 hc = { ORG_HEART_X, ORG_HEART_Y };
+    DrawCircleV(hc, 132.0f * beat, Fade(bloodCol, bloodGlow));
+    float hr = 94.0f * beat;
+    DrawCircleV((Vector2){ hc.x + 8.0f, hc.y + 10.0f }, hr * 0.95f, Fade(BLACK, 0.22f)); // sombra
+    DrawCircleV((Vector2){ hc.x - hr * 0.52f, hc.y - hr * 0.34f }, hr * 0.60f, bloodCol);
+    DrawCircleV((Vector2){ hc.x + hr * 0.52f, hc.y - hr * 0.34f }, hr * 0.60f, bloodCol);
+    DrawTriangle((Vector2){ hc.x - hr, hc.y - hr * 0.18f },
+                 (Vector2){ hc.x, hc.y + hr * 1.05f },
+                 (Vector2){ hc.x + hr, hc.y - hr * 0.18f }, bloodCol);
+    DrawTriangle((Vector2){ hc.x + hr, hc.y - hr * 0.18f },
+                 (Vector2){ hc.x, hc.y + hr * 1.05f },
+                 (Vector2){ hc.x - hr, hc.y - hr * 0.18f }, bloodCol);
+    // realce + contorno
+    DrawCircleV((Vector2){ hc.x - hr * 0.5f, hc.y - hr * 0.42f }, hr * 0.30f, Fade((Color){ 255, 150, 150, 255 }, 0.5f));
+    DrawCircleLines((int)hc.x, (int)hc.y, hr * 1.02f, Fade(bloodCol, 0.45f));
+    // grandes vasos saindo do coração
+    DrawLineEx(hc, (Vector2){ LUNGS_CX, 1470.0f }, 14.0f, Fade(bloodCol, 0.45f));
+
+    // ---- (7) BEXIGA (parte inferior da pelve) ----
+    DrawOrganBlob(BLADDER_OUT, (int)(sizeof(BLADDER_OUT)/sizeof(BLADDER_OUT[0])),
+                  (Vector2){ ORG_BLADDER_X, ORG_BLADDER_Y }, (Vector2){ 96.0f, 78.0f },
+                  (Color){ 206, 196, 120, 255 }, (Color){ 234, 226, 168, 255 }, (Color){ 150, 140, 78, 255 }, 0.24f, 0);
+
+    // ---- (8) CÉREBRO (cabeça) ----
+    DrawBrain((Vector2){ ORG_BRAIN_X, ORG_BRAIN_Y }, pulse, false);
+
+    // ---- (9) DESTAQUE PULSANTE do órgão em foco da onda (efeitos por cima) ----
+    DrawFocusEffects(currentWorld, wave, time, focus, pulse);
+
+    // ---- (10) RÓTULOS — focos com painel; demais órgãos com etiqueta leve ----
+    Color tagCol = Fade((Color){ 255, 235, 220, 255 }, 0.78f);
+    DrawOrganTag(font, "CEREBRO",  (Vector2){ ORG_BRAIN_X, ORG_BRAIN_Y }, tagCol, 34.0f);
+    DrawOrganTag(font, "TRAQUEIA", (Vector2){ LUNGS_CX, 1010.0f }, tagCol, 26.0f);
+    DrawOrganTag(font, "FIGADO",   (Vector2){ ORG_LIVER_X, ORG_LIVER_Y }, tagCol, 30.0f);
+    DrawOrganTag(font, "ESTOMAGO", (Vector2){ ORG_STOMACH_X, ORG_STOMACH_Y - 6.0f }, tagCol, 26.0f);
+    DrawOrganTag(font, "RIM",      (Vector2){ BODY_CX - ORG_KIDNEY_DX, ORG_KIDNEY_Y }, tagCol, 22.0f);
+    DrawOrganTag(font, "RIM",      (Vector2){ BODY_CX + ORG_KIDNEY_DX, ORG_KIDNEY_Y }, tagCol, 22.0f);
+    DrawOrganTag(font, "BEXIGA",   (Vector2){ ORG_BLADDER_X, ORG_BLADDER_Y }, tagCol, 24.0f);
+
+    DrawOrganLabel(font, "PULMOES", (Vector2){ LUNGS_CX, 1170.0f },
+                   fLung ? (Color){ 150, 230, 255, 255 } : Fade(WHITE, 0.7f), fLung);
+    DrawOrganLabel(font, "CORACAO", (Vector2){ ORG_HEART_X, ORG_HEART_Y + 112.0f },
+                   fBlood ? (Color){ 255, 140, 150, 255 } : Fade(WHITE, 0.7f), fBlood);
+    DrawOrganLabel(font, "INTESTINO", (Vector2){ ORG_GUT_X, ORG_GUT_Y + 205.0f },
+                   fHosp ? (Color){ 255, 230, 140, 255 } : Fade(WHITE, 0.7f), fHosp);
+}
+
+// ============================================================================
 // DrawMapBody — desenha o corpo preenchido + órgãos (dentro de BeginMode2D)
 // Camadas (Etapa 3): silhueta/base -> textura interna -> órgãos -> detalhes ->
 // rótulos. (Fundo externo e entidades/HUD são desenhados pelo chamador.)
@@ -771,15 +1118,33 @@ void DrawMapBody(Font font, int currentWorld, int wave, float time)
     float breathe = 0.5f + 0.5f * sinf(time * 0.9f);   // respiração lenta
     float pulse   = 0.5f + 0.5f * sinf(time * 3.0f);   // pulsação rápida (foco)
 
+    BodyRegion focus = MapBody_GetFocusRegion(currentWorld, wave);
+
     // ------------------------------------------------------------------------
-    // 2) SILHUETA / BASE DO CORPO
+    // CAMINHO PRINCIPAL: IMAGEM OFICIAL DO CORPO (corpo.png -> SPR_MAP_BODY).
+    // A arte JÁ contém silhueta + órgãos + rótulos; portanto NÃO desenhamos a
+    // anatomia procedural por cima (evita duplicação). Só efeitos de foco
+    // translúcidos. A imagem ADAPTA-SE ao mapa: proporção PRESERVADA (sem
+    // deformar), centrada no centro do mundo (mesmo sistema da máscara de
+    // colisão), com altura = MAP_HEIGHT * IMG_SCALE para cobrir a área jogável.
     // ------------------------------------------------------------------------
     if (SpriteAvailable(SPR_MAP_BODY))
     {
-        Vector2 center = { MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
-        DrawSpriteCentered(SPR_MAP_BODY, center, (Vector2){ MAP_WIDTH, MAP_HEIGHT }, 0.0f, WHITE);
+        Texture2D tex = GetSprite(SPR_MAP_BODY);
+        float aspect = (tex.height > 0) ? (float)tex.width / (float)tex.height : 1.0f;
+        float h = (float)MAP_HEIGHT * MAPBODY_IMG_SCALE;
+        float w = h * aspect; // preserva a proporção original (não deforma o corpo)
+        Vector2 center = { MAP_WIDTH * 0.5f + MAPBODY_IMG_DX, MAP_HEIGHT * 0.5f + MAPBODY_IMG_DY };
+        DrawSpriteCentered(SPR_MAP_BODY, center, (Vector2){ w, h }, 0.0f, WHITE);
+        DrawFocusEffects(currentWorld, wave, time, focus, pulse);
+        return;
     }
-    else if (SpriteAvailable(SPR_MAP_SILHOUETTE))
+
+    // ------------------------------------------------------------------------
+    // FALLBACK PROCEDURAL (sem corpo.png): silhueta/base + anatomia desenhadas
+    // para o jogo nunca falhar e continuar legível mesmo sem o PNG.
+    // ------------------------------------------------------------------------
+    if (SpriteAvailable(SPR_MAP_SILHOUETTE))
     {
         Vector2 center = { MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
         DrawSpriteCentered(SPR_MAP_SILHOUETTE, center, (Vector2){ MAP_WIDTH, MAP_HEIGHT }, 0.0f, WHITE);
@@ -793,9 +1158,9 @@ void DrawMapBody(Font font, int currentWorld, int wave, float time)
             DrawBodyCapsule(BODY[i].a, BODY[i].b, BODY[i].r + 22.0f, COL_MEMBRANE);
         for (int i = 0; i < BODY_N; i++)
             DrawBodyCapsule(BODY[i].a, BODY[i].b, BODY[i].r, COL_TISSUE);
-        // 3) Textura interna: realce suave ao longo das linhas centrais + células.
+        // Textura interna: realce suave ao longo das linhas centrais + células.
         for (int i = 0; i < BODY_N; i++)
-            DrawBodyCapsule(BODY[i].a, BODY[i].b, BODY[i].r * 0.46f, Fade(COL_TISSUE_HI, 0.35f));
+            DrawBodyCapsule(BODY[i].a, BODY[i].b, BODY[i].r * 0.46f, Fade(COL_TISSUE_HI, 0.20f));
         for (int i = 0; i < 80; i++)
         {
             float bx = BODY_CX - 760.0f + fmodf(i * 167.0f, 1520.0f);
@@ -823,11 +1188,6 @@ void DrawMapBody(Font font, int currentWorld, int wave, float time)
         }
     }
 
-    BodyRegion focus = MapBody_GetFocusRegion(currentWorld, wave);
-
-    // ------------------------------------------------------------------------
-    // 4) ÓRGÃOS
-    // ------------------------------------------------------------------------
     if (SpriteAvailable(SPR_MAP_ORGANS))
     {
         Vector2 center = { MAP_WIDTH / 2.0f, MAP_HEIGHT / 2.0f };
@@ -835,95 +1195,6 @@ void DrawMapBody(Font font, int currentWorld, int wave, float time)
     }
     else
     {
-        // ---- PULMÕES (silhueta orgânica em camadas + traqueia + brônquios) ----
-        bool fLung = (focus == REGION_LUNGS);
-        // Estado clínico derivado do estado REAL do foco (sem feedback falso):
-        // infectado quando o pulmão É o foco da onda; em recuperação se já foi
-        // foco numa onda anterior deste Mundo; saudável caso contrário.
-        LungCondition cond;
-        if (fLung) cond = LUNG_INFECTED;
-        else
-        {
-            bool lungWasFocus = false;
-            for (int w = 1; w < wave; w++)
-                if (MapBody_GetFocusRegion(currentWorld, w) == REGION_LUNGS) { lungWasFocus = true; break; }
-            cond = lungWasFocus ? LUNG_RECOVERING : LUNG_HEALTHY;
-        }
-        LungStyle st = LungStyleFor(cond, fLung, pulse);
-
-        Vector2 hilumL = { LUNGS_CX - LUNG_OFFSET * 0.5f, LUNGS_CY - 40.0f };
-        Vector2 hilumR = { LUNGS_CX + LUNG_OFFSET * 0.5f, LUNGS_CY - 40.0f };
-        Vector2 trTop = { LUNGS_CX, 1230.0f };
-        Vector2 trBif = { LUNGS_CX, 1470.0f };
-
-        // Lobos primeiro (a traqueia/brônquios passam por cima dos hilos).
-        // Assimetria anatômica: lobo esquerdo do mapa = 3 lobos (fissura extra),
-        // lobo direito = 2 lobos com entalhe cardíaco mais marcado.
-        DrawLungLobe(hilumL, -1, st, breathe, 0.0f, time);
-        DrawLungLobe(hilumR, +1, st, breathe, 1.0f, time);
-        DrawTrachea(trTop, trBif, hilumL, hilumR, st.vessel, breathe);
-
-        // ---- CORAÇÃO / CORRENTE SANGUÍNEA ----
-        bool fBlood = (focus == REGION_BLOODSTREAM);
-        Color bloodCol = fBlood ? (Color){ 255, 70, 90, 255 } : (Color){ 200, 70, 80, 205 };
-        float bloodGlow = fBlood ? (0.20f + pulse * 0.24f) : 0.12f;
-        float beat = 1.0f + (fBlood ? pulse * 0.10f : breathe * 0.05f); // batimento
-        Vector2 hc = { BLOOD_CX, BLOOD_CY };
-        DrawCircleV(hc, 210.0f * beat, Fade(bloodCol, bloodGlow));
-        // Forma de coração: dois lóbulos + ponta inferior.
-        float hr = 96.0f * beat;
-        DrawCircleV((Vector2){ hc.x - hr * 0.55f, hc.y - hr * 0.35f }, hr * 0.62f, Fade(bloodCol, 0.65f));
-        DrawCircleV((Vector2){ hc.x + hr * 0.55f, hc.y - hr * 0.35f }, hr * 0.62f, Fade(bloodCol, 0.65f));
-        DrawTriangle((Vector2){ hc.x - hr, hc.y - hr * 0.2f },
-                     (Vector2){ hc.x, hc.y + hr * 1.05f },
-                     (Vector2){ hc.x + hr, hc.y - hr * 0.2f }, Fade(bloodCol, 0.65f));
-        DrawCircleLines((int)hc.x, (int)hc.y, hr * 1.05f, Fade(bloodCol, 0.5f));
-        // Grandes vasos saindo do coração.
-        DrawLineEx(hc, (Vector2){ BLOOD_CX, 1470.0f }, 16.0f, Fade(bloodCol, 0.45f));
-        DrawLineEx(hc, (Vector2){ BLOOD_CX, 2650.0f }, 14.0f, Fade(bloodCol, 0.40f));
-        DrawLineEx(hc, (Vector2){ BLOOD_CX - 260.0f, 2000.0f }, 10.0f, Fade(bloodCol, 0.35f));
-        DrawLineEx(hc, (Vector2){ BLOOD_CX + 260.0f, 2000.0f }, 10.0f, Fade(bloodCol, 0.35f));
-
-        // ---- FOCO HOSPITALAR (colonização intestinal — abdome) ----
-        bool fHosp = (focus == REGION_HOSPITAL_FOCUS);
-        Color hospCol = fHosp ? (Color){ 255, 210, 60, 255 } : (Color){ 190, 170, 90, 195 };
-        float hospGlow = fHosp ? (0.16f + pulse * 0.20f) : 0.09f;
-        DrawCircleV((Vector2){ HOSP_CX, HOSP_CY }, 300.0f, Fade(hospCol, hospGlow));
-        // Alças intestinais (caminho serpenteante aproximado por segmentos).
-        Vector2 prev = { HOSP_CX - 220.0f, HOSP_CY - 110.0f };
-        for (int s = 1; s <= 40; s++)
-        {
-            float t = (float)s / 40.0f;
-            float xx = HOSP_CX + sinf(t * PI * 5.0f + 0.4f) * 210.0f;
-            float yy = (HOSP_CY - 110.0f) + t * 230.0f;
-            Vector2 cur = { xx, yy };
-            DrawLineEx(prev, cur, 26.0f, Fade(hospCol, 0.45f));
-            DrawLineEx(prev, cur, 14.0f, Fade(hospCol, 0.7f));
-            prev = cur;
-        }
-
-        // ------------------------------------------------------------------
-        // 5) DETALHES / DESTAQUES — anel de foco pulsante no órgão da onda.
-        // ------------------------------------------------------------------
-        Vector2 fc = MapBody_GetRegionCenter(focus);
-        float ringR = 330.0f + pulse * 26.0f;
-        Color ringCol = fLung ? (Color){ 120, 220, 255, 255 }
-                      : fBlood ? (Color){ 255, 120, 130, 255 }
-                               : (Color){ 255, 225, 120, 255 };
-        DrawCircleLines((int)fc.x, (int)fc.y, ringR, Fade(ringCol, 0.25f + 0.2f * pulse));
-        DrawCircleLines((int)fc.x, (int)fc.y, ringR + 8.0f, Fade(ringCol, 0.12f));
+        DrawAnatomyLayer(font, currentWorld, wave, time, focus, breathe, pulse);
     }
-
-    // ------------------------------------------------------------------------
-    // 6) RÓTULOS DOS ÓRGÃOS (painel + contorno + contraste) — sempre legíveis.
-    // ------------------------------------------------------------------------
-    DrawOrganLabel(font, "PULMOES", (Vector2){ LUNGS_CX, 1410.0f },
-                   (focus == REGION_LUNGS) ? (Color){ 150, 230, 255, 255 } : Fade(WHITE, 0.7f),
-                   focus == REGION_LUNGS);
-    DrawOrganLabel(font, "CORRENTE SANGUINEA", (Vector2){ BLOOD_CX, 1980.0f },
-                   (focus == REGION_BLOODSTREAM) ? (Color){ 255, 140, 150, 255 } : Fade(WHITE, 0.7f),
-                   focus == REGION_BLOODSTREAM);
-    DrawOrganLabel(font, "FOCO HOSPITALAR", (Vector2){ HOSP_CX, 2600.0f },
-                   (focus == REGION_HOSPITAL_FOCUS) ? (Color){ 255, 230, 140, 255 } : Fade(WHITE, 0.7f),
-                   focus == REGION_HOSPITAL_FOCUS);
 }

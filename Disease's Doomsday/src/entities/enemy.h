@@ -28,9 +28,12 @@ typedef enum EnemyState
 #define ETYPE_BACT_MELEE  5   // bactéria corpo a corpo (cocos/pneumonia)
 #define ETYPE_BACT_RANGED 6   // bactéria à distância (bacilo atirador)
 // --- Mundo 2 (Vírus, com escudo de capsídeo) ---
-#define ETYPE_VIRUS_MELEE  7  // vírus corpo a corpo com escudo (tema dengue)
-#define ETYPE_VIRUS_RANGED 8  // vírus à distância com escudo (tema influenza)
-#define ETYPE_VIRUS_BOSS   9  // chefe viral com escudo reforçado (Mundo 2, onda 5)
+#define ETYPE_VIRUS_MELEE  7  // vírus envelopado corpo a corpo (tema dengue)
+#define ETYPE_VIRUS_RANGED 8  // vírus à distância (tema influenza)
+#define ETYPE_VIRUS_BOSS   9  // chefe viral (tema coronavírus, Mundo 2, onda 5)
+// IDs ACRESCENTADOS NO FINAL (compatibilidade de saves antigos preservada):
+#define ETYPE_VIRUS_SWARM  10 // vírus de enxame (tema rinovírus): pequeno, rápido, frágil
+#define ETYPE_VIRUS_ELITE  11 // vírus elite/mutante (tema sarampo): grande, capsídeo reforçado
 
 typedef enum EnemyTier
 {
@@ -40,6 +43,16 @@ typedef enum EnemyTier
     TIER_3_BOSS,
     TIER_MINIBOSS   // Mini chefe de cada onda (entre o elite e o chefe final)
 } EnemyTier;
+
+// Comportamento de IA do patógeno (consultado pela IA/render via o arquétipo).
+typedef enum EnemyBehavior
+{
+    BEHAV_MELEE = 0,  // persegue e causa dano de contato
+    BEHAV_RANGED,     // mantém distância e atira (kiting + strafe)
+    BEHAV_SWARM,      // pequeno e veloz, ataca em grupo (contato)
+    BEHAV_ELITE,      // tanque que alterna entre kiting e investida
+    BEHAV_BOSS        // chefe multi-fase (lógica dedicada)
+} EnemyBehavior;
 
 typedef struct Enemy
 {
@@ -102,5 +115,55 @@ typedef struct Enemy
     float   attackAnim; // envelope 0..1 de antecipação(+)/recuo(-) do ataque ranged
     float   spawnAnim;  // 0..1 "pop-in" ao surgir (cresce de 0 a 1)
 } Enemy;
+
+// ============================================================================
+// ARQUÉTIPOS DE PATÓGENO (configuração centralizada)
+// ----------------------------------------------------------------------------
+// Uma única tabela define stats/visual/comportamento de cada tipo, evitando
+// blocos duplicados em wave_manager.c e números mágicos espalhados pela IA e
+// pelo renderer. A IA lê `behavior`; o renderer lê `sizeScale`/`palette`; o
+// wave manager usa EnemyInitFromArchetype() para inicializar TODOS os campos.
+// ============================================================================
+typedef struct EnemyArchetype
+{
+    int           type;          // ETYPE_*
+    const char   *name;          // nome educativo (ex.: "Rinovirus")
+    EnemyBehavior behavior;      // comportamento de IA
+    EnemyTier     tier;
+    bool          ranged;        // usa ataque à distância
+    int           baseHp;        // HP base (onda 1)
+    int           hpPerWave;     // incremento de HP por onda
+    float         speed;         // velocidade base (px/s)
+    int           shieldBase;    // capsídeo base (0 = sem escudo)
+    int           shieldPerWave; // incremento do capsídeo por onda
+    float         sizeScale;     // multiplicador de tamanho de render (1.0 = comum)
+    Color         palette;       // cor procedural principal (fallback sem PNG)
+    int           contactDmgBonus; // dano de contato extra (combat_system)
+} EnemyArchetype;
+
+// Retorna o arquétipo do tipo informado (NULL se desconhecido).
+const EnemyArchetype *EnemyArchetypeFor(int type);
+
+// Inicializa TODOS os campos derivados de stats/visual de `e` a partir do
+// arquétipo do `type`, escalando HP por `healthMul` (use 1.0 para deixar a
+// escala de dificuldade global por conta do chamador). NÃO define position,
+// active nem patrolTarget — isso é responsabilidade do código de spawn.
+void EnemyInitFromArchetype(Enemy *e, int type, int wave, float healthMul);
+
+// Conjunto de tipos COMUNS DISTINTOS esperados numa onda do Mundo dos Vírus
+// (1..4). Preenche typesOut[] (capacidade >= 4); retorna a contagem. Usado como
+// contrato de "presença esperada por onda".
+int VirusWaveTypes(int wave, int *typesOut);
+
+// Sacola ORDENADA de tipos para o spawn da onda viral: o spawn usa out[idx % n].
+// Contém cada tipo de VirusWaveTypes ao menos uma vez (presença garantida) e
+// pondera as proporções (mais enxame/melee, pouco elite). Retorna a contagem.
+int VirusWaveBag(int wave, int *out, int cap);
+
+// Tipo do MINI CHEFE viral por onda (introduz o elite na onda 3).
+int VirusMiniBossType(int wave);
+
+// Nome do chefe para o HUD, conforme o Mundo atual.
+const char *BossDisplayName(int currentWorld);
 
 #endif // ENEMY_H

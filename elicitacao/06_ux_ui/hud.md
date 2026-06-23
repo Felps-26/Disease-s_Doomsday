@@ -1,0 +1,13 @@
+# 6.5 HUD (Heads-Up Display)
+
+```
+┌─────────────────────────────────────────────┐
+│ [Vida: ████████░░] [XP: ██░░░░] Nível: 3    │
+│ Órgão: Pulmões | Doença: Pneumonia Bacteriana│
+│                                             │
+│          [Área de jogo]                     │
+│                                             │
+│ [Radar]              [Onda: 3/5] [Inimigos: 7]│
+│ [1:Espada] [2:Rifle] [3:Granada] [4:Vacina]  │
+└─────────────────────────────────────────────┘
+```

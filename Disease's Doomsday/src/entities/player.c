@@ -26,7 +26,7 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
     if (wpn == 1) {
         // Define cooldown base
         game->player.attackCooldown = 0.22f;
-        PlaySound(g_assets.sfxAttack);
+        PlayWeaponAttackSfx(wpn);
 
         // Configura animação de ataque (Slash)
         game->slashAnimTimer = 0.22f;
@@ -61,7 +61,7 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
                 danoTotal *= 3;
             int applied = ApplyPlayerDamageToEnemy(game, &game->enemies[i], danoTotal, false);
             if (applied <= 0) continue; // bloqueado pelo escudo do chefe
-            PlaySound(g_assets.sfxEnemyHurt);
+            PlayEnemyDamageSfx(game->enemies[i].type, game->enemies[i].tier);
             SpawnDamageText(game, game->enemies[i].position, applied, skinSec);
 
             // Empurrão (Knockback) na direção oposta ao jogador (chefes resistem)
@@ -116,7 +116,7 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
         // Cadência (Fase 5): 0.28s — antes 0.15s permitia spray contínuo. Agora
         // o alcance (~1050px) e a cadência limitam a "limpeza" sem mirar.
         game->player.attackCooldown = 0.28f;
-        PlaySound(g_assets.sfxAttack);
+        PlayWeaponAttackSfx(wpn);
         game->screenShake = 0.1f;
         // Arma de projétil do Mundo atual: Rifle de Bacteriófagos (Mundo 1, bônus
         // vs. bactérias) ou Rifle de Vacina (Mundo 2, bônus vs. vírus).
@@ -125,12 +125,12 @@ void PlayerAttack(GameState *game, Vector2 worldMousePos)
     }
     else if (wpn == 3) {
         game->player.attackCooldown = 1.5f;
-        PlaySound(g_assets.sfxAttack);
+        PlayWeaponAttackSfx(wpn);
         SpawnProjectile(game, game->player.position, worldMousePos, PROJ_PLAYER_GRENADE, 40 + danoBase);
     }
     else if (wpn == 4) {
         game->player.attackCooldown = 5.0f;
-        PlaySound(g_assets.sfxAttack);
+        PlayWeaponAttackSfx(wpn);
         game->screenShake = 0.8f;
         SpawnProjectile(game, game->player.position, worldMousePos, PROJ_PLAYER_BFG, 100 + danoBase);
     }

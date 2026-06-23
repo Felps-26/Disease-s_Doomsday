@@ -271,7 +271,7 @@ void DrawHUD(GameState *game, Font font)
             }
             DrawRectangleRoundedLines(barBg, 0.4f, 6, (Color){ 255, 80, 90, 255 });
 
-            const char *bossName = "SUPERBACTERIA KPC — RESISTENTE";
+            const char *bossName = BossDisplayName(game->currentWorld);
             Vector2 nSz = MeasureTextEx(font, bossName, 16.0f, 1.0f);
             DrawTextEx(font, bossName, (Vector2){ 640.0f - nSz.x / 2.0f, 108.0f }, 16.0f, 1.0f, (Color){ 255, 120, 130, 255 });
             const char *hpTxt = TextFormat("%d / %d", game->enemies[i].hp, game->enemies[i].maxHp);
@@ -527,6 +527,59 @@ void DrawHUD(GameState *game, Font font)
     }
 }
 
+// ============================================================================
+// DEBUG DE COLISÃO (somente modo admin, tecla F1) — overlay translúcido que
+// mostra a área caminhável (verde), corpo sem margem (laranja), bloqueada
+// (vermelho), a fronteira (amarelo) e o raio de colisão do jogador (ciano);
+// no HUD, as coordenadas de mundo sob o cursor. NÃO aparece normalmente e NÃO
+// afeta a jogabilidade (apenas desenho). Usa a MESMA fonte de colisão do jogo.
+// ============================================================================
+static void DrawCollisionDebugWorld(GameState *game)
+{
+    if (!(game->adminMode && game->debugCollision)) return;
+    Rectangle b = MapBody_WorldBounds();
+    const int STEP = 40;
+    int x0 = (int)b.x - STEP * 2, y0 = (int)b.y - STEP * 2;
+    int x1 = (int)(b.x + b.width) + STEP * 2, y1 = (int)(b.y + b.height) + STEP * 2;
+    for (int y = y0; y <= y1; y += STEP)
+        for (int x = x0; x <= x1; x += STEP)
+        {
+            Vector2 p = { (float)x, (float)y };
+            bool walk = MapBody_ContainsWithMargin(p, BODY_PLAYER_RADIUS);
+            bool inside = MapBody_Contains(p);
+            Color col = walk ? (Color){ 40, 220, 90, 60 }
+                      : inside ? (Color){ 255, 170, 40, 60 }   // corpo, margem insuficiente
+                               : (Color){ 230, 40, 40, 36 };   // bloqueado (fora da silhueta)
+            DrawRectangle(x - STEP / 2, y - STEP / 2, STEP, STEP, col);
+            if (walk) // fronteira: célula caminhável tocando não-caminhável
+            {
+                bool edge = !MapBody_ContainsWithMargin((Vector2){ p.x + STEP, p.y }, BODY_PLAYER_RADIUS)
+                         || !MapBody_ContainsWithMargin((Vector2){ p.x - STEP, p.y }, BODY_PLAYER_RADIUS)
+                         || !MapBody_ContainsWithMargin((Vector2){ p.x, p.y + STEP }, BODY_PLAYER_RADIUS)
+                         || !MapBody_ContainsWithMargin((Vector2){ p.x, p.y - STEP }, BODY_PLAYER_RADIUS);
+                if (edge) DrawCircleV(p, 4.0f, (Color){ 255, 230, 60, 220 });
+            }
+        }
+    DrawCircleLines((int)game->player.position.x, (int)game->player.position.y, BODY_PLAYER_RADIUS, (Color){ 0, 229, 255, 255 });
+    DrawCircleV(game->player.position, 3.0f, (Color){ 0, 229, 255, 255 });
+}
+
+static void DrawCollisionDebugHUD(GameState *game, Font font)
+{
+    if (!(game->adminMode && game->debugCollision)) return;
+    extern Vector2 g_virtualMouse;
+    Vector2 mw = GetScreenToWorld2D(g_virtualMouse, game->camera);
+    bool walk = MapBody_ContainsWithMargin(mw, BODY_PLAYER_RADIUS);
+    DrawRectangle(8, 150, 384, 70, Fade(BLACK, 0.62f));
+    DrawRectangleLines(8, 150, 384, 70, Fade((Color){ 0, 229, 255, 255 }, 0.5f));
+    DrawTextEx(font, TextFormat("DEBUG COLISAO [F1]  cursor (%.0f, %.0f)  %s", mw.x, mw.y, walk ? "CAMINHAVEL" : "BLOQUEADO"),
+               (Vector2){ 16, 156 }, 14.0f, 1.0f, walk ? (Color){ 120, 255, 160, 255 } : (Color){ 255, 120, 120, 255 });
+    DrawTextEx(font, "verde=caminhavel  laranja=corpo sem margem  vermelho=bloqueado",
+               (Vector2){ 16, 178 }, 12.0f, 1.0f, RAYWHITE);
+    DrawTextEx(font, "amarelo=fronteira   ciano=raio de colisao do jogador",
+               (Vector2){ 16, 196 }, 12.0f, 1.0f, RAYWHITE);
+}
+
 void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
 {
     // IDENTIDADE VISUAL POR ONDA: cada fase tem cor de fundo, grade, células e
@@ -641,9 +694,14 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
         if (game->enemies[i].active)
         {
             Enemy *enemy = &game->enemies[i];
-            
-            float destSize = (enemy->tier == TIER_3_BOSS) ? 140.0f
+
+            // Tamanho de render: base por tier x escala do arquétipo (centralizada).
+            // Assim o enxame fica pequeno e o elite/chefe ficam grandes sem números
+            // mágicos espalhados (bactérias usam scale 1.0 -> tamanhos inalterados).
+            float tierBase = (enemy->tier == TIER_3_BOSS) ? 140.0f
                            : (enemy->tier == TIER_MINIBOSS) ? 90.0f : 45.0f;
+            const EnemyArchetype *earch = EnemyArchetypeFor(enemy->type);
+            float destSize = tierBase * (earch ? earch->sizeScale : 1.0f);
             Vector2 renderPos = enemy->position;
 
             // ANIMAÇÃO PROCEDURAL (Etapa 5) — squash/stretch, bobbing, inclinação,
@@ -705,7 +763,12 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 float shR = currentDestSize * 1.6f;
                 float flash = (enemy->shieldHitFlash > 0.0f) ? (enemy->shieldHitFlash / 0.18f) : 0.0f;
                 float pct = (enemy->shieldMaxHp > 0) ? (float)enemy->shieldHp / enemy->shieldMaxHp : 1.0f;
-                Color shCol = (Color){ 120, 200, 255, 255 };
+                // Aparência do capsídeo varia por arquétipo: elite REFORÇADO (roxo,
+                // anel duplo), enxame FRACO (ciano tênue), demais azul padrão.
+                EnemyBehavior shBeh = earch ? earch->behavior : BEHAV_MELEE;
+                Color shCol = (shBeh == BEHAV_ELITE) ? (Color){ 190, 140, 255, 255 }
+                            : (shBeh == BEHAV_SWARM) ? (Color){ 150, 220, 235, 255 }
+                                                     : (Color){ 120, 200, 255, 255 };
                 if (SpriteAvailable(SPR_VIRUS_SHIELD))
                 {
                     DrawSpriteCentered(SPR_VIRUS_SHIELD, renderPos, (Vector2){ shR * 2.0f, shR * 2.0f }, rotation,
@@ -716,6 +779,9 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                     DrawCircleV(renderPos, shR, Fade(shCol, alpha * (0.10f + 0.18f * flash)));
                     DrawCircleLines((int)renderPos.x, (int)renderPos.y, shR, Fade(shCol, alpha * (0.5f + 0.5f * flash)));
                     DrawCircleLines((int)renderPos.x, (int)renderPos.y, shR * 0.92f, Fade(shCol, alpha * 0.3f));
+                    // Capsídeo reforçado (elite): anel externo extra (mais "espesso").
+                    if (shBeh == BEHAV_ELITE)
+                        DrawCircleLines((int)renderPos.x, (int)renderPos.y, shR * 1.08f, Fade(shCol, alpha * (0.30f + 0.4f * flash)));
                     // arco que diminui conforme o escudo cai
                     DrawRing(renderPos, shR * 0.96f, shR, -90.0f, -90.0f + 360.0f * pct, 32, Fade(shCol, alpha * 0.7f));
                 }
@@ -739,10 +805,10 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 }
                 DrawRectangleLinesEx(rHPBg, 1.0f, BLACK);
 
-                // Rótulo do mini chefe
+                // Rótulo do mini chefe (mostra o nome educativo do arquétipo).
                 if (mini)
                 {
-                    const char *mn = "MINI CHEFE";
+                    const char *mn = (earch && earch->name) ? TextFormat("MINI CHEFE: %s", earch->name) : "MINI CHEFE";
                     Vector2 ms = MeasureTextEx(font, mn, 16.0f, 1.0f);
                     DrawTextEx(font, mn, (Vector2){ enemy->position.x - ms.x / 2.0f, rHPBg.y - 20.0f }, 16.0f, 1.0f, (Color){ 255, 170, 60, 255 });
                 }
@@ -799,6 +865,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
             else if (p->type == PROJ_PLAYER_BFG) pCol = wpnPrim;
             else if (p->type == PROJ_PLAYER_PHAGE) pCol = (Color){ 120, 255, 160, 255 };   // bacteriófago (verde)
             else if (p->type == PROJ_PLAYER_VACCINE) pCol = (Color){ 120, 200, 255, 255 }; // vacina (azul)
+            else if (p->type == PROJ_VIRAL_SPORE) pCol = (Color){ 190, 235, 90, 255 };     // material viral
 
             if (p->type == PROJ_PLAYER_BFG) {
                 srcSize = 30.0f;
@@ -815,6 +882,17 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 DrawLineEx(tail, p->position, 5.0f, Fade(pCol, 0.45f));
                 DrawCircle(p->position.x, p->position.y, 9.0f, pCol);
                 DrawCircle(p->position.x, p->position.y, 4.0f, coreCol);
+            } else if (p->type == PROJ_VIRAL_SPORE) {
+                // Material viral: pequeno virion espiculado (projétil próprio dos vírus).
+                float tt = (float)GetTime();
+                DrawCircleV(p->position, 10.0f, Fade(pCol, 0.30f));
+                for (int s = 0; s < 6; s++) {
+                    float a = (tt * 220.0f + s * 60.0f) * DEG2RAD;
+                    Vector2 e = { p->position.x + cosf(a) * 11.0f, p->position.y + sinf(a) * 11.0f };
+                    DrawLineEx(p->position, e, 2.0f, Fade(pCol, 0.85f));
+                }
+                DrawCircleV(p->position, 6.0f, pCol);
+                DrawCircleV(p->position, 2.5f, (Color){ 60, 40, 10, 255 });
             } else {
                 DrawCircle(p->position.x, p->position.y, srcSize, pCol);
                 DrawCircleLines(p->position.x, p->position.y, srcSize, WHITE);
@@ -867,6 +945,9 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
         }
     }
 
+    // Overlay de DEBUG da colisão (admin + F1) — no espaço do mundo, sobre tudo.
+    DrawCollisionDebugWorld(game);
+
     EndMode2D();
 
     float hpPct = (float)game->player.hp / game->player.maxHp;
@@ -889,6 +970,9 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
         float a = (game->hurtFlashTimer / 0.35f) * 0.4f;
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(RED, a));
     }
+
+    // Painel/coordenadas do DEBUG de colisão (admin + F1), em espaço de tela.
+    DrawCollisionDebugHUD(game, font);
 
     if (drawHUD)
     {

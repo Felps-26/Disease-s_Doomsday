@@ -33,6 +33,25 @@
 #define CORE_BOSS_CLEARANCE  180.0f // distância mínima entre núcleo e centro do chefe
 #define CORE_INTER_DISTANCE  240.0f // distância mínima entre núcleos
 
+// ============================================================================
+// TRANSFORMAÇÃO IMAGEM (corpo.png) -> MUNDO — FONTE ÚNICA DA VERDADE.
+// Usada IGUALMENTE pelo renderer (DrawMapBody) e pelo baker da colisão
+// (tools/bake_collision_mask.c), para que a área caminhável coincida EXATAMENTE
+// com a silhueta desenhada. A imagem é desenhada PRESERVANDO A PROPORÇÃO
+// (sem deformar), centrada no centro do mundo, com altura = MAP_HEIGHT * SCALE;
+// a largura segue o aspecto real da textura. NÃO repita estes números em outro
+// lugar — inclua este header.
+// ============================================================================
+#define MAPBODY_IMG_SCALE 1.00f   // altura da imagem como fração de MAP_HEIGHT
+#define MAPBODY_IMG_DX    0.0f    // deslocamento horizontal do centro (px de mundo)
+#define MAPBODY_IMG_DY    0.0f    // deslocamento vertical do centro (px de mundo)
+
+// Parâmetros de GERAÇÃO da máscara de colisão (baker offline; ver Makefile:
+// `make collision-mask`). Não são usados em tempo de execução.
+#define MAPBODY_BAKE_GN     320   // resolução da grade (célula = MAP_WIDTH/GN = 12.5 px)
+#define MAPBODY_BAKE_LUMA   12    // luminância mínima (0-255): pernas escuras ~12-21, fundo ~6-9
+#define MAPBODY_BAKE_CLOSE  4     // fechamento morfológico (células): liga membros ao tronco nas juntas
+
 // Identificadores de região/órgão-alvo
 typedef enum BodyRegion
 {

@@ -1,4 +1,5 @@
 #include "../../include/telas.h"
+#include "../../include/asset_manager.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -277,17 +278,20 @@ void UpdateTelaQuiz(GameState *game, Vector2 mouse)
     }
 
     for (int i = 0; i < 4; i++) {
-        if (CheckCollisionPointRec(mouse, quizOptionsBtn[i].bounds)) {
-            quizOptionsBtn[i].hover = true;
+        bool wasHovered = quizOptionsBtn[i].hover;
+        bool isHovered = CheckCollisionPointRec(mouse, quizOptionsBtn[i].bounds);
+        quizOptionsBtn[i].hover = isHovered;
+        if (isHovered != wasHovered && g_assets.sfxQuizHover.frameCount > 0)
+            PlaySound(g_assets.sfxQuizHover);
+        if (isHovered) {
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                if (g_assets.sfxMenuClick.frameCount > 0) PlaySound(g_assets.sfxMenuClick);
                 selectedOption = i;
                 questionAnswered = true;
                 if (selectedOption == quizDB[currentQuestionIdx].correctOption) {
                     game->player.susPoints += 50;
                 }
             }
-        } else {
-            quizOptionsBtn[i].hover = false;
         }
     }
 }
