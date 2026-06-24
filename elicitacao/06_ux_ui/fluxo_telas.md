@@ -1,6 +1,8 @@
 # 6.4 Fluxo de Telas (User Flow)
 
-> 17 estados de tela gerenciados pela FSM em `src/logic/fsm.c`.
+> O enum `GameScreen` define **20 estados** de tela (incl. `SCREEN_STAGE_COMPLETE` e `SCREEN_STAGE_PROLOGUE`,
+> usados nas pausas curtas entre fim de onda → quiz → próxima onda). As principais estão documentadas abaixo;
+> a FSM vive em `src/logic/fsm.c`.
 
 ## Diagrama de Transições
 
@@ -50,7 +52,7 @@
 | `SCREEN_TUTORIAL`            | Fase da seringa — 3 etapas guiadas |
 | `SCREEN_QUIZ`                | Quiz educativo entre ondas |
 | `SCREEN_UPGRADE`             | Melhorias com Pontos do SUS |
-| `SCREEN_ARSENAL`             | Exibição e detalhes das 5 armas |
+| `SCREEN_ARSENAL`             | Exibição e detalhes das 4 armas-base e suas 4 evoluções |
 | `SCREEN_SKINS`               | Preview ao vivo de skins e cosméticos |
 | `SCREEN_SETTINGS`            | Volume (música + SFX), acessibilidade |
 | `SCREEN_ADMIN`               | Painel de debug / admin |
@@ -61,6 +63,8 @@
 | `SCREEN_LOADING`             | Loading com dica educativa rotativa |
 | `SCREEN_GAMEOVER`            | Derrota — opção de recomeçar ou menu |
 | `SCREEN_VICTORY`             | Vitória — estatísticas da campanha |
+| `SCREEN_STAGE_COMPLETE`      | Pausa curta entre o fim da onda e o quiz |
+| `SCREEN_STAGE_PROLOGUE`      | Prólogo breve antes da próxima onda |
 
 ## Animações de Transição
 

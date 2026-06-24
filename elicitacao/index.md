@@ -18,10 +18,11 @@
 | Mundos                 | 2 (Bactérias → Vírus)          |
 | Ondas totais           | 10 (5 por mundo) + 2 chefes    |
 | Tipos de inimigo       | 12                             |
-| Armas                  | 5 (4 iniciais + 1 desbloqueável) |
-| Perguntas no quiz      | 39                             |
-| Telas do jogo          | 17                             |
-| Slots de save          | 3                              |
+| Armas                  | 8 formas (4 slots-base + 4 evoluções) |
+| Power-ups              | 10 tipos                       |
+| Perguntas no quiz      | 48                             |
+| Telas do jogo          | 20 estados (enum `GameScreen`) |
+| Slots de save          | 3 manuais + auto-save          |
 | Dificuldades           | 3 (Fácil / Médio / Difícil)    |
 
 ---

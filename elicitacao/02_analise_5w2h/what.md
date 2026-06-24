@@ -24,20 +24,22 @@
 | Vírus | Swarm, Melee, Ranged, Elite, Boss | Rinovirus, Dengue, Influenza, Sarampo mutante, Coronavírus |
 | Total de tipos | 12 tipos com IDs 0–11 | |
 
-### Armas (5)
+### Armas (4 slots-base + 4 evoluções = 8 formas)
 
-| # | Nome | Mecânica |
-| - | ---- | -------- |
-| 1 | Espada-Seringa | AoE 360°, raio 140 px, cooldown 0.22 s |
-| 2 | Rifle contextual | Bacteriófago (Mundo 1) / Rifle de Vacina (Mundo 2); bônus +60% vs tipo correto |
-| 3 | Desestabilizador de RNA | Granada: AoE + veneno; ignora capsídeo viral |
-| 4 | BFG Imunológico | Projétil perfurante; acerta todos os inimigos na trajetória; cooldown 5 s |
-| 5 | Lâmina Bioelétrica | Desbloqueável (30 kills); dano 3× no escudo de capsídeo viral |
+> Cada slot evolui após **30 abates com aquele slot** (`WEAPON_EVOLVE_KILLS = 30`).
+> Pressionar o número do slot alterna entre a base e a evolução desbloqueada.
+
+| Slot | Base | Mecânica base | Evolução (30 abates) |
+| ---- | ---- | ------------- | -------------------- |
+| 1 | Espada-Seringa | AoE 360°, raio 140 px, cooldown 0.24 s | **Lâmina Bioelétrica** — ×3 vs. escudo de capsídeo |
+| 2 | Rifle contextual | Bacteriófago (M1) / Vacina (M2); +60% vs. tipo correto; cooldown 0.28 s | **Rifle Vetorial Replicante** — duplica no 1º impacto |
+| 3 | Desestabilizador de RNA | **Planta minas** biológicas; Mouse 2 detona todas; cooldown 0.75 s | **Lança-Minas de RNA** — arremessa minas (pavio 6 s) |
+| 4 | BFG Imunológico | Projétil perfurante (atravessa todos); cooldown 5 s | **BFG Imunológico Ômega** — perfura + explode no fim |
 
 ### Sistema de Quiz Educativo
 
-- 39 perguntas sobre SUS, vigilância epidemiológica, vacinação, dengue, resistência antimicrobiana e microbiologia
-- Aparece entre ondas
+- **48 perguntas** sobre SUS, vigilância epidemiológica, vacinação, dengue, resistência antimicrobiana e microbiologia
+- Aparece entre ondas, com explicação educativa após cada resposta
 - Embaralhamento por Fisher-Yates; histórico de 14 perguntas recentes evita repetição
 
 ### Progressão
@@ -47,11 +49,11 @@
 | XP / Nível | Ganho por kills; sobe atributos do anticorpo |
 | Pontos do SUS | Moeda de upgrades mid-run (HP máx., ataque, velocidade) |
 | Score | Acumulado por toda a campanha |
-| Desbloqueáveis | Lâmina Bioelétrica (30 kills), skins (3 jogador + 3 arma), cosméticos (8 slots) |
+| Desbloqueáveis | 4 evoluções de arma (30 abates/slot), skins (3 jogador + 3 arma), cosméticos (8 slots) |
 
-### Power-ups (8 tipos)
+### Power-ups (10 tipos)
 
-`HP_RECOVERY` · `SPEED_BOOST` · `SHIELD` · `ATTACK_BOOST` · `POWERUP_MASK` (dano −40%) · `POWERUP_DISTANCING` (aura repulsora) · `POWERUP_RNA_GRENADE` · `POWERUP_CYTOKINE` (regeneração)
+`HP_RECOVERY` · `SPEED_BOOST` · `SHIELD` · `ATTACK_BOOST` · `POWERUP_MASK` (dano −40%) · `POWERUP_DISTANCING` (aura repulsora) · `POWERUP_RNA_GRENADE` (explosão em área) · `POWERUP_CYTOKINE` (cura + regeneração) · `POWERUP_SUPREME_ORB` (todos os buffs, 7 s) · `POWERUP_BARRIER` (escudo + máscara, 12 s)
 
 ### Save / Load
 

@@ -6,7 +6,7 @@
 | RNF02 | Pool de 250 partículas, 100 projéteis e 60 inimigos simultâneos sem queda de FPS | Desempenho  | `MAX_PARTICLES=250`, `MAX_PROJECTILES=100`, `MAX_ENEMIES=60` |
 | RNF03 | O código deve ser modular com separação clara entre entities, systems, render e logic | Manutenibilidade | Estrutura de pastas `src/` |
 | RNF04 | O build deve compilar e executar em Windows, Linux e macOS                   | Portabilidade    | `compilar.bat` + `Makefile` + `build.sh` |
-| RNF05 | Todo conteúdo educativo deve ser scientificamente correto e revisado         | Qualidade        | 39 perguntas baseadas em OMS/MS/SES-DF |
+| RNF05 | Todo conteúdo educativo deve ser scientificamente correto e revisado         | Qualidade        | 48 perguntas baseadas em OMS/MS/SES-DF |
 | RNF06 | O jogo deve carregar em menos de 5 segundos em hardware padrão               | Desempenho       | Tela de loading com duração mínima configurável |
 | RNF07 | O código-fonte deve ser versionado no GitHub com histórico rastreável        | Rastreabilidade  | Repositório Felps-26/Disease-s_Doomsday |
 | RNF08 | A interface deve ser intuitiva: controles operacionais sem leitura de manual | Usabilidade      | Tutorial guiado de 3 etapas na seringa |

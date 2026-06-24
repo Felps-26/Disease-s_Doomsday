@@ -18,14 +18,15 @@
 | RF12 | O tutorial deve ser uma fase separada (mapa da seringa) com 3 etapas guiadas         | Alta       | Implementado  |
 | RF13 | O quicksave (F5) e o quickload (F9) devem estar disponíveis durante o gameplay       | Média      | Implementado  |
 | RF14 | O chefe do Mundo 2 deve ter 3 fases de comportamento (aiPhase 0/1/2) e núcleos de infecção | Alta | Implementado |
-| RF15 | A Lâmina Bioelétrica deve ser desbloqueada automaticamente ao atingir 30 kills       | Média      | Implementado  |
+| RF15 | Cada slot de arma (1–4) deve evoluir automaticamente após 30 abates com aquele slot (4 evoluções, incl. Lâmina Bioelétrica) | Média | Implementado  |
 | RF16 | O Rifle deve mudar de tipo entre mundos (Bacteriófago → Vacina) com bônus de +60%   | Média      | Implementado  |
 | RF17 | Power-ups educativos devem incluir Máscara Hospitalar e Distanciamento Social        | Média      | Implementado  |
 | RF18 | O jogo deve exibir metadados de save (nível, score, onda, data) na tela de carregamento | Média | Implementado |
 | RF19 | O sistema de cosméticos deve oferecer 8 slots independentes por personagem           | Baixa      | Implementado  |
 | RF20 | A transição entre Mundo 1 e Mundo 2 deve incluir cutscene educativa com diálogo      | Média      | Implementado  |
-| RF21 | O quiz deve ter banco de 39 perguntas e evitar repetir as últimas 14 da sessão       | Alta       | Implementado  |
+| RF21 | O quiz deve ter banco de 48 perguntas e evitar repetir as últimas 14 da sessão       | Alta       | Implementado  |
 | RF22 | Os inimigos devem escalar HP, velocidade e escudo por onda e dificuldade             | Alta       | Implementado  |
+| RF23 | O slot 3 (Desestabilizador de RNA) deve plantar minas detonáveis por tiro/melee ou Mouse 2 | Média | Implementado  |
 
 ---
 
@@ -42,7 +43,7 @@
 
 ### RF09 — Capsídeo
 - Dano vai ao escudo primeiro; HP do inimigo só é afetado após escudo ser zerado
-- Granada (RNA) ignora o capsídeo por design pedagógico
+- O **power-up** Desestabilizador de RNA (drop) dissolve o capsídeo direto antes de ferir a vida
 - Lâmina Bioelétrica inflige 3× dano ao escudo
 
 ### RF11 — Dificuldade

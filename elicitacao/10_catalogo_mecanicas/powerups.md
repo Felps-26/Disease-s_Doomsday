@@ -1,6 +1,7 @@
 # 10.3 Catálogo de Power-ups
 
-> 8 tipos de power-up. Drops aparecem no mapa em quantidade `4 + onda` (máx. 10) por geração de onda.
+> **10 tipos** de power-up (`PowerUpType`, com `POWERUP_TYPE_COUNT` no fim). Drops aparecem no mapa
+> em quantidade `4 + onda` (máx. 10) por geração de onda.
 
 ---
 
@@ -15,14 +16,19 @@
 
 ---
 
-## Power-ups Educativos (4 tipos)
+## Power-ups Educativos / Expansão (6 tipos)
 
 | Tipo | `PowerUpType` | Conceito de saúde pública real | Efeito mecânico |
 | ---- | ------------- | ------------------------------ | --------------- |
-| Máscara Hospitalar | `POWERUP_MASK` | EPI obrigatório em ambientes hospitalares | Reduz todo dano recebido em **40%** (`maskTimer > 0` → multiplicador 0,6) |
-| Distanciamento Social | `POWERUP_DISTANCING` | Medida de controle epidemiológico não-farmacológico | Ativa aura repulsora que afasta inimigos ao redor do jogador |
-| Granada de RNA | `POWERUP_RNA_GRENADE` | Interferência de RNA (terapia gênica) | Projétil de área que bypassa capsídeo |
-| Citocina | `POWERUP_CYTOKINE` | Citocinas anti-inflamatórias / imunomodulação | Regeneração contínua de HP (`regenTimer > 0`) |
+| Máscara Hospitalar | `POWERUP_MASK` | EPI obrigatório em ambientes hospitalares | Reduz todo dano recebido em **40%** (`maskTimer` → multiplicador 0,6) |
+| Distanciamento Social | `POWERUP_DISTANCING` | Medida de controle epidemiológico não-farmacológico | Aura repulsora que afasta inimigos por ~10 s (`distancingTimer`) |
+| Desestabilizador de RNA | `POWERUP_RNA_GRENADE` | Interferência de RNA (terapia gênica) | **Explosão imediata em área** ao redor do herói (`DetonateRNAGrenade`) |
+| Citocina de Estabilização | `POWERUP_CYTOKINE` | Citocinas anti-inflamatórias / imunomodulação | Cura imediata (+20 HP) + regeneração contínua por ~6 s (`regenTimer`) |
+| Orbe Supremo | `POWERUP_SUPREME_ORB` | Resposta imune total / pico imunológico | Por ~7 s ativa **todos** os sistemas: velocidade, ataque ×, escudo, regen e bônus de dano (`supremeTimer`) |
+| Barreira de Plasma | `POWERUP_BARRIER` | Imunidade reforçada (escudo de anticorpos) | Por ~12 s combina escudo + máscara (dano −40% e absorção) |
+
+> **Drops por mundo:** os itens Máscara/Distanciamento aparecem com tema do Mundo 1 (Bactérias).
+> A distribuição de raridade é definida em `RandomDropType()` (HP é o mais comum; Orbe Supremo, o mais raro).
 
 ---
 
@@ -44,6 +50,7 @@
 | `maskTimer` | > 0 → dano recebido × 0,6 |
 | `distancingTimer` | > 0 → aura repulsora ativa |
 | `regenTimer` | > 0 → regen por `regenAccum` (acumulador fracional para HP inteiro) |
+| `supremeTimer` | > 0 → Orbe Supremo: +25% velocidade, +35% dano e demais buffs simultâneos |
 | `poisonTimer` | > 0 → dano de veneno por tick |
 | `slowTimer` | > 0 → velocidade reduzida (debuff de inimigos) |
 

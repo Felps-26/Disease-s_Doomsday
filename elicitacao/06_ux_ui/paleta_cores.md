@@ -29,16 +29,16 @@
 
 ## Skins de Arma (Paletas de cor)
 
-| Skin | Primary | Secondary | Uso |
-| ---- | ------- | --------- | --- |
-| Default | `{120, 200, 255}` (azul-imune) | `{235, 245, 255}` (branco-gelo) | Padrão |
-| Plasma | `{220, 70, 255}` (magenta) | `{0, 229, 255}` (ciano) | Cosmético |
-| Toxic | `{130, 220, 40}` (verde-ácido) | `{200, 255, 90}` (lima) | Cosmético |
+| Skin (in-game) | Primary | Secondary | Uso |
+| -------------- | ------- | --------- | --- |
+| PADRAO | `{120, 200, 255}` (azul-imune) | `{235, 245, 255}` (branco-gelo) | Padrão |
+| PLASMA | `{220, 70, 255}` (magenta) | `{0, 229, 255}` (ciano) | Cosmético |
+| TOXICA | `{130, 220, 40}` (verde-ácido) | `{200, 255, 90}` (lima) | Cosmético |
 
 ## Skins de Jogador (Paletas de personagem)
 
-| Skin | ID | Visual |
-| ---- | -- | ------ |
-| Default | 0 | Anticorpo clássico ciano |
-| Doutor | 1 | Paleta clínica branca/azul |
-| Infectado | 2 | Paleta roxa/verde degradada |
+| Skin (in-game) | ID | Visual |
+| -------------- | -- | ------ |
+| PADRAO | 0 | Anticorpo clássico ciano |
+| MEDICA | 1 | Paleta clínica branca/azul |
+| INFECTADA | 2 | Paleta roxa/verde degradada |

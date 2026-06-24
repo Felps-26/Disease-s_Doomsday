@@ -26,8 +26,9 @@
 | RN11 | Knockback por tier: inimigo comum = 55 px, miniboss = 22 px, boss = 8 px |
 | RN12 | Attack Boost duplica todo o dano do jogador enquanto ativo |
 | RN13 | Dano ao capsídeo viral: vai ao escudo primeiro; HP do inimigo só reduz quando `shieldHp ≤ 0` |
-| RN14 | Lâmina Bioelétrica aplica multiplicador 3× somente sobre o escudo de capsídeo |
-| RN15 | Granada (RNA) causa AoE + veneno e ignora capsídeo por design |
+| RN14 | Lâmina Bioelétrica aplica multiplicador 3× somente sobre o escudo de capsídeo (`danoTotal *= 3`) |
+| RN15 | Slot 3 (Desestabilizador de RNA) **planta minas** (`BioMine`, até 12 ativas); detonam por tiro/melee na mina ou pelo Mouse 2 (todas). As minas NÃO ignoram o capsídeo |
+| RN15b | O **power-up** Desestabilizador de RNA (drop) gera explosão em área que **dissolve o capsídeo** antes de ferir a vida |
 | RN16 | Rifle muda de tipo entre mundos: Bacteriófago (+60% vs bactérias) no Mundo 1; Vacina (+60% vs vírus) no Mundo 2 |
 | RN17 | Boss Coronavírus é invulnerável enquanto pelo menos 1 Núcleo de Infecção estiver ativo |
 | RN18 | Núcleos de Infecção só são atingidos pela AoE corpo-a-corpo (raio 140 px) |
@@ -36,9 +37,10 @@
 
 | Regra | Detalhe |
 | ----- | ------- |
-| RN19 | Lâmina Bioelétrica (arma 5) desbloqueia automaticamente ao atingir 30 kills totais |
-| RN20 | Anúncio de desbloqueio é exibido uma única vez por campanha (`bioBladeAnnounced`) |
-| RN21 | Armas 1–4 disponíveis desde o início; arma 5 exige progressão |
+| RN19 | Armas-base 1–4 liberam por **nível** (`maxWeaponUnlocked`): o slot N abre quando o jogador atinge o nível de desbloqueio daquele slot |
+| RN20 | Cada slot evolui após **30 abates com aquele slot** (`WEAPON_EVOLVE_KILLS = 30`): 1→Lâmina Bioelétrica, 2→Rifle Vetorial Replicante, 3→Lança-Minas de RNA, 4→BFG Imunológico Ômega |
+| RN21 | Pressionar o número do slot alterna entre a base e a evolução já desbloqueada |
+| RN21b | O anúncio de cada evolução é exibido uma única vez por campanha (`bioBladeAnnounced`, `weaponEvolutionAnnounced[]`) |
 
 ## Escalamento por Dificuldade
 
@@ -73,6 +75,6 @@
 
 | Regra | Detalhe |
 | ----- | ------- |
-| RN30 | Jogador possui 3 skins de personagem (Default, Doutor, Infectado) e 3 skins de arma (Default, Plasma, Tóxico) |
+| RN30 | Jogador possui 3 skins de personagem (PADRAO, MEDICA, INFECTADA) e 3 skins de arma (PADRAO, PLASMA, TOXICA) |
 | RN31 | 8 slots de cosméticos independentes: capacete, rosto, peito, braços, pernas, botas, costas, efeito |
 | RN32 | Skins e cosméticos são cosméticos puros — não alteram atributos de combate |

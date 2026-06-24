@@ -46,7 +46,7 @@
 
 ## Slash Visual (Melee)
 
-- `slashAnimTimer`: 0,22 s (coincide com cooldown)
+- `slashAnimTimer`: ~0,24 s (coincide com o cooldown do melee)
 - `slashAnimPos`: posição do jogador no momento do ataque
 - `slashAnimRadius`: 140 px (mesma área do hitbox)
 - Partículas radiais em arco 360° na cor da skin de arma

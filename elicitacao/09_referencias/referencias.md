@@ -29,7 +29,7 @@
 | -------- | --------------- |
 | Capsídeo viral (escudo) | Estrutura proteica que envolve o genoma viral; inibidores de capsídeo são alvo terapêutico real |
 | Bacteriófago (Rifle Mundo 1) | Vírus que infecta especificamente bactérias; pesquisados como alternativa a antibióticos |
-| Interferência de RNA (Granada) | Mecanismo de silenciamento gênico usado em terapias antivirais |
+| Interferência de RNA (Desestabilizador de RNA / minas) | Mecanismo de silenciamento gênico usado em terapias antivirais |
 | Citocina (Regen) | Proteínas de sinalização imune; citocinas anti-inflamatórias reduzem dano tecidual |
 | Máscara Hospitalar (−40% dano) | EPIs reduzem transmissão de agentes infecciosos por gotículas e aerossóis |
 | Distanciamento Social (aura) | Medida não-farmacológica que reduz R₀ (número básico de reprodução) |

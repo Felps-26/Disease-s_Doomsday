@@ -12,8 +12,8 @@
 │                  shader: distorção orgânica + vinheta    │
 │                                                          │
 │  [Radar]                  [Score: 1250]  [SUS: 31 pts]  │
-│  [1:Seringa] [2:Rifle] [3:Granada] [4:BFG] [5:Bioblade] │
-│  Cooldowns individuais por arma                          │
+│  [1:Seringa] [2:Rifle] [3:Minas RNA] [4:BFG]            │
+│  (slot evoluído após 30 abates) · cooldown por arma     │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -29,7 +29,7 @@
 | **Inimigos** | Contagem de inimigos restantes na onda | 0–60 |
 | **Score** | Pontuação acumulada da campanha | Cresce por kill |
 | **Pontos do SUS** | Moeda de upgrade; gasta em `SCREEN_UPGRADE` | Acumulado |
-| **Hotbar de Armas** | 5 slots; indica arma equipada e cooldown visual | Arma 5 só após 30 kills |
+| **Hotbar de Armas** | 4 slots; indica arma equipada e cooldown visual | Slot evolui após 30 abates (pressionar o nº alterna base ↔ evolução) |
 | **Radar** | Mini-mapa mostrando posição do jogador no corpo | |
 | **Banners** | Mensagem central temporária (início de onda, boss, unlock) | Desaparece automaticamente |
 | **Textos de dano** | Números flutuantes (+55 px/s por 0,7 s) acima de inimigos atingidos | Cor = skin de arma |
@@ -46,7 +46,9 @@
 | Distanciamento Social | ↔ | variável | aura repulsora ao redor |
 | Veneno | ☠ | 3 s (ácido) | HP drena lentamente |
 | Lentidão | ↓ velocidade | 2 s (bolt) | movimento reduzido |
-| Regeneração (Citocina) | ♥ | variável | HP sobe lentamente |
+| Regeneração (Citocina) | ♥ | ~6 s | HP sobe lentamente |
+| Orbe Supremo | 🌈 | 7 s | todos os buffs ativos (velocidade/dano/escudo/regen) |
+| Barreira de Plasma | 🔵 | 12 s | escudo + máscara reforçados |
 | Capsídeo (inimigo) | 🔵 | até ser destruído | barra azul separada do HP |
 
 ## Feedback Visual de Combate

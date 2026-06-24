@@ -13,7 +13,7 @@
 
 | Módulo | Responsabilidade |
 | ------ | ---------------- |
-| `src/logic/fsm.c` | Máquina de estados com 17 telas; gerencia todas as transições |
+| `src/logic/fsm.c` | Máquina de estados com 20 telas (enum `GameScreen`); gerencia todas as transições |
 | `src/logic/update_gameplay.c` | Loop de atualização: input → física → colisão → IA → partículas |
 | `src/render/render_gameplay.c` | Desenho do mundo, entidades, HUD, efeitos visuais |
 | `src/systems/wave_manager.c` | Geração determinística de ondas; escalamento por wave e dificuldade |
@@ -78,7 +78,7 @@ save_slot_N  → posX posY hp maxHp xp level score attack susPoints wave weapon 
    - Citocina → regeneração de HP (resposta imune natural)
    - BFG Imunológico → resposta imune sistêmica (atinge todos os patógenos)
 
-2. **Quiz com 39 perguntas** cobrindo SUS, ESF, vacinação, arboviroses, resistência antimicrobiana e microbiologia; feedback explicativo após cada resposta
+2. **Quiz com 48 perguntas** cobrindo SUS, ESF, vacinação, arboviroses, resistência antimicrobiana e microbiologia; feedback explicativo após cada resposta
 
 3. **Mensagens educativas** em banners, loading tips e cutscene de transição de mundo
 

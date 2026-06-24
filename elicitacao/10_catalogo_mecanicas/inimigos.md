@@ -24,8 +24,8 @@
 | ID | Nome in-game | Tipo biológico | Comportamento | HP base | HP/onda | Escudo base | Escudo/onda | Escala | Tier |
 | -- | ------------ | -------------- | ------------- | ------- | ------- | ----------- | ----------- | ------ | ---- |
 | 10 | Rinovirus | Rinovírus (common cold) | Swarm — rápido, frágil | 12 | 3 | 8 | 2 | 0,60× | TIER_1 |
-| 7  | Dengue | Vírus da dengue (envelopado) | Melee corpo-a-corpo | 30 | 9 | 28 | 8 | 1,05× | TIER_2 |
-| 8  | Influenza | Influenzavirus (H1N1/H3N2) | Ranged projéteis | — | — | — | — | 1,00× | TIER_2 |
+| 7  | Dengue | Vírus da dengue (envelopado) | Melee corpo-a-corpo | 30 | 9 | 28 | 8 | 1,05× | TIER_1 |
+| 8  | Influenza | Influenzavirus (H1N1/H3N2) | Ranged projéteis | 22 | 6 | 28 | 8 | 1,00× | TIER_2 |
 | 11 | Sarampo (mutante) | Paramyxovirus mutante | Elite — grande, resistente | 180 | 30 | 90 | 20 | 1,50× | TIER_3 |
 | 9  | Coronavírus | SARS-CoV-2 | Boss — 3 fases de IA | 1400 | 100 | — | — | 1,15× | TIER_3_BOSS |
 
@@ -57,8 +57,11 @@
 
 - Todo vírus tem `shieldHp = shieldBase + onda × shieldPerWave`
 - Dano vai ao escudo primeiro; HP só é afetado após `shieldHp ≤ 0`
-- `shieldHitFlash = 0,15 s` — pisca ao receber dano no escudo
-- **Counters**: Lâmina Bioelétrica (3×), Granada RNA (bypassa direto)
+- `shieldHitFlash ≈ 0,18 s` — pisca ao receber dano no escudo
+- **Counters**:
+  - **Lâmina Bioelétrica** — ×3 de dano contra o escudo (quebra bem mais rápido)
+  - **Power-up Desestabilizador de RNA** (drop) — a explosão **dissolve o capsídeo** direto antes de ferir a vida
+  - ⚠️ A **arma** slot 3 (minas) NÃO ignora o escudo: o dano da mina passa pelo capsídeo normalmente
 
 ---
 
