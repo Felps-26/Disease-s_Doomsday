@@ -365,8 +365,16 @@ _e da biblioteca [Raylib](https://www.raylib.com/)._
 ---
 
 ```
-[ O paciente está aguardando. O anticorpo está a postos. ]
-              Boa sorte, Doutor.
+ ┌─ BRIEFING DA MISSÃO ──────────────────────────────────────
+ │
+ │   > Patógenos detectados na corrente sanguínea.
+ │   > Anticorpo injetado ......................... OK
+ │   > Sistema imune .............................. ONLINE
+ │
+ │   ❯  O paciente está aguardando. O anticorpo está a postos.
+ │   ❯  Boa sorte, Doutor.
+ │
+ └────────────────────────────────────────────────────────────
 ```
 
 </div>
