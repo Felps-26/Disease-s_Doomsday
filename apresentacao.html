@@ -157,9 +157,39 @@
     border:3px solid var(--green); display:flex; align-items:center; justify-content:center;
     font-size:2rem; margin:0 auto .6rem;
   }
+
+  /* ====== FUNDOS ANIMADOS DO JOGO (portados do Disease's Doomsday) ====== */
+  /* Camada fixa atrás de todo o conteúdo. Dois canvases empilhados fazem
+     crossfade entre os fundos quando o slide muda. O véu garante a leitura. */
+  #fx-layer { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+  #fx-layer canvas {
+    position:absolute; inset:0; width:100%; height:100%;
+    display:block; opacity:0; will-change:opacity;
+  }
+  #fx-veil {
+    position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 125% 120% at 50% 44%,
+                  rgba(6,9,14,0.38) 0%, rgba(6,9,14,0.56) 58%, rgba(3,5,9,0.76) 100%);
+  }
+  /* Conteúdo sempre acima da camada de fundo. */
+  #slides { z-index:2; }
+  #nav { position:relative; z-index:2; }
+  /* Sombras de texto: deixam o texto sobre a animação legível sem escurecer
+     demais o fundo (mesma estratégia de glow/sombra usada no próprio jogo). */
+  .slide h1, .slide h2, .slide h3, .slide p, .slide li,
+  .cover-sub, .part-desc, .part-num, .stat-num, .stat-label, .weapon-name {
+    text-shadow: 0 1px 5px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.55);
+  }
+  .cover-title, .part-title { filter: drop-shadow(0 2px 12px rgba(0,0,0,.55)); }
+  @media (prefers-reduced-motion: reduce) { #fx-layer canvas { will-change:auto; } }
 </style>
 </head>
 <body>
+<div id="fx-layer">
+  <canvas id="fx0"></canvas>
+  <canvas id="fx1"></canvas>
+  <div id="fx-veil"></div>
+</div>
 <div id="progress-bar" style="width:0%"></div>
 <div id="part-indicator">Capa</div>
 <div id="slides">
@@ -666,6 +696,26 @@
   </div>
 </div>
 
+<!-- 21 COMPARAÇÃO DE DESIGN -->
+<div class="slide" data-part="3">
+  <span class="tag tag-cyan">Comparação de Design</span>
+  <h2 style="text-align:center;margin-bottom:1.2rem">Comparação de Design de Personagem</h2>
+  <div class="grid2" style="max-width:1000px">
+    <div class="card">
+      <h3 style="color:var(--cyan);margin-bottom:.6rem">🧬 Personagem Atual</h3>
+      <p style="color:var(--dim);margin-bottom:.8rem;font-size:.82rem">Utilizado na entrega do jogo</p>
+      <img src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHh0Z3VpdWFkNnVxaWFvbzNvZm4wbTd2MHd6djBlMDJiNXdyZTBpZiZlcD12MV9pbnRlcm5hbGZ9/kI8snvKT2SOwaMFx3X/giphy.gif" style="width:100%;height:auto;border-radius:8px;margin-bottom:.6rem;max-width:400px">
+      <p style="font-size:.75rem;color:var(--dim)">Design procedural com animação base</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--cyan);margin-bottom:.6rem">✨ Personagem Futuro</h3>
+      <p style="color:var(--dim);margin-bottom:.8rem;font-size:.82rem">Rework planejado</p>
+      <img src="https://i.postimg.cc/3R6qCjnx/102-Sem-Titulo-20260625003113.png" style="width:100%;height:auto;border-radius:8px;margin-bottom:.6rem;max-width:400px">
+      <p style="font-size:.75rem;color:var(--dim)">Design pixel art definido</p>
+    </div>
+  </div>
+</div>
+
 <!-- 20 CONCLUSÃO -->
 <div class="slide" data-part="0">
   <span class="tag tag-green">Conclusão</span>
@@ -711,6 +761,479 @@
 </div>
 
 <script>
+/* =====================================================================
+   MOTOR DE FUNDOS ANIMADOS — porte fiel dos fundos procedurais do jogo
+   "Disease's Doomsday" (src/telas/telas.c e tela_character_select.c).
+   Tudo é vetor puro: nenhum asset externo é necessário. Cada slide recebe
+   um fundo sorteado; a troca de slide faz crossfade entre dois canvases.
+   ===================================================================== */
+(function () {
+  const VW = 1280, VH = 720;                       // resolução virtual do jogo
+  const TAU = Math.PI * 2, DEG = Math.PI / 180;
+  const REDUCE = window.matchMedia &&
+                 window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+
+  // ---- primitivas (equivalentes Raylib) -----------------------------------
+  function circle(ctx, x, y, r, fill) {
+    ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), 0, TAU);
+    ctx.fillStyle = fill; ctx.fill();
+  }
+  function circleLines(ctx, x, y, r, stroke, lw) {
+    ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), 0, TAU);
+    ctx.lineWidth = lw || 1; ctx.strokeStyle = stroke; ctx.stroke();
+  }
+  function lineEx(ctx, x1, y1, x2, y2, w, stroke) {
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.strokeStyle = stroke; ctx.stroke();
+  }
+  function ring(ctx, cx, cy, inner, outer, sDeg, eDeg, fill) {
+    const s = sDeg * DEG, e = eDeg * DEG;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outer, s, e, false);
+    ctx.arc(cx, cy, inner, e, s, true);
+    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  }
+  function gradV(ctx, x, y, w, h, top, bot) {
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, top); g.addColorStop(1, bot);
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  }
+
+  // ---- formas do menu (DrawMenuVirus / Bacteria / Biohazard) --------------
+  function drawVirus(ctx, cx, cy, radius, rotDeg, col, al) {
+    circle(ctx, cx, cy, radius * 1.15, rgba(col, 0.10 * al));      // halo
+    for (let i = 0; i < 10; i++) {
+      const a = (rotDeg + i * 36) * DEG;
+      const bx = cx + Math.cos(a) * radius * 0.72, by = cy + Math.sin(a) * radius * 0.72;
+      const tx = cx + Math.cos(a) * radius * 1.18, ty = cy + Math.sin(a) * radius * 1.18;
+      lineEx(ctx, bx, by, tx, ty, 2.5, rgba(col, 0.85 * al));
+      circle(ctx, tx, ty, radius * 0.10, rgba(col, 0.9 * al));
+    }
+    circle(ctx, cx, cy, radius * 0.72, rgba(col, 0.28 * al));
+    circleLines(ctx, cx, cy, radius * 0.72, rgba(col, 0.85 * al), 1);
+    circle(ctx, cx, cy, radius * 0.32, rgba(col, 0.6 * al));        // núcleo de RNA
+  }
+  function drawBacteria(ctx, cx, cy, size, angDeg, col, al) {
+    const a = angDeg * DEG, dx = Math.cos(a), dy = Math.sin(a);
+    const pax = cx - dx * size, pay = cy - dy * size;
+    const pbx = cx + dx * size, pby = cy + dy * size;
+    const px = -dy, py = dx;                                        // perpendicular
+    for (let i = -2; i <= 2; i++) {                                 // cílios
+      const ex = cx + dx * (size * 0.45 * i), ey = cy + dy * (size * 0.45 * i);
+      lineEx(ctx, ex, ey, ex + px * size * 0.55, ey + py * size * 0.55, 1.5, rgba(col, 0.4 * al));
+      lineEx(ctx, ex, ey, ex - px * size * 0.55, ey - py * size * 0.55, 1.5, rgba(col, 0.4 * al));
+    }
+    lineEx(ctx, pax, pay, pbx, pby, size * 0.78, rgba(col, 0.5 * al));  // corpo
+    circle(ctx, pax, pay, size * 0.39, rgba(col, 0.5 * al));
+    circle(ctx, pbx, pby, size * 0.39, rgba(col, 0.5 * al));
+    circleLines(ctx, cx, cy, size * 0.5, rgba(col, 0.7 * al), 1);
+  }
+  function drawBiohazard(ctx, cx, cy, radius, pulse, col, al) {
+    const r = radius * (1 + pulse * 0.06);
+    for (let k = 0; k < 3; k++) {
+      const base = -90 + k * 120;
+      ring(ctx, cx, cy, r * 0.46, r, base + 18, base + 102, rgba(col, 0.85 * al));
+    }
+    circle(ctx, cx, cy, r * 0.26, rgba(col, 0.9 * al));
+    circleLines(ctx, cx, cy, r * 0.5, rgba(col, 0.6 * al), 1);
+  }
+  // seringa estilizada (substitui o sprite SPR_MENU_SYRINGE); aponta p/ -y local
+  function drawSyringe(ctx, cx, cy, h, rotDeg, al) {
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(rotDeg * DEG);
+    const bw = h * 0.16;
+    lineEx(ctx, 0, -h * 0.50, 0, -h * 0.30, h * 0.025, rgba([205, 222, 235], 0.85 * al)); // agulha
+    ctx.fillStyle = rgba([170, 190, 205], 0.7 * al);                                      // base da agulha
+    ctx.fillRect(-bw * 0.28, -h * 0.31, bw * 0.56, h * 0.05);
+    ctx.fillStyle = rgba([60, 200, 255], 0.42 * al);                                      // líquido (vacina)
+    ctx.fillRect(-bw * 0.5, -h * 0.05, bw, h * 0.22);
+    ctx.lineWidth = h * 0.012; ctx.strokeStyle = rgba([200, 230, 255], 0.7 * al);          // corpo de vidro
+    ctx.strokeRect(-bw * 0.5, -h * 0.26, bw, h * 0.44);
+    ctx.fillStyle = rgba([220, 235, 245], 0.6 * al);                                       // flange
+    ctx.fillRect(-bw * 0.95, h * 0.16, bw * 1.9, h * 0.04);
+    lineEx(ctx, 0, h * 0.18, 0, h * 0.40, h * 0.05, rgba([225, 238, 248], 0.6 * al));       // haste do êmbolo
+    ctx.fillStyle = rgba([225, 238, 248], 0.65 * al);                                       // apoio do dedo
+    ctx.fillRect(-bw * 0.8, h * 0.40, bw * 1.6, h * 0.04);
+    ctx.restore();
+  }
+
+  // catálogo de organismos do menu (Assets/@models/menu_organisms.h)
+  const GREEN = [90, 230, 120], BLUE = [70, 200, 255], PURPLE = [190, 110, 255];
+  const ORG_TYPE = [0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0];   // 0=vírus 1=bactéria (11,14)
+  const ORG_COL  = [GREEN,BLUE,BLUE,BLUE,GREEN,BLUE,BLUE,GREEN,BLUE,BLUE,GREEN,BLUE,BLUE,GREEN,BLUE,BLUE,GREEN,BLUE];
+  const ORG_N = 18, ORG_EXCLUDED = 14;
+
+  // =========================================================================
+  // FUNDO A — Menu FX (DrawMenuFXBackground): organismos destruídos por
+  // seringas, em camadas de profundidade, com explosões neon e biohazards.
+  // =========================================================================
+  function makeMenuFX() {
+    let rng = 0x1357abcd >>> 0;
+    const randU = () => (rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0);
+    const randF = () => (randU() >>> 8) / 16777216;
+    const range = (a, b) => a + (b - a) * randF();
+
+    const TARGET = 25, MIN_ACTIVE = 24, BIO = 5, SYR_N = 2, PART_MAX = 120;
+    const org = [], part = [];
+    let syr = [], bioStart = TARGET;
+
+    function orgColor(ci) { return (ci < 0 || ci >= ORG_N) ? [120,220,160] : ORG_COL[ci]; }
+    function allowedCatAt(i) { return i >= ORG_EXCLUDED ? i + 1 : i; }
+    function pickCat() {
+      const counts = new Array(ORG_N).fill(0);
+      for (let i = 0; i < TARGET; i++)
+        if (org[i] && org[i].active && org[i].catIdx >= 0) counts[org[i].catIdx]++;
+      const off = (randF() * ORG_N) | 0; let best = 0, bestc = 1e9;
+      for (let k = 0; k < ORG_N; k++) {
+        const c = (off + k) % ORG_N;
+        if (c === ORG_EXCLUDED) continue;
+        if (counts[c] < bestc) { bestc = counts[c]; best = c; }
+      }
+      return best;
+    }
+    function place(o, forceCat, fadeIn) {
+      let zx = 60, zy = 60;
+      for (let tr = 0; tr < 24; tr++) {
+        zx = range(28, VW - 28); zy = range(28, VH - 28); let ok = true;
+        for (let s = 0; s < syr.length; s++) {
+          if (!syr[s] || !syr[s].active) continue;
+          const dx = zx - syr[s].x, dy = zy - syr[s].y;
+          if (dx*dx + dy*dy < 120*120) { ok = false; break; }
+        }
+        for (let i = 0; ok && i < TARGET; i++) {
+          const ot = org[i]; if (!ot || ot === o || !ot.active || ot.isBio) continue;
+          const dx = zx - ot.x, dy = zy - ot.y;
+          if (dx*dx + dy*dy < 72*72) ok = false;
+        }
+        if (ok) break;
+      }
+      o.bx = o.x = zx; o.by = o.y = zy;
+      o.depth = range(0.40, 1.0);
+      o.rotation = range(0, 360);
+      o.rotSpeed = range(-9, 9) * o.depth;
+      o.phase = range(0, 6.2831);
+      const ma = range(0, TAU), ms = range(10, 24);
+      o.vx = Math.cos(ma) * ms; o.vy = Math.sin(ma) * ms;
+      o.catIdx = (forceCat >= 0) ? forceCat : pickCat();
+      o.isBio = false; o.active = true; o.respawn = 0; o.fade = fadeIn ? 0 : 1; o.radius = 30;
+    }
+    function spawnSyr(s) {
+      const speed = range(48, 72), edge = (randF() * 4) | 0;
+      if (edge === 0)      { s.x = -100;  s.y = range(80,640); s.vx = speed;  s.vy = range(-40,40); }
+      else if (edge === 1) { s.x = 1380;  s.y = range(80,640); s.vx = -speed; s.vy = range(-40,40); }
+      else if (edge === 2) { s.x = range(140,1140); s.y = -100; s.vx = range(-50,50); s.vy = speed; }
+      else                 { s.x = range(140,1140); s.y = 820;  s.vx = range(-50,50); s.vy = -speed; }
+      s.rotation = Math.atan2(s.vy, s.vx) / DEG + 90;
+      s.depth = range(0.45, 0.95); s.scale = range(0.85, 1.1);
+      s.cooldown = 0; s.wobble = range(0, 6.2831); s.active = true;
+    }
+    function explode(x, y, base) {
+      let count = 8 + ((randF() * 7) | 0);
+      for (let k = 0; k < count; k++) {
+        let slot = -1;
+        for (let i = 0; i < PART_MAX; i++) if (!part[i] || !part[i].active) { slot = i; break; }
+        if (slot < 0) break;
+        const ang = range(0, 6.2831), spd = range(60, 220);
+        part[slot] = {
+          x, y, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd,
+          col: [Math.min(255, base[0]+range(0,40))|0, Math.min(255, base[1]+range(0,40))|0, Math.min(255, base[2]+range(0,40))|0],
+          life: range(0.30, 0.6), active: true
+        };
+        part[slot].maxLife = part[slot].life;
+        part[slot].size = range(2, 5);
+      }
+    }
+    // init
+    (function init() {
+      const allowed = ORG_N - 1;
+      for (let i = 0; i < TARGET; i++) { const o = {}; org[i] = o; place(o, i < allowed ? allowedCatAt(i) : -1, false); }
+      const bhx = [116,318,1054,1172,930], bhy = [176,610,154,502,654], bhd = [0.58,0.46,0.72,0.86,0.52];
+      for (let b = 0; b < BIO; b++) {
+        org[bioStart + b] = {
+          bx: bhx[b], by: bhy[b], x: bhx[b], y: bhy[b], vx: 0, vy: 0,
+          depth: bhd[b], rotation: 0, rotSpeed: range(-2,2), phase: range(0,6.2831),
+          catIdx: -1, isBio: true, active: true, fade: 1, respawn: 0, radius: 40
+        };
+      }
+      for (let i = 0; i < SYR_N; i++) { const s = {}; syr[i] = s; spawnSyr(s); }
+      for (let i = 0; i < PART_MAX; i++) part[i] = { active: false };
+    })();
+
+    function update(dt, time) {
+      if (dt > 0.1) dt = 0.1;
+      for (let i = 0; i < bioStart + BIO; i++) {
+        const o = org[i];
+        if (!o.isBio && !o.active) {
+          if (o.respawn > 0) o.respawn -= dt;
+          if (o.respawn <= 0) place(o, -1, true);
+          continue;
+        }
+        if (o.fade < 1) { o.fade += dt * 2.2; if (o.fade > 1) o.fade = 1; }
+        o.bx += o.vx * dt * o.depth; o.by += o.vy * dt * o.depth;
+        const m = 46;
+        if (o.by < -m) o.by = VH + m; if (o.by > VH + m) o.by = -m;
+        if (o.bx < -m) o.bx = VW + m; if (o.bx > VW + m) o.bx = -m;
+        o.x = o.bx + Math.sin(time*0.6 + o.phase) * 9 * o.depth;
+        o.y = o.by + Math.cos(time*0.5 + o.phase*1.3) * 7 * o.depth;
+        o.rotation += o.rotSpeed * dt;
+        o.radius = ((o.isBio ? 64 : 48) + o.depth * 40) * 0.42;
+      }
+      for (let s = 0; s < syr.length; s++) {
+        const sy = syr[s]; if (!sy.active) { spawnSyr(sy); continue; }
+        if (sy.cooldown > 0) sy.cooldown -= dt;
+        sy.wobble += dt;
+        const len = Math.hypot(sy.vx, sy.vy) || 1, dx = sy.vx/len, dy = sy.vy/len;
+        const px = -dy, py = dx, w = Math.sin(sy.wobble*1.2) * 7;
+        const vx = sy.vx + px * w, vy = sy.vy + py * w;
+        sy.x += vx * dt; sy.y += vy * dt;
+        sy.rotation = Math.atan2(vy, vx) / DEG + 90;
+        if (sy.x < -170 || sy.x > 1450 || sy.y < -170 || sy.y > 890) spawnSyr(sy);
+      }
+      for (let s = 0; s < syr.length; s++) {
+        const sy = syr[s]; if (!sy.active || sy.cooldown > 0) continue;
+        const syrH = (70 + sy.depth * 60) * sy.scale, syrR = syrH * 0.26;
+        for (let i = 0; i < TARGET; i++) {
+          const o = org[i]; if (!o.active) continue;
+          const dx = o.x - sy.x, dy = o.y - sy.y, rr = o.radius + syrR + 6;
+          if (dx*dx + dy*dy <= rr*rr) {
+            explode(o.x, o.y, orgColor(o.catIdx));
+            o.active = false; o.respawn = range(0.3, 0.8); sy.cooldown = range(0.25, 0.5);
+            break;
+          }
+        }
+      }
+      let activeCount = 0;
+      for (let i = 0; i < TARGET; i++) if (org[i].active) activeCount++;
+      while (activeCount < MIN_ACTIVE) {
+        let best = -1, bestT = 1e9;
+        for (let i = 0; i < TARGET; i++) if (!org[i].active && org[i].respawn < bestT) { bestT = org[i].respawn; best = i; }
+        if (best < 0) break;
+        place(org[best], -1, true); activeCount++;
+      }
+      for (let i = 0; i < PART_MAX; i++) {
+        const p = part[i]; if (!p.active) continue;
+        p.life -= dt; if (p.life <= 0) { p.active = false; continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vx *= (1 - 3*dt); p.vy *= (1 - 3*dt);
+      }
+    }
+    function drawOrganisms(ctx, dmin, dmax, time) {
+      for (let i = 0; i < bioStart + BIO; i++) {
+        const o = org[i];
+        if (!o.isBio && !o.active) continue;
+        if (o.depth < dmin || o.depth >= dmax) continue;
+        const glow = 0.85 + 0.15 * Math.sin(time*2 + o.phase);
+        const pulse = 1 + 0.03 * Math.sin(time*1.8 + o.phase);
+        const targetH = (o.isBio ? 64 : 48) + o.depth * 40;
+        let a = (0.42 + 0.55 * o.depth) * glow * o.fade;
+        if (o.isBio) { a *= 0.85; drawBiohazard(ctx, o.x, o.y, 30*o.depth + 18, glow, [255,80,80], a); continue; }
+        const r = targetH * 0.5 * pulse, col = orgColor(o.catIdx);
+        if (ORG_TYPE[o.catIdx] === 1) drawBacteria(ctx, o.x, o.y, r, o.rotation, col, a);
+        else                          drawVirus(ctx, o.x, o.y, r, o.rotation, col, a);
+      }
+    }
+    function drawSyringes(ctx, dmin, dmax) {
+      for (let s = 0; s < syr.length; s++) {
+        const sy = syr[s]; if (!sy.active || sy.depth < dmin || sy.depth >= dmax) continue;
+        const targetH = (70 + sy.depth * 60) * sy.scale;
+        drawSyringe(ctx, sy.x, sy.y, targetH, sy.rotation, 0.5 + 0.45 * sy.depth);
+      }
+    }
+    function drawParticles(ctx) {
+      for (let i = 0; i < PART_MAX; i++) {
+        const p = part[i]; if (!p.active) continue;
+        const a = p.life / p.maxLife, r = p.size * (0.6 + 0.8 * a);
+        circle(ctx, p.x, p.y, r, rgba(p.col, a));
+        circle(ctx, p.x, p.y, r * 0.5, rgba([235,255,245], a * 0.7));
+      }
+    }
+    return { t: 0, draw(ctx, dt) {
+      this.t += dt; const time = this.t;
+      update(dt, time);
+      gradV(ctx, 0, 0, VW, VH, rgba([9,13,30],1), rgba([4,6,16],1));
+      drawOrganisms(ctx, 0.00, 0.60, time);
+      drawSyringes(ctx, 0.00, 0.70);
+      drawOrganisms(ctx, 0.60, 0.85, time);
+      drawParticles(ctx);
+      drawOrganisms(ctx, 0.85, 1.01, time);
+      drawSyringes(ctx, 0.70, 1.01);
+    }};
+  }
+
+  // =========================================================================
+  // FUNDO B — Themed (DrawThemedBackground): gradiente + 26 células
+  // biológicas subindo + vinhetas. Paleta fixa por variante.
+  // =========================================================================
+  function makeThemed(top, bot, acc) {
+    return { t: 0, draw(ctx, dt) {
+      this.t += dt; const time = this.t;
+      gradV(ctx, 0, 0, VW, VH, rgba(top,1), rgba(bot,1));
+      for (let i = 0; i < 26; i++) {
+        const seedx = (i * 137) % VW, baseY = (i * 89) % VH;
+        let y = baseY - ((time * (12 + (i % 5) * 6)) % (VH + 60));
+        if (y < -30) y += VH + 60;
+        const x = seedx + Math.sin(time*0.6 + i) * 18;
+        const r = 6 + (i % 4) * 5;
+        const a = 0.05 + 0.05 * Math.sin(time*1.4 + i);
+        circle(ctx, x, y, r, rgba(acc, a));
+        circleLines(ctx, x, y, r, rgba(acc, a * 1.4), 1);
+      }
+      gradV(ctx, 0, 0, VW, 90, 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0)');
+      gradV(ctx, 0, VH - 90, VW, 90, 'rgba(0,0,0,0)', 'rgba(0,0,0,0.35)');
+    }};
+  }
+
+  // =========================================================================
+  // FUNDO C — Menu (DrawMenuBackground): gradiente naval + brilho pulsante +
+  // micróbios decorativos nas bordas + biohazard pulsante.
+  // =========================================================================
+  function makeMenu(acc) {
+    const decor = [
+      [70,90,30,0,0],[150,280,22,1,1],[60,470,26,0,2],[120,640,20,1,1],
+      [1210,80,32,0,0],[1130,250,24,1,1],[1225,430,22,0,2],[1150,610,28,1,1],
+      [300,60,18,1,1],[980,60,20,0,0],[360,670,18,0,2],[940,668,20,1,1]
+    ];
+    const vCol = [170,90,230], bCol = [90,210,120], cCol = [60,200,255];
+    return { t: 0, draw(ctx, dt) {
+      this.t += dt; const time = this.t;
+      gradV(ctx, 0, 0, VW, VH, rgba([9,13,30],1), rgba([4,6,16],1));
+      const breath = 0.06 + 0.03 * Math.sin(time*1.5);
+      gradV(ctx, 0, 0, VW, 220, rgba(acc, breath), rgba(acc, 0));
+      for (let i = 0; i < decor.length; i++) {
+        const d = decor[i], cx = d[0], cy = d[1] + Math.sin(time*0.6 + i) * 8, sz = d[2];
+        const col = d[4] === 0 ? vCol : d[4] === 1 ? bCol : cCol;
+        if (d[3] === 0) drawVirus(ctx, cx, cy, sz, time*25 + i*30, col, 1);
+        else            drawBacteria(ctx, cx, cy, sz, time*12 + i*40, col, 1);
+      }
+      drawBiohazard(ctx, 1180, 560, 46, 0.5 + 0.5*Math.sin(time*2), [255,90,90], 0.5);
+    }};
+  }
+
+  // =========================================================================
+  // FUNDO D — Character Select (DrawCharSelectBackground): gradiente bio +
+  // halo radial pulsante + 48 micróbios em 2 camadas + 34 esporos subindo.
+  // =========================================================================
+  function makeCharSelect(acc) {
+    const BASE = [200, 235, 215];
+    return { t: 0, draw(ctx, dt) {
+      this.t += dt; const time = this.t;
+      gradV(ctx, 0, 0, VW, VH, rgba([6,20,16],1), rgba([3,9,11],1));
+      const pulse = 0.5 + 0.5 * Math.sin(time*1.2);
+      const rg = ctx.createRadialGradient(VW/2, VH/2+30, 0, VW/2, VH/2+30, 430 + pulse*34);
+      rg.addColorStop(0, rgba(acc, 0.07)); rg.addColorStop(1, rgba(acc, 0));
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, VW, VH);
+      for (let i = 0; i < 48; i++) {
+        const back = (i % 2 === 0), depth = back ? 0.45 : 1, size = back ? 34 : 62;
+        const baseAlpha = back ? 0.08 : 0.17, dir = (i % 3) ? 1 : -1;
+        const speed = (back ? 11 : 18) * dir, phase = i * 0.7;
+        const x = ((i*173) + time*speed + 260) % (VW + 520) - 260;
+        const y = ((i*97) % VH) + Math.sin(time*(0.4 + 0.05*i) + phase) * 28 * depth;
+        const rot = time*(back ? 9 : 15)*dir + phase*40;
+        const ci = i % ORG_N, col = BASE, al = baseAlpha * 0.85;
+        if (ORG_TYPE[ci] === 1) drawBacteria(ctx, x, y, size*0.5, rot, col, al);
+        else                    drawVirus(ctx, x, y, size*0.5, rot, col, al);
+      }
+      for (let i = 0; i < 34; i++) {
+        const x = ((i*71) + time*(6 + (i%5))) % VW;
+        const y = ((i*53) - time*5 + 4*VH) % VH;
+        const r = 1.5 + (i % 3), a = 0.10 + 0.06 * Math.sin(time*2 + i);
+        circle(ctx, x, y, r, rgba(acc, a));
+      }
+      gradV(ctx, 0, 0, VW, 150, 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0)');
+      gradV(ctx, 0, VH - 130, VW, 130, 'rgba(0,0,0,0)', 'rgba(0,0,0,0.4)');
+    }};
+  }
+
+  // ---- catálogo de fundos (id -> fábrica) ---------------------------------
+  const CATALOG = {
+    'menufx':        makeMenuFX,
+    'menu':          () => makeMenu([0, 229, 255]),
+    'charselect':    () => makeCharSelect([0, 229, 180]),
+    'themed:amber':  () => makeThemed([14,16,22], [8,12,16], [255,200,80]),
+    'themed:purple': () => makeThemed([20,10,28], [10,6,18], [200,110,255]),
+    'themed:cyan':   () => makeThemed([8,18,28],  [5,10,18], [0,200,255]),
+    'themed:teal':   () => makeThemed([10,18,20], [6,10,12], [0,229,200]),
+    'themed:gold':   () => makeThemed([10,16,36], [6,8,20],  [255,210,90]),
+    'themed:red':    () => makeThemed([22,8,8],   [10,4,5],  [255,80,80])
+  };
+  const IDS = Object.keys(CATALOG);
+
+  // ---- camadas / crossfade ------------------------------------------------
+  const layers = [0, 1].map(i => {
+    const c = document.getElementById('fx' + i);
+    return { canvas: c, ctx: c.getContext('2d'), bg: null, id: null, opacity: 0, target: 0 };
+  });
+  let active = 0;
+
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = window.innerWidth, h = window.innerHeight;
+    const scale = Math.max(w / VW, h / VH);                 // "cover"
+    const offX = (w - VW * scale) / 2, offY = (h - VH * scale) / 2;
+    for (const L of layers) {
+      L.canvas.width = Math.round(w * dpr);
+      L.canvas.height = Math.round(h * dpr);
+      L.ctx.setTransform(scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr);
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function fxSetBg(id) {
+    const cur = layers[active];
+    if (cur.id === id && cur.target === 1) return;         // já exibindo
+    const idle = layers[active ^ 1];
+    idle.bg = CATALOG[id](); idle.id = id; idle.target = 1;
+    cur.target = 0;
+    active ^= 1;
+  }
+
+  let last = null;
+  function frame(ts) {
+    if (last === null) last = ts;
+    let dt = (ts - last) / 1000; last = ts;
+    if (dt > 0.1) dt = 0.1; if (dt < 0) dt = 0;
+    const animDt = REDUCE ? 0 : dt;
+    for (const L of layers) {
+      L.opacity += (L.target - L.opacity) * Math.min(1, dt * 4.5);
+      if (L.opacity < 0.002 && L.target === 0) L.opacity = 0;
+      L.canvas.style.opacity = L.opacity.toFixed(3);
+      if (L.opacity > 0.003 && L.bg) L.bg.draw(L.ctx, animDt);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- distribuição aleatória dos fundos por slide ------------------------
+  const SLIDE_COUNT = document.querySelectorAll('.slide').length;
+  let bag = [];
+  function nextId(prev) {
+    if (!bag.length) {
+      bag = IDS.slice();
+      for (let i = bag.length - 1; i > 0; i--) {           // Fisher-Yates
+        const j = (Math.random() * (i + 1)) | 0;
+        const t = bag[i]; bag[i] = bag[j]; bag[j] = t;
+      }
+    }
+    let id = bag.pop();
+    if (id === prev && bag.length) { bag.unshift(id); id = bag.pop(); }
+    return id;
+  }
+  const slideBg = []; let prev = null;
+  for (let i = 0; i < SLIDE_COUNT; i++) { const id = nextId(prev); slideBg.push(id); prev = id; }
+
+  window.fxSetForSlide = function (i) {
+    if (i < 0 || i >= slideBg.length) return;
+    fxSetBg(slideBg[i]);
+  };
+
+  window.fxSetForSlide(0);
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>
 const slides = document.querySelectorAll('.slide');
 const TOTAL = slides.length;
 let current = 0;
@@ -738,6 +1261,7 @@ function update() {
   document.querySelectorAll('.part-pill').forEach((p, i) => {
     p.classList.toggle('active', part === i + 1);
   });
+  if (window.fxSetForSlide) window.fxSetForSlide(current);
 }
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); nextSlide(); }
