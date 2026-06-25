@@ -231,6 +231,15 @@ void LoadPlayerConfig(GameState *game)
         // Categoria "Traseiro" foi removida do jogo: ignora qualquer item
         // traseiro de saves/config antigos (mantém a largura para compat.).
         game->player.cosmetics[COS_BACK] = 0;
+
+        // Personagem jogável: 1 inteiro extra ao final da linha (depois dos
+        // cosméticos). Ausente em saves antigos => 0 (Anticorpo).
+        {
+            char *cend = NULL;
+            long cid = strtol(cursor, &cend, 10);
+            game->player.characterId = (cend != cursor && cid >= 0 && cid < CHARACTER_COUNT)
+                                       ? (int)cid : 0;
+        }
         fclose(f);
     }
     // Sempre garante uma configuração de dificuldade válida (mesmo sem arquivo).
@@ -246,7 +255,9 @@ void SavePlayerConfig(GameState *game)
     // Guarda-roupa modular (mesma linha, na ordem do enum CosmeticSlot).
     for (int s = 0; s < COS_SLOT_COUNT; s++)
         fprintf(f, " %d", game->player.cosmetics[s]);
-    fprintf(f, "\n");
+    // Personagem jogável: campo extra ao FINAL da linha (retrocompatível — saves
+    // antigos sem este valor assumem 0 = Anticorpo no load).
+    fprintf(f, " %d\n", game->player.characterId);
     fclose(f);
 }
 
@@ -871,7 +882,7 @@ void InitGame(GameState *game)
     // Preserva nome, audio, skins, dificuldade e configuracao do modo admin.
     char tempName[16] = "";
     float tempMusicVol = 1.0f, tempSfxVol = 1.0f;
-    int tempSkin = 0, tempWSkin = 0;
+    int tempSkin = 0, tempWSkin = 0, tempChar = 0;
     int tempCos[COS_SLOT_COUNT] = { 0 };   // cosméticos do guarda-roupa (preferência)
     int tempDiff = DIFFICULTY_MEDIUM;
     bool tAdmin = false, tAdminApply = false, tAdminUnlockWeapons = false, tAdminUnlockSkins = false;
@@ -884,6 +895,7 @@ void InitGame(GameState *game)
         tempSfxVol = game->sfxVolume;
         tempSkin = game->player.skinId;
         tempWSkin = game->player.weaponSkinId;
+        tempChar = game->player.characterId;
         for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
         tempDiff = game->difficulty;
         tAdmin = game->adminMode; tAdminApply = game->adminApply;
@@ -914,6 +926,7 @@ void InitGame(GameState *game)
     game->sfxVolume = tempSfxVol;
     game->player.skinId = tempSkin;
     game->player.weaponSkinId = tempWSkin;
+    game->player.characterId = tempChar;
     for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
 
     // Jogador inicial
@@ -2060,25 +2073,26 @@ void UpdateGameplay(GameState *game, float delta)
             enemy->chargeTimer -= delta;
             if (enemy->chargeTimer <= 0.0f) {
                 // Seleciona tipo de projétil baseado no tipo do inimigo
+                // Cada arquétipo atirador tem uma IDENTIDADE de projétil (cor +
+                // animação + dano), ensinada na aba INIMIGOS do tutorial. KPC é o
+                // ETYPE_KPC (==2): um ramo só evita duplicar o caso legado.
                 ProjectileType ptype = PROJ_ACID_ARC;
                 int dmg = 8;
-                
-                if (enemy->type == 1) { // Dengue (legado): picada espalhada
-                    ptype = PROJ_BULLET_SPREAD;
-                    dmg = 10;
-                } else if (enemy->type == 2) { // KPC: tiro pesado
-                    ptype = PROJ_VOID_BOLT;
-                    dmg = 20;
-                } else if (enemy->type == 4) { // TB: ácido moderado
-                    ptype = PROJ_ACID_ARC;
-                    dmg = 12;
-                } else if (enemy->type == ETYPE_BACT_RANGED) { // Bactéria atiradora (bacilo)
-                    ptype = PROJ_ACID_ARC;
-                    dmg = 11;
-                } else if (enemy->type == ETYPE_VIRUS_RANGED || enemy->type == ETYPE_VIRUS_ELITE ||
-                           enemy->type == ETYPE_VIRUS_BOSS) { // Vírus atirador/elite/chefe: material viral
-                    ptype = PROJ_VIRAL_SPORE;
-                    dmg = (enemy->type == ETYPE_VIRUS_ELITE) ? 16 : 12;
+
+                if (enemy->type == ETYPE_BACT_RANGED) {          // Bacilo: ácido lento (verde)
+                    ptype = PROJ_ACID_ARC;      dmg = 11;
+                } else if (enemy->type == ETYPE_VIRUS_RANGED) {  // Influenza: toxina rápida (ciano)
+                    ptype = PROJ_BULLET_SPREAD; dmg = 8;
+                } else if (enemy->type == ETYPE_VIRUS_ELITE) {   // Sarampo: bolha pesada (magenta, DANO x2)
+                    ptype = PROJ_VOID_BOLT;     dmg = 20;
+                } else if (enemy->type == ETYPE_VIRUS_BOSS) {    // Coronavírus: esporo viral espiculado
+                    ptype = PROJ_VIRAL_SPORE;   dmg = 12;
+                } else if (enemy->type == ETYPE_KPC) {           // KPC (==2): dardo tóxico MUITO veloz (azul)
+                    ptype = PROJ_TOXIN_DART;    dmg = 14;
+                } else if (enemy->type == 1) {                   // legado Aedes: leque de toxina (ciano)
+                    ptype = PROJ_BULLET_SPREAD; dmg = 8;
+                } else if (enemy->type == 4) {                   // legado TB: ácido moderado
+                    ptype = PROJ_ACID_ARC;      dmg = 12;
                 }
                 
                 // Antecipação LIMITADA de mira: lidera o alvo conforme a velocidade
@@ -2115,13 +2129,15 @@ void UpdateGameplay(GameState *game, float delta)
                     SpawnProjectile(game, enemy->position, off1, ptype, dmg);
                     SpawnProjectile(game, enemy->position, off2, ptype, dmg);
 
-                    // FASE FINAL: rajada radial em todas as direções (bullet-hell leve)
+                    // FASE FINAL: rajada radial em todas as direções (bullet-hell leve).
+                    // Usa o ORBE DA PRAGA (laranja, lento, de área) para dar uma
+                    // identidade visual própria ao ataque mais perigoso do chefe.
                     if (bossPhase >= 2) {
                         for (int r = 0; r < 8; r++) {
                             float a = (float)r / 8.0f * 2.0f * PI;
                             Vector2 rt = { enemy->position.x + cosf(a) * 200.0f,
                                            enemy->position.y + sinf(a) * 200.0f };
-                            SpawnProjectile(game, enemy->position, rt, ptype, dmg);
+                            SpawnProjectile(game, enemy->position, rt, PROJ_PLAGUE_ORB, 14);
                         }
                     }
                 }
@@ -2384,6 +2400,19 @@ void UpdateGameplay(GameState *game, float delta)
                 else if (game->projectiles[i].isPlayerProjectile)
                     SpawnParticle(game, game->projectiles[i].position, (Vector2){ 0, 0 },
                                   WeaponSkinPrimary(game->player.weaponSkinId), 3.0f, 0.22f);
+                else {
+                    // Projétil INIMIGO se dissipou na borda do corpo (não escapa do
+                    // organismo): pequeno respingo na cor do projétil.
+                    ProjectileType pt = game->projectiles[i].type;
+                    Color pc = (Color){ 0, 230, 80, 255 };                       // ácido (verde)
+                    if      (pt == PROJ_VOID_BOLT)     pc = (Color){ 220, 60, 255, 255 };
+                    else if (pt == PROJ_BULLET_SPREAD) pc = (Color){ 80, 230, 255, 255 };
+                    else if (pt == PROJ_TOXIN_DART)    pc = (Color){ 90, 170, 255, 255 };
+                    else if (pt == PROJ_PLAGUE_ORB)    pc = (Color){ 235, 150, 40, 255 };
+                    else if (pt == PROJ_VIRAL_SPORE)   pc = (Color){ 190, 235, 90, 255 };
+                    else if (pt == PROJ_BOSS_BULLET)   pc = (Color){ 255, 70, 70, 255 };
+                    SpawnParticleExplosion(game, game->projectiles[i].position, pc, 5, 30.0f, 90.0f, 3.0f, 0.3f);
+                }
                 continue;
             }
 
@@ -2819,6 +2848,7 @@ void CarregarJogoSlot(GameState *game, int slot)
         float tempSfxVol = game->sfxVolume;
         int tempSkin = game->player.skinId;
         int tempWSkin = game->player.weaponSkinId;
+        int tempChar = game->player.characterId; // personagem escolhido persiste ao carregar
         int tempCos[COS_SLOT_COUNT];   // cosméticos persistem ao carregar um save
         for (int s = 0; s < COS_SLOT_COUNT; s++) tempCos[s] = game->player.cosmetics[s];
         // Preserva o MODO ADMIN/DEV através do memset (igual ao InitGame). Sem isto,
@@ -2839,6 +2869,7 @@ void CarregarJogoSlot(GameState *game, int slot)
         game->sfxVolume = tempSfxVol;
         game->player.skinId = tempSkin;
         game->player.weaponSkinId = tempWSkin;
+        game->player.characterId = tempChar;
         for (int s = 0; s < COS_SLOT_COUNT; s++) game->player.cosmetics[s] = tempCos[s];
         game->adminMode = tAdmin; game->adminApply = tAdminApply;
         game->adminUnlockWeapons = tAdminUnlockWeapons; game->adminUnlockSkins = tAdminUnlockSkins;

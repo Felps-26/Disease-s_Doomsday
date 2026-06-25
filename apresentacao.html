@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Disease's Doomsday — Apresentação</title>
+<style>
+  :root {
+    --green:  #00ff88;
+    --cyan:   #00e5ff;
+    --purple: #c77dff;
+    --red:    #ff4444;
+    --yellow: #ffe066;
+    --bg:     #080c10;
+    --card:   #0d1520;
+    --border: #1a2e40;
+    --text:   #c8d8e8;
+    --dim:    #6a8099;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden; width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  #progress-bar {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    transition: width .4s ease; z-index: 100;
+  }
+  #part-indicator {
+    position: fixed; top: 10px; right: 16px;
+    font-size: .65rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); z-index: 100; transition: color .3s;
+  }
+  #slides { flex: 1; position: relative; overflow: hidden; }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 3rem 5vw;
+    opacity: 0; transform: translateX(60px);
+    transition: opacity .45s ease, transform .45s ease;
+    pointer-events: none;
+  }
+  .slide.active { opacity: 1; transform: translateX(0); pointer-events: auto; }
+  .slide.exit   { opacity: 0; transform: translateX(-60px); }
+  #nav {
+    display: flex; align-items: center; justify-content: center;
+    gap: 1.5rem; padding: .9rem 0 1rem;
+    border-top: 1px solid var(--border);
+    background: rgba(8,12,16,.9);
+  }
+  #nav button {
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: .45rem 1.4rem;
+    border-radius: 6px; cursor: pointer; font-size: .85rem;
+    transition: background .2s, border-color .2s;
+  }
+  #nav button:hover { background: var(--border); border-color: var(--cyan); }
+  #nav button:disabled { opacity: .3; cursor: default; }
+  #slide-counter { font-size: .8rem; color: var(--dim); min-width: 5ch; text-align:center; }
+  #part-pills { display: flex; gap: .5rem; align-items: center; }
+  .part-pill {
+    font-size: .65rem; letter-spacing:.08em; text-transform:uppercase;
+    padding:.2rem .7rem; border-radius:999px; border:1px solid;
+    cursor:pointer; transition: opacity .2s; opacity: .4;
+  }
+  .part-pill.active { opacity:1; }
+  .pill-1 { border-color:var(--green); color:var(--green); }
+  .pill-2 { border-color:var(--purple);color:var(--purple);}
+  .pill-3 { border-color:var(--cyan);  color:var(--cyan);  }
+  h1 { font-size: clamp(1.8rem,4vw,3.2rem); line-height:1.15; }
+  h2 { font-size: clamp(1.2rem,2.5vw,2rem); line-height:1.2; }
+  h3 { font-size: clamp(.9rem,1.8vw,1.3rem); }
+  p, li { font-size: clamp(.78rem,1.4vw,1rem); line-height:1.65; }
+  .tag {
+    display:inline-block; font-size:.65rem; letter-spacing:.1em;
+    text-transform:uppercase; padding:.2rem .7rem; border-radius:4px; margin-bottom:1rem;
+  }
+  .tag-green  { background:rgba(0,255,136,.12); color:var(--green); border:1px solid rgba(0,255,136,.3); }
+  .tag-cyan   { background:rgba(0,229,255,.12); color:var(--cyan);  border:1px solid rgba(0,229,255,.3); }
+  .tag-purple { background:rgba(199,125,255,.12);color:var(--purple);border:1px solid rgba(199,125,255,.3);}
+  .tag-yellow { background:rgba(255,224,102,.12);color:var(--yellow);border:1px solid rgba(255,224,102,.3);}
+  .accent-green  { color: var(--green);  }
+  .accent-cyan   { color: var(--cyan);   }
+  .accent-purple { color: var(--purple); }
+  .accent-yellow { color: var(--yellow); }
+  .accent-red    { color: #ff4444;       }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; width:100%; max-width:1000px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:1.2rem; width:100%; max-width:1100px; }
+  .grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; width:100%; max-width:1100px; }
+  .card {
+    background:var(--card); border:1px solid var(--border);
+    border-radius:10px; padding:1.2rem 1.4rem;
+  }
+  .card h3 { margin-bottom:.5rem; }
+  .card p, .card li { color: var(--dim); }
+  .card ul { list-style:none; padding:0; }
+  .card ul li { padding:.15rem 0; }
+  .card ul li::before { content:"▸ "; color:var(--cyan); }
+  .stat-row { display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .stat-num { font-size: clamp(1.6rem,3vw,2.6rem); font-weight:700; }
+  .stat-label { font-size:.72rem; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; }
+  table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  th { background:rgba(255,255,255,.05); padding:.5rem .8rem; text-align:left; color:var(--cyan); font-weight:600; border-bottom:1px solid var(--border); }
+  td { padding:.45rem .8rem; border-bottom:1px solid rgba(255,255,255,.04); color:var(--dim); }
+  tr:last-child td { border-bottom:none; }
+  td:first-child { color:var(--text); }
+  .badge { display:inline-block; padding:.1rem .5rem; border-radius:4px; font-size:.7rem; }
+  .badge-done { background:rgba(0,255,136,.15); color:var(--green); }
+  .badge-wip  { background:rgba(255,224,102,.15); color:var(--yellow); }
+  .badge-plan { background:rgba(0,229,255,.15); color:var(--cyan); }
+  .code-block {
+    background:#040810; border:1px solid var(--border); border-radius:8px;
+    padding:1rem 1.2rem; font-family:'Courier New',monospace; font-size:.78rem;
+    color:#8fc6e8; white-space:pre; overflow-x:auto; width:100%; max-width:860px;
+  }
+  .tl-item { display:flex; gap:1.2rem; margin-bottom:1rem; }
+  .tl-dot { width:12px; height:12px; border-radius:50%; margin-top:.35rem; flex-shrink:0; }
+  .tl-done { background:var(--green); }
+  .tl-wip  { background:var(--yellow); }
+  .tl-plan { background:var(--cyan); box-shadow:0 0 0 3px rgba(0,229,255,.15); }
+  .cover-title {
+    font-size: clamp(2.5rem,7vw,5rem); font-weight:800; letter-spacing:-.02em; line-height:1.05;
+    background: linear-gradient(135deg, var(--green) 0%, var(--cyan) 50%, var(--purple) 100%);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    text-align:center; margin-bottom:.5rem;
+  }
+  .cover-sub { color:var(--dim); font-size:clamp(.85rem,1.6vw,1.1rem); text-align:center; max-width:580px; line-height:1.7; }
+  .cover-line { width:60px; height:3px; margin:1.2rem auto; background:linear-gradient(90deg,var(--green),var(--cyan)); border-radius:2px; }
+  .cover-pills { display:flex; gap:.7rem; flex-wrap:wrap; justify-content:center; margin-top:1.4rem; }
+  .part-divider { display:flex; flex-direction:column; align-items:center; text-align:center; gap:1rem; }
+  .part-num   { font-size:.7rem; letter-spacing:.3em; text-transform:uppercase; color:var(--dim); }
+  .part-title { font-size:clamp(2rem,5vw,3.8rem); font-weight:800; line-height:1.1; }
+  .part-desc  { color:var(--dim); max-width:500px; font-size:clamp(.8rem,1.5vw,1rem); }
+  .part-icon  { font-size:3.5rem; margin-bottom:.5rem; }
+  .wide { max-width:1100px; width:100%; }
+  .section-title { margin-bottom:1.2rem; }
+  .weapon-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+  .weapon-slot { font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-bottom:.3rem; }
+  .weapon-name { font-size:.95rem; font-weight:700; margin-bottom:.2rem; }
+  .weapon-evo  { font-size:.72rem; color:var(--purple); margin-top:.4rem; }
+  .weapon-evo::before { content:"▲ "; }
+  kbd { background:#1a2a3a; border:1px solid #2a4060; border-radius:4px; padding:.1rem .4rem; font-size:.75rem; font-family:monospace; color:var(--cyan); }
+  .ctrl-row { display:flex; justify-content:space-between; align-items:center; padding:.4rem 0; border-bottom:1px solid rgba(255,255,255,.04); }
+  .ctrl-row:last-child { border-bottom:none; }
+  .ctrl-action { color:var(--dim); font-size:.82rem; }
+  .ctrl-keys { display:flex; gap:.3rem; flex-wrap:wrap; justify-content:flex-end; }
+  .perf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.8rem; width:100%; max-width:900px; }
+  .perf-item { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:.8rem 1rem; }
+  .perf-key  { font-size:.65rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:.3rem; }
+  .perf-val  { font-size:1.05rem; font-weight:700; color:var(--cyan); }
+  .summary-ring {
+    width:80px; height:80px; border-radius:50%;
+    border:3px solid var(--green); display:flex; align-items:center; justify-content:center;
+    font-size:2rem; margin:0 auto .6rem;
+  }
+</style>
+</head>
+<body>
+<div id="progress-bar" style="width:0%"></div>
+<div id="part-indicator">Capa</div>
+<div id="slides">
+<!-- 0 CAPA -->
+<div class="slide active" data-part="0">
+  <div class="cover-pills">
+    <span class="tag tag-green">C + Raylib</span>
+    <span class="tag tag-cyan">Educativo</span>
+    <span class="tag tag-purple">Saúde Pública</span>
+    <span class="tag tag-yellow">DF</span>
+  </div>
+  <div class="cover-title">Disease's Doomsday</div>
+  <div class="cover-line"></div>
+  <p class="cover-sub">🧬 <em>Você é um anticorpo. Eles são a pandemia. Só um sobrevive.</em></p>
+  <p class="cover-sub" style="margin-top:.8rem">Jogo de ação 2D top-down educativo — Projeto Integrador · Junho 2026</p>
+  <div style="display:flex;gap:1.5rem;margin-top:2rem;flex-wrap:wrap;justify-content:center">
+    <div class="stat-row"><span class="stat-num accent-green">2</span><span class="stat-label">Mundos</span></div>
+    <div class="stat-row"><span class="stat-num accent-cyan">10</span><span class="stat-label">Ondas</span></div>
+    <div class="stat-row"><span class="stat-num accent-purple">12</span><span class="stat-label">Inimigos</span></div>
+    <div class="stat-row"><span class="stat-num accent-yellow">48</span><span class="stat-label">Perguntas</span></div>
+    <div class="stat-row"><span class="stat-num accent-red">8</span><span class="stat-label">Armas</span></div>
+  </div>
+</div>
+
+<!-- 1 AGENDA -->
+<div class="slide" data-part="0">
+  <h2 style="margin-bottom:1.5rem">Estrutura da Apresentação</h2>
+  <div class="grid3" style="max-width:900px">
+    <div class="card" style="border-color:rgba(0,255,136,.3)">
+      <div class="tag tag-green">Parte 1</div>
+      <h3 class="accent-green">Elicitação &amp; Planos</h3>
+      <ul><li>O problema real</li><li>Quem é o jogador</li><li>Requisitos definidos</li><li>Roadmap e futuro</li></ul>
+    </div>
+    <div class="card" style="border-color:rgba(0,229,255,.3)">
+      <div class="tag tag-purple">Parte 2</div>
+      <h3 class="accent-purple">Código &amp; Otimização</h3>
+      <ul><li>Loop de jogo</li><li>Inimigos e mundos</li><li>Arsenal de armas</li><li>Sistema educativo</li></ul>
+    </div>
+    <div class="card" style="border-color:rgba(199,125,255,.3)">
+      <div class="tag tag-cyan">Parte 3</div>
+      <h3 class="accent-cyan">Jogabilidade</h3>
+      <ul><li>Arquitetura do código</li><li>Técnicas de performance</li><li>Config. mínima</li><li>Custo computacional</li></ul>
+    </div>
+  </div>
+  <p style="margin-top:1.5rem;color:var(--dim);font-size:.8rem">⏱ ~10 minutos · ~3 min por parte</p>
+</div>
+
+<!-- 2 DIVISOR P1 -->
+<div class="slide" data-part="1">
+  <div class="part-divider">
+    <div class="part-icon">📋</div>
+    <div class="part-num">Parte 1 de 3</div>
+    <div class="part-title accent-green">Elicitação &amp;<br>Planos Futuros</div>
+    <p class="part-desc">O problema, os stakeholders, os requisitos e onde o projeto vai chegar</p>
+  </div>
+</div>
+
+<!-- 3 PROBLEMA -->
+<div class="slide" data-part="1">
+  <span class="tag tag-green">O Problema</span>
+  <h2 style="text-align:center;margin-bottom:1.2rem">Por que esse jogo existe?</h2>
+  <div class="grid2" style="max-width:860px">
+    <div class="card">
+      <h3 style="margin-bottom:.6rem">🦟 Contexto no DF</h3>
+      <ul>
+        <li>Surtos anuais de <strong>dengue</strong> no Distrito Federal</li>
+        <li>Resistência antimicrobiana em hospitais de referência</li>
+        <li>Baixa aderência à vacinação e campanhas</li>
+        <li>Jovens como público mais difícil de engajar</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:.6rem">🎓 A Solução Lúdica</h3>
+      <ul>
+        <li>Aprendizagem ativa via <strong>gameplay</strong></li>
+        <li>Cada inimigo = doença real com mecânica fiel</li>
+        <li>Quiz de 48 perguntas baseadas em OMS/MS/SES-DF</li>
+        <li>Pontos do SUS como moeda de progressão</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card" style="max-width:860px;margin-top:1rem;border-color:rgba(0,255,136,.25)">
+    <p style="text-align:center;font-style:italic;color:var(--green)">"Vigilância epidemiológica traduzida em mecânicas de jogo coerentes, didáticas e divertidas."</p>
+  </div>
+</div>
+
+<!-- 4 STAKEHOLDERS -->
+<div class="slide" data-part="1">
+  <span class="tag tag-green">Stakeholders</span>
+  <h2 style="text-align:center;margin-bottom:1.2rem">Quem é impactado?</h2>
+  <div class="grid4" style="max-width:1000px">
+    <div class="card" style="text-align:center"><div style="font-size:2rem;margin-bottom:.4rem">🧑‍🎓</div><h3>Alunos</h3><p>Ensino médio e superior — público primário do jogo</p></div>
+    <div class="card" style="text-align:center"><div style="font-size:2rem;margin-bottom:.4rem">👩‍🏫</div><h3>Professores</h3><p>Integram o jogo em aulas de saúde e biologia</p></div>
+    <div class="card" style="text-align:center"><div style="font-size:2rem;margin-bottom:.4rem">🏥</div><h3>SUS / SES-DF</h3><p>Conteúdo baseado em diretrizes oficiais de vigilância</p></div>
+    <div class="card" style="text-align:center"><div style="font-size:2rem;margin-bottom:.4rem">👥</div><h3>Equipe Dev</h3><p>Filipi, Thiago e Mateus — Projeto Integrador 2026</p></div>
+  </div>
+</div>
+
+<!-- 5 REQUISITOS -->
+<div class="slide" data-part="1">
+  <span class="tag tag-green">Requisitos</span>
+  <h2 style="text-align:center;margin-bottom:1rem">O que foi definido</h2>
+  <div class="grid2" style="max-width:1000px">
+    <div>
+      <h3 style="color:var(--cyan);margin-bottom:.6rem">Funcionais (seleção)</h3>
+      <table>
+        <tr><th>ID</th><th>Requisito</th></tr>
+        <tr><td>RF01</td><td>2 mundos temáticos (Bactérias → Vírus)</td></tr>
+        <tr><td>RF02</td><td>5 ondas por mundo; onda 5 = chefe</td></tr>
+        <tr><td>RF03</td><td>Quiz educativo entre ondas</td></tr>
+        <tr><td>RF04</td><td>Save/Load em 3 slots + auto-save</td></tr>
+        <tr><td>RF11</td><td>3 dificuldades configuráveis</td></tr>
+        <tr><td>RF12</td><td>Tutorial na seringa (3 etapas)</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="color:var(--purple);margin-bottom:.6rem">Não Funcionais (seleção)</h3>
+      <table>
+        <tr><th>ID</th><th>Requisito</th></tr>
+        <tr><td>RNF01</td><td>60 FPS com OpenGL 3.3 / 512 MB RAM</td></tr>
+        <tr><td>RNF02</td><td>60 inimigos + 100 projéteis + 250 partículas</td></tr>
+        <tr><td>RNF04</td><td>Build em Windows, Linux e macOS</td></tr>
+        <tr><td>RNF09</td><td>Supersampling 2× (render 2560×1440)</td></tr>
+        <tr><td>RNF13</td><td>Nenhum dado pessoal coletado (LGPD)</td></tr>
+        <tr><td>RNF11</td><td>Binário &lt; 5 MB (~2,7 MB atual)</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 6 ROADMAP -->
+<div class="slide" data-part="1">
+  <span class="tag tag-green">Planos Futuros</span>
+  <h2 style="text-align:center;margin-bottom:1.2rem">Roadmap do Produto</h2>
+  <div style="width:100%;max-width:800px">
+    <div class="tl-item"><div class="tl-dot tl-done"></div><div><strong>MVP — Mundo 1 + Quiz + Save</strong> <span class="badge badge-done">Concluído</span><p style="color:var(--dim);font-size:.8rem">5 ondas bacterianas, boss KPC, quiz, 3 slots de save</p></div></div>
+    <div class="tl-item"><div class="tl-dot tl-done"></div><div><strong>Mundo 2 — Vírus + Capsídeo + Boss Coronavírus</strong> <span class="badge badge-done">Concluído</span><p style="color:var(--dim);font-size:.8rem">5 vírus, sistema de escudo, boss 3 fases, Núcleos de Infecção</p></div></div>
+    <div class="tl-item"><div class="tl-dot tl-done"></div><div><strong>Cosméticos + Evolução de Armas + Cutscenes</strong> <span class="badge badge-done">Concluído</span><p style="color:var(--dim);font-size:.8rem">8 slots cosméticos, 4 evoluções (30 abates), cutscene de transição</p></div></div>
+    <div class="tl-item"><div class="tl-dot tl-wip"></div><div><strong>Sprites PNG finais</strong> <span class="badge badge-wip">Em produção</span><p style="color:var(--dim);font-size:.8rem">Substituir render procedural por arte pixel art definitiva</p></div></div>
+    <div class="tl-item"><div class="tl-dot tl-plan"></div><div><strong>Versão Web (WebAssembly / Emscripten)</strong> <span class="badge badge-plan">Planejado</span><p style="color:var(--dim);font-size:.8rem">Rodar no browser sem instalação — laboratórios escolares</p></div></div>
+    <div class="tl-item"><div class="tl-dot tl-plan"></div><div><strong>Ranking Online com Pontos do SUS</strong> <span class="badge badge-plan">Planejado</span><p style="color:var(--dim);font-size:.8rem">Competição educativa entre turmas</p></div></div>
+    <div class="tl-item"><div class="tl-dot tl-plan"></div><div><strong>Modo Multiplayer Local</strong> <span class="badge badge-plan">Planejado</span><p style="color:var(--dim);font-size:.8rem">Co-op para uso em sala de aula</p></div></div>
+  </div>
+</div>
+
+<!-- 13 DIVISOR P3 -->
+<div class="slide" data-part="2">
+  <div class="part-divider">
+    <div class="part-icon">⚙️</div>
+    <div class="part-num">Parte 2 de 3</div>
+    <div class="part-title accent-purple">Código &amp;<br>Otimização</div>
+    <p class="part-desc">Arquitetura, técnicas de performance e requisitos de hardware</p>
+  </div>
+</div>
+
+<!-- 14 ARQUITETURA -->
+<div class="slide" data-part="2">
+  <span class="tag tag-purple">Arquitetura</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Estrutura do Código</h2>
+  <div class="grid2" style="max-width:1000px">
+    <div class="code-block">src/
+├── entities/    player · enemy · projectiles
+├── systems/     combat_system · wave_manager
+├── logic/       fsm · update_gameplay
+├── render/      render_gameplay
+├── telas/       quiz · arsenal · skins · admin
+├── gameplay/    input_controller · spatial_grid
+└── assets/      asset_manager · sprite_manager</div>
+    <div>
+      <div class="card" style="margin-bottom:.8rem;border-color:rgba(199,125,255,.3)">
+        <h3 style="color:var(--purple);margin-bottom:.4rem">🔄 FSM — 20 estados</h3>
+        <p>Máquina de estados finitos gerencia todas as telas: menu, gameplay, quiz, upgrade, cutscene, pausa…</p>
+      </div>
+      <div class="card" style="border-color:rgba(0,229,255,.3)">
+        <h3 style="color:var(--cyan);margin-bottom:.4rem">🏗️ Stack Técnica</h3>
+        <ul>
+          <li>C11 + Raylib 5.x (licença zlib)</li>
+          <li>OpenGL 3.3 via Raylib</li>
+          <li>GLSL — shaders customizados</li>
+          <li>miniaudio embutido no Raylib</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 15 OTIMIZAÇÕES -->
+<div class="slide" data-part="2">
+  <span class="tag tag-purple">Otimização</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Técnicas de Performance</h2>
+  <div class="grid3" style="max-width:1020px">
+    <div class="card">
+      <h3 style="color:var(--purple);margin-bottom:.5rem">🗺️ Spatial Grid</h3>
+      <p>Grade 452×452 células (~12,5 px). Substitui brute-force O(n²) por lookup de entidades próximas — colisões rápidas.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--purple);margin-bottom:.5rem">♻️ Particle Pool</h3>
+      <p>Pool de 250 partículas reutilizáveis. Sem alocação dinâmica em runtime — zero fragmentação, zero GC pause.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--purple);margin-bottom:.5rem">🖼️ Supersampling</h3>
+      <p>Render interno 2560×1440 (2×), downscale bilinear para 1280×720. SSAA via RenderTexture, sem lib externa.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--cyan);margin-bottom:.5rem">🎨 Pipeline Procedural</h3>
+      <p>Sprites desenhados proceduralmente como fallback automático. Zero crash com assets faltando.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--cyan);margin-bottom:.5rem">💾 Save Retrocompatível</h3>
+      <p>Save em .txt simples. Header versionado (AUDIO2) garante compatibilidade entre versões sem migração.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--cyan);margin-bottom:.5rem">🎵 Dual-track Audio</h3>
+      <p>Crossfade de 12 s entre trilhas. Volumes independentes por canal. SFX contextuais por evento.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 16 SHADERS & IA -->
+<div class="slide" data-part="2">
+  <span class="tag tag-purple">Shaders &amp; IA</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Detalhes Avançados</h2>
+  <div class="grid2" style="max-width:960px">
+    <div>
+      <div class="card" style="margin-bottom:.8rem;border-color:rgba(199,125,255,.3)">
+        <h3 style="color:var(--purple);margin-bottom:.5rem">✨ Shaders GLSL</h3>
+        <ul>
+          <li><code style="color:var(--cyan)">biological.fs</code> — distorção orgânica no gameplay</li>
+          <li><code style="color:var(--cyan)">low_hp_vignette.fs</code> — vinheta quando HP baixo</li>
+          <li>Aplicados só no gameplay (não no menu)</li>
+          <li>Screen shake via câmera lerp em impactos</li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:rgba(0,229,255,.3)">
+        <h3 style="color:var(--cyan);margin-bottom:.5rem">📷 Colisão de Mapa</h3>
+        <ul>
+          <li>Mapa corpo humano: 5657×5657 px</li>
+          <li>Máscara gerada por <code style="color:var(--yellow)">bake_collision_mask.py</code></li>
+          <li>Grid espacial → lookup O(1) por célula</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="border-color:rgba(0,255,136,.3)">
+      <h3 style="color:var(--green);margin-bottom:.5rem">🤖 IA dos Inimigos — 5 tipos</h3>
+      <table style="font-size:.75rem">
+        <tr><th>Tipo</th><th>Comportamento</th></tr>
+        <tr><td>MELEE</td><td>Perseguição com flanking (flankSign ±1)</td></tr>
+        <tr><td>RANGED</td><td>Mantém distância, dispara com chargeTimer</td></tr>
+        <tr><td>SWARM</td><td>Bando, recua com HP abaixo do threshold</td></tr>
+        <tr><td>ELITE</td><td>Lento, resistente, aplica efeitos de status</td></tr>
+        <tr><td>BOSS</td><td>3 fases (aiPhase 0/1/2), summon, Núcleos</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 17 CONFIG MÍNIMA -->
+<div class="slide" data-part="2">
+  <span class="tag tag-purple">Requisitos de Hardware</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Config. Mínima vs Recomendada</h2>
+  <div class="grid2" style="max-width:900px">
+    <div class="card" style="border-color:rgba(255,224,102,.3)">
+      <h3 style="color:var(--yellow);margin-bottom:.8rem">⚠️ Configuração Mínima</h3>
+      <table>
+        <tr><th>Componente</th><th>Mínimo</th></tr>
+        <tr><td>CPU</td><td>Dual-core 1,5 GHz</td></tr>
+        <tr><td>RAM</td><td>512 MB livres</td></tr>
+        <tr><td>GPU</td><td>Integrada (OpenGL 3.3)</td></tr>
+        <tr><td>Armazenamento</td><td>~50 MB</td></tr>
+        <tr><td>Resolução</td><td>800×600 (redimensionável)</td></tr>
+        <tr><td>OS</td><td>Win 7+, Ubuntu 18+, macOS 10.14+</td></tr>
+      </table>
+    </div>
+    <div class="card" style="border-color:rgba(0,255,136,.3)">
+      <h3 style="color:var(--green);margin-bottom:.8rem">✅ Recomendado</h3>
+      <table>
+        <tr><th>Componente</th><th>Recomendado</th></tr>
+        <tr><td>CPU</td><td>Quad-core 2,0 GHz+</td></tr>
+        <tr><td>RAM</td><td>1 GB+</td></tr>
+        <tr><td>GPU</td><td>Dedicada 512 MB VRAM</td></tr>
+        <tr><td>Armazenamento</td><td>~100 MB (com sprites PNG)</td></tr>
+        <tr><td>Resolução</td><td>1280×720 ou superior</td></tr>
+        <tr><td>OS</td><td>Versões recentes</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="card" style="margin-top:1rem;max-width:900px;border-color:rgba(0,229,255,.2)">
+    <p style="text-align:center;font-size:.82rem;color:var(--cyan)">
+      📌 Funciona em laboratório sem internet &nbsp;|&nbsp;
+      Custo de licença: <strong class="accent-green">R$ 0,00</strong> &nbsp;|&nbsp;
+      Setup por máquina: <strong>~10 min</strong>
+    </p>
+  </div>
+</div>
+
+<!-- 18 CARGA -->
+<div class="slide" data-part="2">
+  <span class="tag tag-purple">Carga Computacional</span>
+  <h2 style="text-align:center;margin-bottom:1rem">O que roda ao mesmo tempo</h2>
+  <div class="perf-grid" style="max-width:900px">
+    <div class="perf-item"><div class="perf-key">FPS Alvo</div><div class="perf-val">60 FPS</div></div>
+    <div class="perf-item"><div class="perf-key">Render Interno</div><div class="perf-val">2560×1440</div></div>
+    <div class="perf-item"><div class="perf-key">Saída de Vídeo</div><div class="perf-val">1280×720</div></div>
+    <div class="perf-item"><div class="perf-key">Inimigos Simultâneos</div><div class="perf-val accent-red">60</div></div>
+    <div class="perf-item"><div class="perf-key">Projéteis</div><div class="perf-val accent-yellow">100</div></div>
+    <div class="perf-item"><div class="perf-key">Partículas (pool)</div><div class="perf-val accent-cyan">250</div></div>
+    <div class="perf-item"><div class="perf-key">Textos de Dano</div><div class="perf-val">32</div></div>
+    <div class="perf-item"><div class="perf-key">Power-ups no Mapa</div><div class="perf-val">20</div></div>
+    <div class="perf-item"><div class="perf-key">Células da Grade</div><div class="perf-val">452×452</div></div>
+  </div>
+  <div class="card" style="margin-top:1rem;max-width:900px;border-color:rgba(199,125,255,.25)">
+    <p style="text-align:center;font-size:.82rem;color:var(--purple)">
+      Binário: <strong>~2,7 MB</strong> &nbsp;|&nbsp;
+      Compilação incremental: <strong>&lt;3 s</strong> &nbsp;|&nbsp;
+      Carregamento: <strong>&lt;5 s</strong>
+    </p>
+  </div>
+</div>
+
+<!-- 19 BUILD & TESTES -->
+<div class="slide" data-part="2">
+  <span class="tag tag-purple">Build &amp; Testes</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Cross-platform e Testado</h2>
+  <div class="grid2" style="max-width:960px">
+    <div class="card">
+      <h3 style="color:var(--cyan);margin-bottom:.6rem">🏗️ Build por Plataforma</h3>
+      <table>
+        <tr><th>Plataforma</th><th>Comando</th></tr>
+        <tr><td>🪟 Windows</td><td><code style="color:var(--yellow)">compilar.bat</code></td></tr>
+        <tr><td>🐧 Linux</td><td><code style="color:var(--yellow)">make && ./rpg_game</code></td></tr>
+        <tr><td>🍎 macOS</td><td><code style="color:var(--yellow)">./build.sh</code></td></tr>
+      </table>
+      <p style="margin-top:.6rem;font-size:.75rem;color:var(--dim)">Dependência única: Raylib (GCC/MinGW)</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green);margin-bottom:.6rem">🧪 Suite de Testes (5 arquivos, C puro)</h3>
+      <table>
+        <tr><th>Arquivo</th><th>Cobre</th></tr>
+        <tr><td>test_rifle_range.c</td><td>Alcance e velocidade do projétil</td></tr>
+        <tr><td>test_virus_waves.c</td><td>Composição e escala de ondas M2</td></tr>
+        <tr><td>test_map_body.c</td><td>Colisão do mapa do corpo</td></tr>
+        <tr><td>test_core_spawns.c</td><td>Posicionamento dos 4 Núcleos</td></tr>
+        <tr><td>test_cosmetics.c</td><td>Cosméticos (8 slots)</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 7 DIVISOR P2 -->
+<div class="slide" data-part="3">
+  <div class="part-divider">
+    <div class="part-icon">🎮</div>
+    <div class="part-num">Parte 3 de 3</div>
+    <div class="part-title accent-cyan">Jogabilidade</div>
+    <p class="part-desc">O loop de jogo, os mundos, os inimigos, o arsenal e o sistema educativo</p>
+  </div>
+</div>
+
+<!-- 8 LOOP -->
+<div class="slide" data-part="3">
+  <span class="tag tag-cyan">Loop de Jogo</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Como o jogo funciona</h2>
+  <div style="display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;justify-content:center;max-width:1000px">
+    <div class="card" style="text-align:center;min-width:120px"><div style="font-size:1.6rem">📋</div><p style="font-size:.8rem;margin-top:.3rem">Tutorial<br><span style="color:var(--dim);font-size:.7rem">Seringa</span></p></div>
+    <div style="color:var(--dim);font-size:1.4rem">→</div>
+    <div class="card" style="text-align:center;min-width:120px"><div style="font-size:1.6rem">🦠</div><p style="font-size:.8rem;margin-top:.3rem">Mundo 1<br><span style="color:var(--dim);font-size:.7rem">Ondas 1–5</span></p></div>
+    <div style="color:var(--dim);font-size:1.4rem">→</div>
+    <div class="card" style="text-align:center;min-width:120px;border-color:rgba(0,229,255,.3)"><div style="font-size:1.6rem">❓</div><p style="font-size:.8rem;margin-top:.3rem">Quiz<br><span style="color:var(--dim);font-size:.7rem">+Pontos SUS</span></p></div>
+    <div style="color:var(--dim);font-size:1.4rem">→</div>
+    <div class="card" style="text-align:center;min-width:120px"><div style="font-size:1.6rem">🎬</div><p style="font-size:.8rem;margin-top:.3rem">Cutscene<br><span style="color:var(--dim);font-size:.7rem">Transição</span></p></div>
+    <div style="color:var(--dim);font-size:1.4rem">→</div>
+    <div class="card" style="text-align:center;min-width:120px"><div style="font-size:1.6rem">🧬</div><p style="font-size:.8rem;margin-top:.3rem">Mundo 2<br><span style="color:var(--dim);font-size:.7rem">Ondas 1–5</span></p></div>
+    <div style="color:var(--dim);font-size:1.4rem">→</div>
+    <div class="card" style="text-align:center;min-width:120px;border-color:rgba(0,255,136,.3)"><div style="font-size:1.6rem">🏆</div><p style="font-size:.8rem;margin-top:.3rem">Vitória<br><span style="color:var(--dim);font-size:.7rem">Paciente sobreviveu</span></p></div>
+  </div>
+  <div class="card" style="margin-top:1.2rem;max-width:700px;border-color:rgba(0,229,255,.2)">
+    <p style="text-align:center;color:var(--cyan)">
+      Inimigos por onda: <code style="color:var(--yellow)">8 + onda × 6</code> (máx. 60) &nbsp;|&nbsp; Onda 5 = 1 chefe + 12 minions
+    </p>
+  </div>
+</div>
+
+<!-- 9 INIMIGOS -->
+<div class="slide" data-part="3">
+  <span class="tag tag-cyan">Inimigos</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Doenças Reais, Mecânicas Reais</h2>
+  <div class="grid2" style="max-width:1000px">
+    <div>
+      <h3 style="color:var(--green);margin-bottom:.6rem">🌍 Mundo 1 — Bactérias</h3>
+      <table>
+        <tr><th>Patógeno</th><th>Comportamento</th></tr>
+        <tr><td>🟢 Coco</td><td>Melee — perseguição com flanqueamento</td></tr>
+        <tr><td>🟡 Bacilo</td><td>Ranged — mantém distância, dispara ácido</td></tr>
+        <tr><td>👑 KPC (boss)</td><td>3 fases + Núcleos de Infecção + escolta</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="color:var(--cyan);margin-bottom:.6rem">🧬 Mundo 2 — Vírus (todos com capsídeo)</h3>
+      <table>
+        <tr><th>Patógeno</th><th>Comportamento</th></tr>
+        <tr><td>🔴 Rinovírus</td><td>Swarm — veloz, frágil, recua com HP baixo</td></tr>
+        <tr><td>🦟 Dengue</td><td>Melee — pressão constante, capsídeo como casca</td></tr>
+        <tr><td>💨 Influenza</td><td>Ranged — dispara esporos virais</td></tr>
+        <tr><td>🟣 Sarampo elite</td><td>Lento, resistente, aplica lentidão</td></tr>
+        <tr><td>👑 Coronavírus</td><td>3 fases IA, invoca 12 minions a cada 6 s</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="card" style="margin-top:1rem;max-width:1000px;border-color:rgba(199,125,255,.25)">
+    <p style="color:var(--purple);font-size:.82rem;text-align:center">
+      🛡️ <strong>Capsídeo Viral</strong> — dano vai ao escudo primeiro. Lâmina Bioelétrica causa ×3 contra o capsídeo.
+    </p>
+  </div>
+</div>
+
+<!-- 10 ARSENAL -->
+<div class="slide" data-part="3">
+  <span class="tag tag-cyan">Arsenal</span>
+  <h2 style="text-align:center;margin-bottom:1rem">4 Slots → 8 Formas &nbsp;·&nbsp; 30 abates = evolução</h2>
+  <div class="grid4" style="max-width:1080px">
+    <div class="weapon-card">
+      <div class="weapon-slot">Slot 1 — Corpo a Corpo</div>
+      <div class="weapon-name">🔪 Espada-Seringa</div>
+      <p style="font-size:.72rem;color:var(--dim)">Combo 360° · raio 140 px · AoE</p>
+      <div class="weapon-evo accent-purple">Lâmina Bioelétrica<br><span style="color:var(--dim);font-size:.68rem">×3 dano ao capsídeo</span></div>
+    </div>
+    <div class="weapon-card">
+      <div class="weapon-slot">Slot 2 — Rifle</div>
+      <div class="weapon-name">🦠 Bacteriófago / 💉 Vacina</div>
+      <p style="font-size:.72rem;color:var(--dim)">+60% vs bactérias (M1) / vírus (M2)</p>
+      <div class="weapon-evo accent-purple">Rifle Vetorial Replicante<br><span style="color:var(--dim);font-size:.68rem">duplica no 1º impacto</span></div>
+    </div>
+    <div class="weapon-card">
+      <div class="weapon-slot">Slot 3 — Controle</div>
+      <div class="weapon-name">💣 Desestabilizador RNA</div>
+      <p style="font-size:.72rem;color:var(--dim)">Planta minas · Mouse2 detona tudo</p>
+      <div class="weapon-evo accent-purple">Lança-Minas de RNA<br><span style="color:var(--dim);font-size:.68rem">arremessa à distância</span></div>
+    </div>
+    <div class="weapon-card">
+      <div class="weapon-slot">Slot 4 — Artilharia</div>
+      <div class="weapon-name">🌟 BFG Imunológico</div>
+      <p style="font-size:.72rem;color:var(--dim)">Projétil atravessa todos inimigos</p>
+      <div class="weapon-evo accent-purple">BFG Ômega<br><span style="color:var(--dim);font-size:.68rem">perfura E explode no fim</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 11 QUIZ -->
+<div class="slide" data-part="3">
+  <span class="tag tag-cyan">Sistema Educativo</span>
+  <h2 style="text-align:center;margin-bottom:1rem">Quiz + Pontos do SUS</h2>
+  <div class="grid2" style="max-width:960px">
+    <div class="card">
+      <h3 style="margin-bottom:.6rem">🧠 Quiz da Vigilância</h3>
+      <ul>
+        <li>48 perguntas baseadas em OMS / MS / SES-DF</li>
+        <li>Embaralhamento Fisher-Yates a cada rodada</li>
+        <li>Evita repetir as últimas 14 perguntas da sessão</li>
+        <li>Cada resposta traz explicação educativa</li>
+        <li>Aparece entre cada onda</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:.6rem">🏥 Pontos do SUS</h3>
+      <p style="margin-bottom:.6rem;color:var(--dim)">Acertar rende pontos gastos em melhorias:</p>
+      <table>
+        <tr><th>Melhoria</th><th>Custo</th></tr>
+        <tr><td>❤️ Vida Máxima +100</td><td>50 pts</td></tr>
+        <tr><td>⚡ Velocidade +15%</td><td>50 pts</td></tr>
+        <tr><td>⚔️ Dano +10</td><td>50 pts</td></tr>
+      </table>
+      <p style="margin-top:.6rem;font-size:.75rem;color:var(--green)">→ Aprender bem = personagem mais forte</p>
+    </div>
+  </div>
+  <div class="grid3" style="max-width:960px;margin-top:1rem">
+    <div class="card" style="text-align:center"><p style="font-size:.8rem">🧫 KPC</p><p style="font-size:.72rem;color:var(--dim)">Resistência antimicrobiana</p></div>
+    <div class="card" style="text-align:center"><p style="font-size:.8rem">🦟 Dengue</p><p style="font-size:.72rem;color:var(--dim)">Aedes, criadouros, DF</p></div>
+    <div class="card" style="text-align:center"><p style="font-size:.8rem">💉 Sarampo / Influenza</p><p style="font-size:.72rem;color:var(--dim)">Vacinação, imunidade coletiva</p></div>
+  </div>
+</div>
+
+<!-- 12 CONTROLES -->
+<div class="slide" data-part="3">
+  <span class="tag tag-cyan">Controles</span>
+  <h2 style="text-align:center;margin-bottom:1.2rem">Como jogar</h2>
+  <div class="grid2" style="max-width:760px">
+    <div class="card">
+      <div class="ctrl-row"><span class="ctrl-action">Mover</span><span class="ctrl-keys"><kbd>WASD</kbd> ou <kbd>↑↓←→</kbd></span></div>
+      <div class="ctrl-row"><span class="ctrl-action">Atacar</span><span class="ctrl-keys"><kbd>Clique Esq.</kbd> ou <kbd>Espaço</kbd></span></div>
+      <div class="ctrl-row"><span class="ctrl-action">Trocar / Evoluir Arma</span><span class="ctrl-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span></div>
+      <div class="ctrl-row"><span class="ctrl-action">Detonar Minas</span><span class="ctrl-keys"><kbd>Clique Dir.</kbd></span></div>
+    </div>
+    <div class="card">
+      <div class="ctrl-row"><span class="ctrl-action">Usar Poção</span><span class="ctrl-keys"><kbd>E</kbd></span></div>
+      <div class="ctrl-row"><span class="ctrl-action">Avançar Diálogo</span><span class="ctrl-keys"><kbd>Q</kbd> ou <kbd>Espaço</kbd></span></div>
+      <div class="ctrl-row"><span class="ctrl-action">Pausar</span><span class="ctrl-keys"><kbd>Esc</kbd></span></div>
+      <div class="ctrl-row"><span class="ctrl-action">Salvar / Carregar</span><span class="ctrl-keys"><kbd>F5</kbd> / <kbd>F9</kbd></span></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:1rem;max-width:760px;border-color:rgba(0,229,255,.2)">
+    <p style="text-align:center;font-size:.82rem;color:var(--dim)">
+      🎯 Tutorial guiado na seringa — jogador aprende tudo antes da primeira onda, <span class="accent-cyan">sem leitura de manual</span>
+    </p>
+  </div>
+</div>
+
+<!-- 20 CONCLUSÃO -->
+<div class="slide" data-part="0">
+  <span class="tag tag-green">Conclusão</span>
+  <h2 style="text-align:center;margin-bottom:1.5rem">Disease's Doomsday — em síntese</h2>
+  <div class="grid3" style="max-width:900px;margin-bottom:1.5rem">
+    <div class="card" style="text-align:center;border-color:rgba(0,255,136,.3)">
+      <div class="summary-ring" style="border-color:var(--green)">📋</div>
+      <h3 class="accent-green">Elicitação</h3>
+      <p>Problema real (dengue / KPC no DF) → requisitos claros → roadmap com WebAssembly e ranking planejados</p>
+    </div>
+    <div class="card" style="text-align:center;border-color:rgba(0,229,255,.3)">
+      <div class="summary-ring" style="border-color:var(--cyan)">🎮</div>
+      <h3 class="accent-cyan">Jogabilidade</h3>
+      <p>2 mundos · 12 inimigos · 8 armas · 10 power-ups · quiz 48 perguntas · Pontos do SUS</p>
+    </div>
+    <div class="card" style="text-align:center;border-color:rgba(199,125,255,.3)">
+      <div class="summary-ring" style="border-color:var(--purple)">⚙️</div>
+      <h3 class="accent-purple">Código</h3>
+      <p>C11 + Raylib · spatial grid · particle pool · SSAA · FSM 20 estados · 60 FPS em hardware mínimo</p>
+    </div>
+  </div>
+  <div class="card" style="max-width:900px;border-color:rgba(0,255,136,.25)">
+    <p style="text-align:center;font-style:italic;color:var(--green);font-size:1rem">
+      "O paciente está aguardando. O anticorpo está a postos. Boa sorte, Doutor."
+    </p>
+  </div>
+  <p style="margin-top:1rem;color:var(--dim);font-size:.78rem;text-align:center">
+    Filipi Ramos · Thiago Vinícius Brito · Mateus Gomes — Projeto Integrador 2026
+  </p>
+</div>
+
+</div><!-- /slides -->
+
+<div id="nav">
+  <div id="part-pills">
+    <span class="part-pill pill-1 active" onclick="goToSlide(2)">① Elicitação</span>
+    <span class="part-pill pill-2" onclick="goToSlide(7)">② Código</span>
+    <span class="part-pill pill-3" onclick="goToSlide(14)">③ Jogabilidade</span>
+  </div>
+  <button id="btn-prev" onclick="prevSlide()" disabled>← Anterior</button>
+  <span id="slide-counter">1 / 21</span>
+  <button id="btn-next" onclick="nextSlide()">Próximo →</button>
+</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const TOTAL = slides.length;
+let current = 0;
+const PART_MAP = { 0:'Capa', 1:'Parte 1 — Elicitação', 2:'Parte 2 — Código', 3:'Parte 3 — Jogabilidade' };
+
+function goToSlide(n) {
+  if (n === current) return;
+  slides[current].classList.remove('active');
+  slides[current].classList.add('exit');
+  const prev = current;
+  current = Math.max(0, Math.min(TOTAL - 1, n));
+  slides[current].classList.add('active');
+  setTimeout(() => slides[prev].classList.remove('exit'), 460);
+  update();
+}
+function nextSlide() { goToSlide(current + 1); }
+function prevSlide() { goToSlide(current - 1); }
+function update() {
+  document.getElementById('btn-prev').disabled = current === 0;
+  document.getElementById('btn-next').disabled = current === TOTAL - 1;
+  document.getElementById('slide-counter').textContent = (current + 1) + ' / ' + TOTAL;
+  document.getElementById('progress-bar').style.width = (current / (TOTAL - 1) * 100) + '%';
+  const part = parseInt(slides[current].dataset.part || '0');
+  document.getElementById('part-indicator').textContent = PART_MAP[part] || '';
+  document.querySelectorAll('.part-pill').forEach((p, i) => {
+    p.classList.toggle('active', part === i + 1);
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); prevSlide(); }
+});
+update();
+</script>
+</body>
+</html>
