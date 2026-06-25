@@ -2,7 +2,7 @@
 
 > **Disciplina:** Projeto Integrador
 > **Data:** Junho de 2026
-> **Versão:** 2.0
+> **Versão:** 3.0 — Jogo Concluído
 
 ---
 
@@ -10,22 +10,24 @@
 
 **Disease's Doomsday** é um jogo de ação 2D _top-down_ em C + Raylib onde o jogador controla um Anticorpo dentro do corpo humano, eliminando patógenos onda após onda enquanto aprende sobre vigilância epidemiológica e saúde pública.
 
-O recorte da problemática é o **Distrito Federal** — onde os surtos anuais de dengue e a resistência antimicrobiana em hospitais de referência tornam o tema urgente — generalizando-se para o Brasil.
+O palco central é o **Distrito Federal** — onde os surtos anuais de dengue e a resistência antimicrobiana em hospitais de referência tornam o tema urgente e reconhecível. O jogo é pensado para uso em **aulas de Ciências e Biologia nas escolas do DF**, funcionando como ferramenta pedagógica interativa alinhada à BNCC.
 
-| Métrica                | Valor                          |
-| ---------------------- | ------------------------------ |
-| Resolução              | 1280 × 720 px                  |
-| FPS alvo               | 60 (supersampling 2×)          |
-| Tamanho do mapa        | 5657 × 5657 px                 |
-| Mundos                 | 2 (Bactérias → Vírus)          |
-| Ondas totais           | 10 (5 por mundo) + 2 chefes    |
-| Tipos de inimigo       | 12                             |
-| Armas                  | 8 formas (4 slots-base + 4 evoluções) |
-| Power-ups              | 10 tipos                       |
-| Perguntas no quiz      | 48                             |
-| Telas do jogo          | 20 estados (enum `GameScreen`) |
-| Slots de save          | 3 manuais + auto-save          |
-| Dificuldades           | 3 (Fácil / Médio / Difícil)    |
+| Métrica | Valor |
+| ------- | ----- |
+| Resolução | 1280 × 720 px (supersampling 2× em 2560 × 1440) |
+| FPS alvo | 60 |
+| Tamanho do mapa | 5657 × 5657 px (corpo humano) |
+| Mundos | 2 (Bactérias → Vírus) |
+| Ondas totais | 10 (5 por mundo) + 2 chefes |
+| Tipos de inimigo ativos | 7 (Coco, Bacilo, KPC · Rinovírus, Dengue, Influenza, Sarampo, Coronavírus) |
+| Armas | 8 formas (4 slots-base + 4 evoluções aos 30 abates/slot) |
+| Power-ups | 10 tipos |
+| Perguntas no quiz | 48 |
+| Telas do jogo | 20 estados (enum `GameScreen`) |
+| Slots de save | 3 manuais + quicksave F5/F9 |
+| Dificuldades | 3 (Fácil / Médio / Difícil) |
+| Testes automatizados | 5 suites em C puro |
+| Status | **v1.0 Concluído** |
 
 ---
 
