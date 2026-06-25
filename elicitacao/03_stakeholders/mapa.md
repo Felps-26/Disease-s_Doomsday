@@ -3,19 +3,24 @@
 ```
 Disease's Doomsday
        │
-       ├─── ACADEMICO
-       │         ├─ Equipe de Desenvolvimento (alunos)
-       │         ├─ Professor da Disciplina (orientador)
+       ├─── ACADÊMICO
+       │         ├─ Equipe de Desenvolvimento (Filipi, Thiago, Mateus)
+       │         ├─ Professor da Disciplina — Projeto Integrador (orientador/avaliador)
+       │         ├─ Professor de Publicidade (avaliador de comunicação e design)
        │         ├─ Coordenador do Curso
        │         └─ Instituição de Ensino
        │
-       ├─── SAUDE
-       │         ├─ Representante do Setor de Saúde (banca)
-       │         ├─ Secretaria de Saúde do DF (potencial parceiro)
-       │         └─ Profissionais de Saúde Pública
+       ├─── SAÚDE E EDUCAÇÃO
+       │         ├─ Representante do Setor de Saúde (banca avaliadora)
+       │         ├─ Secretaria de Saúde do DF — SES-DF (parceiro potencial)
+       │         ├─ Secretaria de Educação do DF — SEDF (parceiro potencial)
+       │         ├─ Profissionais de Saúde Pública
+       │         └─ Professores de Ciências / Biologia das escolas do DF
        │
-       └─── USUARIOS
-                 ├─ Estudantes de Ensino Médio / Superior
-                 ├─ Professores e Educadores
-                 └─ Público Geral
+       └─── USUÁRIOS FINAIS
+                 ├─ Estudantes do Ensino Médio do DF (público prioritário)
+                 ├─ Estudantes do Ensino Superior (saúde, educação, computação)
+                 └─ Público geral interessado em saúde
 ```
+
+> Ver [Detalhamento dos Stakeholders](detalhamento.md) para descrição de papel, interesse e nível de influência de cada grupo.

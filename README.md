@@ -227,16 +227,18 @@ Escola do DF
 
 O jogo é projetado para uso como **ferramenta pedagógica** nas aulas de Ciências e Biologia das escolas do Distrito Federal, alinhado com a BNCC e com as campanhas de saúde da SES-DF.
 
-| Tema Abordado | Mecânica que Ensina | Alinhamento |
-| ------------- | ------------------- | ----------- |
-| **Dengue / Arboviroses no DF** | Inimigo Dengue (Melee com capsídeo) | SES-DF — campanhas de eliminação de criadouros |
-| **Resistência Antimicrobiana** | Boss KPC em 3 fases | OMS — 10 maiores ameaças globais à saúde |
+> **Para escolas:** gratuito · open-source · offline · sem cadastro · sem assinatura · roda em qualquer PC com OpenGL 3.3 e 512 MB de RAM
+
+| Tema Abordado | Mecânica que Ensina | Alinhamento BNCC / SUS |
+| ------------- | ------------------- | ---------------------- |
+| **Dengue / Arboviroses no DF** | Inimigo Dengue (Melee com capsídeo) | EM13CNT207 — prevenção de doenças e promoção da saúde coletiva |
+| **Resistência Antimicrobiana** | Boss KPC em 3 fases | EM13CNT303 — uso responsável de medicamentos; OMS top 10 ameaças |
 | **Gripe / Influenza** | Inimigo Ranged com projéteis virais | PNI — Programa Nacional de Imunizações |
-| **Coronavírus / SARS-CoV-2** | Boss Coronavírus (fases + isolamento) | Protocolos de isolamento e vacinação |
-| **Sarampo / Vacinação** | Inimigo Elite com alta resistência | Importância da cobertura vacinal em massa |
-| **Bacteriófagos** | Rifle de Bacteriófago (bônus vs. bactérias) | Microbiologia — alternativa terapêutica real |
-| **Sistema Imune** | Anticorpos, citocinas, capsídeo viral | Biologia celular e imunologia básica |
-| **EPI / Distanciamento Social** | Power-ups Máscara e Distanciamento | ANVISA / SUS — medidas não-farmacológicas |
+| **Coronavírus / SARS-CoV-2** | Boss Coronavírus (fases + isolamento) | EM13CNT207 — transmissão, isolamento e vacinação |
+| **Sarampo / Vacinação** | Inimigo Elite com alta resistência | EM13CNT207 — importância da cobertura vacinal em massa |
+| **Bacteriófagos** | Rifle de Bacteriófago (bônus vs. bactérias) | EM13CNT303 — biotecnologia e alternativas terapêuticas |
+| **Sistema Imune** | Anticorpos, citocinas, capsídeo viral | EM13CNT301 — imunologia básica e biologia celular |
+| **EPI / Distanciamento Social** | Power-ups Máscara e Distanciamento | ANVISA / SUS — medidas não-farmacológicas de controle epidemiológico |
 
 ### 🧠 Quiz da Vigilância Epidemiológica
 
@@ -331,6 +333,8 @@ Disease's_Doomsday/
 ---
 
 ## 🚀 COMO COMPILAR E RODAR
+
+> **Pré-requisitos rápidos:** Git · GCC/MinGW (Windows) ou GCC (Linux/macOS) · Raylib 5.x
 
 ### 📥 Passo 0 — Baixar o Código-Fonte
 

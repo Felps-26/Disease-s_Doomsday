@@ -2,37 +2,43 @@
 
 ## Saúde Pública e Epidemiologia
 
-- OMS — _Antimicrobial Resistance: Global Report on Surveillance_ (2023)
-- Ministério da Saúde do Brasil — _Boletim Epidemiológico de Dengue_ (2025)
-- SES-DF — _Informe Epidemiológico Semanal_ (2025)
-- ANVISA — _Prevenção e Controle de Infecções em Serviços de Saúde_ (2023)
-- Ministério da Saúde — _Princípios e Diretrizes do SUS_ (Lei 8080/1990)
-- Ministério da Saúde — _Estratégia de Saúde da Família (ESF)_ — Documentação oficial
-- RENAME — _Relação Nacional de Medicamentos Essenciais_ (2022)
-- RENASES — _Relação Nacional de Ações e Serviços de Saúde_ (2022)
+- OMS — _Antimicrobial Resistance: Global Report on Surveillance_, World Health Organization, 2023. Disponível em: https://www.who.int/publications/i/item/9789241564748
+- OMS — _Ten threats to global health in 2019_ (inclui resistência antimicrobiana). Disponível em: https://www.who.int/news-room/spotlight/ten-threats-to-global-health-in-2019
+- Ministério da Saúde do Brasil — _Boletim Epidemiológico de Dengue_, Secretaria de Vigilância em Saúde, 2024–2025. Disponível em: https://www.gov.br/saude/pt-br/centrais-de-conteudo/publicacoes/boletins/epidemiologicos
+- SES-DF — _Informe Epidemiológico Semanal — Dengue, Chikungunya e Zika_, Secretaria de Estado de Saúde do Distrito Federal, 2024–2025. Disponível em: https://www.saude.df.gov.br/vigilancia-epidemiologica
+- SES-DF — _Decreto de Emergência em Saúde Pública — Dengue_, Distrito Federal, fevereiro de 2024
+- ANVISA — _Medidas de Prevenção e Controle de Infecções em Serviços de Saúde_, Agência Nacional de Vigilância Sanitária, 2023. Disponível em: https://www.gov.br/anvisa/pt-br
+- Ministério da Saúde — _Lei Orgânica da Saúde_ nº 8.080/1990 — Princípios e Diretrizes do SUS
+- Ministério da Saúde — _Estratégia de Saúde da Família (ESF)_. Disponível em: https://www.gov.br/saude/pt-br/composicao/saps/esf
+- Fiocruz — _Resistência antimicrobiana: o que é e por que nos preocupar_. Disponível em: https://www.fiocruz.br/ioc/cgi/cgilua.exe/sys/start.htm?infoid=1137&sid=32
 
-## Educação e Jogos Sérios
+## Educação, BNCC e Jogos Sérios
 
-- Prensky, M. — _Digital Game-Based Learning_ (2001)
-- Gee, J.P. — _What Video Games Have to Teach Us About Learning and Literacy_ (2003)
-- Estudos sobre retenção de conteúdo em _serious games_: aumento de até 40% vs. métodos tradicionais
+- MEC — _Base Nacional Comum Curricular (BNCC) — Ensino Médio_, Ministério da Educação, 2018. Competências referenciadas: EM13CNT207, EM13CNT301, EM13CNT303. Disponível em: http://basenacionalcomum.mec.gov.br/
+- Prensky, M. — _Digital Game-Based Learning_, McGraw-Hill, 2001. ISBN: 9780071454001
+- Gee, J.P. — _What Video Games Have to Teach Us About Learning and Literacy_, Palgrave Macmillan, 2003. ISBN: 9781403984586
+- Wouters, P. et al. — _A meta-analysis of the cognitive and motivational effects of serious games_, Journal of Educational Psychology, 105(2), 249–265, 2013. DOI: 10.1037/a0031311 _(base da afirmação de retenção de até 40% superior a métodos tradicionais)_
+- Savi, R.; Ulbricht, V.R. — _Jogos Digitais Educacionais: Benefícios e Desafios_, RENOTE - Revista Novas Tecnologias na Educação, v. 6, n. 2, 2008
 
 ## Tecnologia
 
-- Raylib — https://www.raylib.com/ (licença zlib — open-source)
-- miniaudio — áudio embutido no Raylib (licença MIT)
-- GCC / MinGW — compilador C para Windows (licença GPL)
+- Raylib — Biblioteca gráfica open-source (licença zlib). Disponível em: https://www.raylib.com/
+- miniaudio — Biblioteca de áudio embutida no Raylib (licença MIT). Disponível em: https://miniaud.io/
+- GCC / MinGW — Compilador C para Windows (licença GPL). Disponível em: https://www.mingw-w64.org/
+
+---
 
 ## Conteúdo Científico Mapeado nas Mecânicas
 
-| Mecânica | Base científica |
-| -------- | --------------- |
-| Capsídeo viral (escudo) | Estrutura proteica que envolve o genoma viral; inibidores de capsídeo são alvo terapêutico real |
-| Bacteriófago (Rifle Mundo 1) | Vírus que infecta especificamente bactérias; pesquisados como alternativa a antibióticos |
-| Interferência de RNA (Desestabilizador de RNA / minas) | Mecanismo de silenciamento gênico usado em terapias antivirais |
-| Citocina (Regen) | Proteínas de sinalização imune; citocinas anti-inflamatórias reduzem dano tecidual |
-| Máscara Hospitalar (−40% dano) | EPIs reduzem transmissão de agentes infecciosos por gotículas e aerossóis |
-| Distanciamento Social (aura) | Medida não-farmacológica que reduz R₀ (número básico de reprodução) |
-| Núcleos de Infecção (boss) | Analogia ao RNA viral e às proteínas estruturais do coronavírus dentro da célula hospedeira |
-| Superbactéria KPC | Klebsiella pneumoniae carbapenemase — bactéria multirresistente; prioridade OMS |
-| Lâmina Bioelétrica (anti-capsídeo) | Potencial de membrana celular usado em pesquisa de terapias anti-retrovirais |
+| Mecânica | Base científica | Fonte de referência |
+| -------- | --------------- | ------------------- |
+| Capsídeo viral (escudo) | Estrutura proteica que envolve o genoma viral; alvo terapêutico real | OMS; literatura de virologia básica |
+| Bacteriófago (Rifle Mundo 1) | Vírus que infecta especificamente bactérias; pesquisados como alternativa a antibióticos | Fiocruz; ANVISA |
+| Interferência de RNA (Minas) | Mecanismo de silenciamento gênico usado em terapias antivirais | Literatura de biologia molecular |
+| Citocina (Regen) | Proteínas de sinalização imune; citocinas anti-inflamatórias reduzem dano tecidual | Literatura de imunologia; Fiocruz |
+| Máscara Hospitalar (−40% dano) | EPIs reduzem transmissão de agentes infecciosos por gotículas e aerossóis | ANVISA — PCIH |
+| Distanciamento Social (aura) | Medida não-farmacológica que reduz R₀ (número básico de reprodução) | OMS; Ministério da Saúde |
+| Núcleos de Infecção (boss) | Analogia ao RNA viral e às proteínas estruturais do SARS-CoV-2 dentro da célula hospedeira | OMS — COVID-19 Technical Guidance |
+| Superbactéria KPC | _Klebsiella pneumoniae_ carbapenemase — bactéria multirresistente; prioridade crítica da OMS | OMS — Priority Pathogens List (2017) |
+| Lâmina Bioelétrica (anti-capsídeo) | Potencial de membrana celular e pesquisa de terapias antivirais baseadas em inibidores de capsídeo | Literatura de biotecnologia antiviral |
+| Dengue (inimigo Melee) | Transmissão vetorial pelo _Aedes aegypti_; requer contato com hospedeiro para replicar | SES-DF; MS — Boletim Dengue 2024 |

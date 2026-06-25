@@ -42,6 +42,6 @@ O palco central é o **Distrito Federal** — onde os surtos anuais de dengue e 
 | [05 — Custo Computacional](05_custo_computacional/) | Hardware · Build · Operacional · Cloud |
 | [06 — Plano de UX/UI](06_ux_ui/) | Design System · Paleta · Tipografia · Telas · HUD · Feedback |
 | [07 — Segurança da Informação](07_seguranca/) | Risco local · Risco servidor · Política de dados |
-| [08 — Product Management](08_product_management/) | Metodologia · Backlog · Definition of Done |
+| [08 — Product Management](08_product_management/) | Metodologia · Backlog · Definition of Done · Métricas de Sucesso · Limitações Conhecidas |
 | [09 — Referências](09_referencias/referencias.md) | Fontes e documentos base |
 | [10 — Catálogo de Mecânicas](10_catalogo_mecanicas/) | Inimigos · Armas · Power-ups |
