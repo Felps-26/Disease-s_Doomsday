@@ -70,6 +70,39 @@ O projeto une **entretenimento e aprendizagem ativa**, traduzindo conteúdos de 
 
 ---
 
+## 🗂️ ONDE O JOGO SE ENCAIXA
+
+**Disease's Doomsday** se posiciona na categoria dos ***serious games*** — jogos digitais desenvolvidos com objetivo primário de ensino, e não apenas de entretenimento. Dentro desse universo, ocupa um nicho específico: **jogo educativo de saúde pública para uso em ambiente escolar**, com foco no Ensino Médio do Distrito Federal.
+
+### Como se diferencia de outras ferramentas de ensino
+
+| Ferramenta | Limitação | O que o jogo oferece diferente |
+| ---------- | --------- | ------------------------------ |
+| Livro didático | Passivo, texto denso, sem feedback imediato | Aprendizagem ativa — o aluno age e vê as consequências |
+| Vídeo educativo | Sem interação, fácil dispersão | Engajamento contínuo — cada onda exige atenção e decisão |
+| Quiz online isolado | Sem contexto, sem narrativa | Quiz integrado à campanha — a pergunta faz sentido dentro do jogo |
+| Simulação científica | Interface técnica, difícil para adolescentes | Interface de jogo familiar — controles simples, curva suave |
+| Campanha de dengue (panfleto/palestra) | Alcance limitado, baixo engajamento jovem | Conteúdo da campanha dentro da mecânica — o aluno joga e aprende ao mesmo tempo |
+
+### Onde é usado
+
+```
+Escola do DF
+│
+├── Laboratório de informática ──► Sessão de 20–40 min (individual ou dupla)
+├── Aula de Ciências / Biologia ──► Ferramenta de fixação pós-conteúdo
+├── Semana de saúde escolar ──────► Atividade temática (dengue, vacinação)
+└── Uso doméstico ────────────────► Continuidade fora da escola (offline, gratuito)
+```
+
+### O que o jogo NÃO é
+
+- Não é uma simulação científica precisa — é uma **metáfora lúdica** de conceitos reais
+- Não substitui o professor — é uma **ferramenta de apoio pedagógico**
+- Não exige internet ou assinatura — roda **offline, localmente, de graça**
+
+---
+
 ## 🦠 OS INIMIGOS — Doenças Reais, Mecânicas Reais
 
 ### Mundo 1 — Bactérias

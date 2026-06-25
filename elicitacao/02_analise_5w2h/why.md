@@ -31,6 +31,37 @@ O **Distrito Federal** não é apenas o recorte geográfico deste projeto — é
 
 ---
 
+## Onde o Jogo se Encaixa
+
+**Disease's Doomsday** pertence à categoria dos ***serious games*** — jogos digitais cujo objetivo primário é o ensino, não apenas o entretenimento. Dentro desse universo, ocupa um nicho específico: **jogo educativo de saúde pública para uso escolar**, direcionado ao Ensino Médio do Distrito Federal.
+
+### Posicionamento frente a outras ferramentas de ensino
+
+| Ferramenta | Limitação para o público-alvo | O que o jogo oferece diferente |
+| ---------- | ----------------------------- | ------------------------------ |
+| Livro didático | Passivo e texto denso; baixo engajamento de adolescentes | Aprendizagem ativa — o aluno age e vê as consequências em tempo real |
+| Vídeo educativo | Sem interação; fácil dispersão | Engajamento contínuo — cada onda exige atenção e tomada de decisão |
+| Quiz online isolado | Sem contexto ou narrativa; mecânico | Quiz integrado à campanha — cada pergunta emerge dentro do jogo |
+| Simulação científica | Interface técnica, difícil para não-especialistas | Interface familiar de jogo; curva de aprendizado suave |
+| Panfleto / palestra de dengue | Alcance e engajamento jovem limitados | Conteúdo da campanha dentro da mecânica — o aluno joga e aprende ao mesmo tempo |
+
+### Onde e como é usado
+
+| Contexto | Formato de uso |
+| -------- | -------------- |
+| Laboratório de informática (DF) | Sessão de 20–40 min, individual ou em dupla |
+| Aula de Ciências / Biologia | Ferramenta de fixação pós-conteúdo teórico |
+| Semana de saúde / campanha de dengue na escola | Atividade interativa temática |
+| Uso doméstico | Extensão do aprendizado — offline, gratuito, sem assinatura |
+
+### O que o jogo NÃO é
+
+- Não é uma simulação científica rigorosa — é uma **metáfora lúdica** de conceitos reais
+- Não substitui o professor — é uma **ferramenta de apoio pedagógico**, usada pelo professor de forma intencional
+- Não exige internet, cadastro ou assinatura — roda **localmente, de graça**
+
+---
+
 ## Da Escala Local à Nacional
 
 O DF é o recorte, mas a problemática se conecta ao Brasil e ao mundo:
