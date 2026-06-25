@@ -299,6 +299,25 @@ Disease's_Doomsday/
 
 ## 🚀 COMO COMPILAR E RODAR
 
+### 📥 Passo 0 — Baixar o Código-Fonte
+
+Você precisa ter o **Git** instalado. Se não tiver, baixe em [git-scm.com](https://git-scm.com/).
+
+**Opção A — via Git (recomendado):**
+
+```bash
+git clone https://github.com/Felps-26/Disease-s_Doomsday.git
+cd "Disease-s_Doomsday/Game"
+```
+
+**Opção B — Download direto (sem Git):**
+
+1. Acesse [github.com/Felps-26/Disease-s_Doomsday](https://github.com/Felps-26/Disease-s_Doomsday)
+2. Clique em **Code → Download ZIP**
+3. Extraia o arquivo e entre na pasta `Game/`
+
+---
+
 ### 🪟 Windows
 
 > Requer Raylib instalada em `C:\raylib` (instalador MinGW oficial)
