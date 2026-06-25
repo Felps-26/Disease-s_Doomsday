@@ -1013,8 +1013,8 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 float tt = (float)GetTime();
                 Color omega = (Color){ 255, 230, 90, 255 };
                 Color core  = (Color){ 150, 255, 230, 255 };
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize * 1.5f, Fade(omega, 0.30f), BLANK);
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize, omega, BLANK);
+                DrawCircleGradient(p->position, srcSize * 1.5f, Fade(omega, 0.30f), BLANK);
+                DrawCircleGradient(p->position, srcSize, omega, BLANK);
                 DrawRing(p->position, srcSize * 0.92f, srcSize * 1.05f, tt * 120.0f, tt * 120.0f + 260.0f, 32, Fade(core, 0.80f));
                 DrawRing(p->position, srcSize * 0.64f, srcSize * 0.76f, -tt * 165.0f, -tt * 165.0f + 220.0f, 28, Fade(omega, 0.85f));
                 for (int n = 0; n < 6; n++) {
@@ -1027,7 +1027,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 DrawCircleV(p->position, srcSize * 0.09f, WHITE);
             } else if (p->type == PROJ_PLAYER_BFG) {
                 srcSize = 30.0f;
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, srcSize, pCol, BLANK);
+                DrawCircleGradient(p->position, srcSize, pCol, BLANK);
                 DrawCircleLines(p->position.x, p->position.y, srcSize, wpnSec);
             } else if (p->type == PROJ_PLAYER_GRENADE) {
                 srcSize = 15.0f;
@@ -1049,7 +1049,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 DrawLineEx(forkA, p->position, 2.5f, Fade(amber, 0.35f));
                 DrawLineEx(forkB, p->position, 2.5f, Fade(amber, 0.35f));
                 DrawLineEx(back, p->position, 5.0f, Fade(amber, 0.55f));
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, 15.0f, Fade(amber, 0.30f), BLANK);
+                DrawCircleGradient(p->position, 15.0f, Fade(amber, 0.30f), BLANK);
                 float ang = atan2f(dir.y, dir.x) * RAD2DEG;
                 DrawPoly(p->position, 4, 11.0f, ang, amber);
                 DrawPolyLinesEx(p->position, 4, 11.0f, ang, 2.0f, hot);
@@ -1102,7 +1102,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 // ALERTA girando que telegrafa o perigo do projétil mais forte.
                 float tt = (float)GetTime();
                 float r = 13.0f;
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, r * 1.7f, Fade(pCol, 0.30f), BLANK);
+                DrawCircleGradient(p->position, r * 1.7f, Fade(pCol, 0.30f), BLANK);
                 DrawRing(p->position, r * 0.92f, r * 1.08f, tt * 90.0f, tt * 90.0f + 200.0f, 24, Fade(pCol, 0.75f));
                 DrawCircleV(p->position, r, pCol);
                 DrawCircleV(p->position, r * 0.55f, (Color){ 40, 0, 50, 255 });
@@ -1112,7 +1112,7 @@ void DrawTelaGameplay(GameState *game, Font font, bool drawHUD)
                 float tt = (float)GetTime();
                 float wob = 1.0f + 0.12f * sinf(tt * 6.0f + p->position.x * 0.05f);
                 float r = 10.0f * wob;
-                DrawCircleGradient((int)p->position.x, (int)p->position.y, r * 2.0f, Fade(pCol, 0.28f), BLANK);
+                DrawCircleGradient(p->position, r * 2.0f, Fade(pCol, 0.28f), BLANK);
                 DrawRing(p->position, r * 1.3f, r * 1.55f, tt * 60.0f, tt * 60.0f + 300.0f, 24, Fade(pCol, 0.55f));
                 DrawCircleV(p->position, r, pCol);
                 DrawCircleV(p->position, r * 0.5f, (Color){ 255, 220, 150, 255 });

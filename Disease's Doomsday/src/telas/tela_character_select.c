@@ -77,7 +77,7 @@ static void DrawCharSelectBackground(float time, float entry, Color accent, Vect
 
     // 2) Halo radial pulsante (a "cultura" respira) centrado na tela.
     float pulse = 0.5f + 0.5f * sinf(time * 1.2f);
-    DrawCircleGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 30,
+    DrawCircleGradient((Vector2){ SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f + 30.0f },
                        430.0f + pulse * 34.0f, Fade(accent, 0.07f * entry), BLANK);
 
     int n = MenuOrganismsReady() ? MenuOrganismCount() : 0;
@@ -205,7 +205,7 @@ void DrawTelaCharacterSelect(GameState *game, Font font)
         Rectangle pv = { dr.x + 28, dr.y + 70, dr.width - 56, 232 };
         DrawRectangleRounded(pv, 0.06f, 8, Fade((Color){ 6, 12, 14, 255 }, 0.7f * ce));
         DrawRectangleRoundedLines(pv, 0.06f, 8, Fade(accent, 0.4f * ce));
-        DrawCircleGradient((int)(pv.x + pv.width / 2.0f), (int)(pv.y + pv.height / 2.0f + 20.0f), 96.0f, Fade(accent, 0.16f * ce), BLANK);
+        DrawCircleGradient((Vector2){ pv.x + pv.width / 2.0f, pv.y + pv.height / 2.0f + 20.0f }, 96.0f, Fade(accent, 0.16f * ce), BLANK);
         if (ce > 0.85f) // só desenha o modelo quando o card já "assentou" (evita tremor na entrada)
             DrawCharPreview(game, i, pv, time);
 

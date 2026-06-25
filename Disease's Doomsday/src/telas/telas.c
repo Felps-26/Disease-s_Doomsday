@@ -1584,7 +1584,7 @@ static void DrawTutorialWeaponCard(Font font, Rectangle card, int weapon,
     Rectangle preview = { card.x + 14.0f, card.y + 18.0f, card.width * 0.43f, card.height - 36.0f };
     float bob = sinf(time * 2.0f + weapon) * 6.0f;
     Vector2 pc = { preview.x + preview.width * 0.5f, preview.y + preview.height * 0.5f + bob };
-    DrawCircleGradient((int)pc.x, (int)pc.y, preview.height * 0.54f, Fade(color, 0.22f), BLANK);
+    DrawCircleGradient(pc, preview.height * 0.54f, Fade(color, 0.22f), BLANK);
     DrawCircleLines((int)pc.x, (int)pc.y, preview.height * 0.44f, Fade(color, 0.28f));
     DrawHeldWeaponFramed(weapon, (Rectangle){ preview.x, preview.y + bob, preview.width, preview.height },
                          58.0f, sinf(time * 1.7f + weapon) * 10.0f, primary, secondary);
@@ -1914,7 +1914,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
 
                 Rectangle pv = { card.x + 14.0f, card.y + 14.0f, card.width - 28.0f, 178.0f };
                 DrawRectangleRounded(pv, 0.06f, 6, Fade((Color){ 8, 14, 22, 255 }, 0.70f));
-                DrawCircleGradient((int)(pv.x + pv.width * 0.5f), (int)(pv.y + pv.height * 0.5f + 14.0f),
+                DrawCircleGradient((Vector2){ pv.x + pv.width * 0.5f, pv.y + pv.height * 0.5f + 14.0f },
                                    94.0f, Fade(accent, 0.18f), BLANK);
                 DrawEllipse((int)(pv.x + pv.width * 0.5f), (int)(pv.y + pv.height - 24.0f),
                             56.0f, 13.0f, Fade(BLACK, 0.35f));
@@ -2068,7 +2068,7 @@ static void DrawTutContent(GameState *game, Font font, Rectangle panel)
                 {
                     Vector2 bc = { col.x + col.width * 0.5f, col.y + 116.0f };
                     float glow = 0.5f + 0.5f * sinf(t * 3.0f);
-                    DrawCircleGradient((int)bc.x, (int)bc.y, 50.0f + glow * 8.0f,
+                    DrawCircleGradient(bc, 50.0f + glow * 8.0f,
                                        Fade((Color){ 255, 90, 90, 255 }, 0.22f), BLANK);
                     DrawTutorialEnemyPreview(ETYPE_VIRUS_BOSS, bc, 22.0f * (0.92f + 0.08f * popK), true);
                     Rectangle bb = { col.x + 16.0f, col.y + 166.0f, col.width - 32.0f, 22.0f };

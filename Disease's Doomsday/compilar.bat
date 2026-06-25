@@ -12,7 +12,7 @@ set "LIBS=-lraylib -lopengl32 -lgdi32 -lwinmm -lm"
 set "PATH=C:\raylib\w64devkit\bin;%PATH%"
 
 :: Lista de todos os arquivos .c do projeto
-set "SOURCES=src\main.c src\logic\update_gameplay.c src\logic\fsm.c src\gameplay\input_controller.c src\gameplay\spatial_grid.c src\render\render_gameplay.c src\entities\player.c src\entities\enemy.c src\entities\projectiles.c src\systems\combat_system.c src\systems\wave_manager.c src\telas\telas.c src\telas\tela_quiz.c src\telas\tela_upgrade.c src\telas\tela_arsenal.c src\telas\tela_skins.c src\telas\tela_admin.c src\assets\asset_manager.c src\assets\sprite_manager.c Assets\@models\player_model.c Assets\@models\enemy_model.c Assets\@models\weapons_model.c Assets\@models\doctor_model.c Assets\@models\cosmetics.c Assets\Maps\map_seringa.c Assets\Maps\map_body.c"
+set "SOURCES=src\main.c src\logic\update_gameplay.c src\logic\fsm.c src\gameplay\input_controller.c src\gameplay\spatial_grid.c src\render\render_gameplay.c src\entities\player.c src\entities\enemy.c src\entities\projectiles.c src\systems\combat_system.c src\systems\wave_manager.c src\telas\telas.c src\telas\tela_quiz.c src\telas\tela_upgrade.c src\telas\tela_arsenal.c src\telas\tela_skins.c src\telas\tela_character_select.c src\telas\tela_admin.c src\assets\asset_manager.c src\assets\sprite_manager.c Assets\@models\player_model.c Assets\@models\player2_model.c Assets\@models\enemy_model.c Assets\@models\weapons_model.c Assets\@models\doctor_model.c Assets\@models\cosmetics.c Assets\Maps\map_seringa.c Assets\Maps\map_body.c"
 
 
 echo [INFO] Compilando Legend of the Square RPG (modular)...

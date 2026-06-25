@@ -164,7 +164,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangleRounded((Rectangle){ -s*0.44f, -s*0.96f, s*0.88f, s*0.72f }, 0.22f, 8, body);
         DrawRectangleRoundedLines((Rectangle){ -s*0.44f, -s*0.96f, s*0.88f, s*0.72f }, 0.22f, 8, glow);
         // Núcleo hexagonal com halo de energia e centro branco-quente.
-        DrawCircleGradient(0, (int)(-s*0.60f), s*0.44f, Fade(primary, 0.5f), BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*0.60f }, s*0.44f, Fade(primary, 0.5f), BLANK);
         DrawPoly((Vector2){ 0, -s*0.60f }, 6, s*0.34f, 30.0f, primary);
         DrawPolyLinesEx((Vector2){ 0, -s*0.60f }, 6, s*0.38f, 30.0f, s*0.045f, secondary);
         DrawCircleV((Vector2){ 0, -s*0.60f }, s*0.12f, hot);
@@ -194,7 +194,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangleRounded((Rectangle){ -s*0.20f, -s*0.02f, s*0.40f, s*0.66f }, 0.45f, 6, bodyDk);
         DrawRectangleRounded((Rectangle){ -s*0.48f, -s*1.00f, s*0.96f, s*0.82f }, 0.30f, 8, body);
         DrawRectangleRoundedLines((Rectangle){ -s*0.48f, -s*1.00f, s*0.96f, s*0.82f }, 0.30f, 8, glow);
-        DrawCircleGradient(0, (int)(-s*1.28f), s*0.58f, Fade(glow, 0.70f), BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*1.28f }, s*0.58f, Fade(glow, 0.70f), BLANK);
         DrawCircleV((Vector2){ 0, -s*1.28f }, s*0.34f, bodyDk);
         DrawCircleV((Vector2){ 0, -s*1.28f }, s*0.22f, primary);
         // Fita de RNA (dupla hélice) carregada na cápsula.
@@ -223,7 +223,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangleRounded((Rectangle){ -s*0.58f, -s*1.05f, s*1.16f, s*1.04f }, 0.26f, 8, body);
         DrawRectangleRoundedLines((Rectangle){ -s*0.58f, -s*1.05f, s*1.16f, s*1.04f }, 0.26f, 8, gold);
         Color cyan = (Color){ 120, 255, 220, 255 };
-        DrawCircleGradient(0, (int)(-s*1.18f), s*0.86f, Fade(gold, 0.75f), BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*1.18f }, s*0.86f, Fade(gold, 0.75f), BLANK);
         DrawCircleV((Vector2){ 0, -s*1.18f }, s*0.42f, primary);
         // Anéis concêntricos de carga (Ômega) + centro branco-quente.
         DrawCircleLines(0, (int)(-s*1.18f), s*0.52f, Fade(cyan, 0.85f));
@@ -262,7 +262,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangle((int)(-s*0.08f), (int)(-s*1.65f), (int)(s*0.16f), (int)(s*0.95f), bodyDk);
         DrawRectangle((int)(-s*0.18f), (int)(-s*1.35f), (int)(s*0.36f), (int)(s*0.10f), secondary);
         DrawTriangle((Vector2){ -s*0.13f, -s*1.65f }, (Vector2){ 0, -s*2.02f }, (Vector2){ s*0.13f, -s*1.65f }, (Color){ 220, 230, 238, 255 });
-        DrawCircleGradient(0, (int)(-s*1.72f), s*0.28f, Fade(primary, 0.75f), BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*1.72f }, s*0.28f, Fade(primary, 0.75f), BLANK);
         DrawCircleV((Vector2){ 0, -s*1.72f }, s*0.10f, secondary);
         DrawRectangleRounded((Rectangle){ s*0.20f, -s*0.28f, s*0.18f, s*0.50f }, 0.35f, 6, bodyDk);
     }
@@ -279,7 +279,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
             float yy = -s*(0.98f - i*0.18f);
             DrawLineEx((Vector2){ -s*0.25f, yy }, (Vector2){ s*0.25f, yy - s*0.08f }, s*0.035f, (i % 2) ? secondary : primary);
         }
-        DrawCircleGradient(0, (int)(-s*0.45f), s*0.42f, Fade(primary, 0.55f), BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*0.45f }, s*0.42f, Fade(primary, 0.55f), BLANK);
         DrawCircleV((Vector2){ 0, -s*0.45f }, s*0.20f, bodyDk);
         DrawCircleLines(0, (int)(-s*0.45f), s*0.23f, primary);
         DrawRectangleRounded((Rectangle){ -s*0.24f, -s*1.42f, s*0.48f, s*0.36f }, 0.45f, 8, bodyDk);
@@ -298,7 +298,7 @@ void DrawHeldWeapon(int weapon, Vector2 handPos, float size, float rotationDeg, 
         DrawRectangleRounded((Rectangle){ -s*0.50f, -s*1.05f, s*1.00f, s*1.12f }, 0.28f, 8, body);
         DrawRectangleRoundedLines((Rectangle){ -s*0.50f, -s*1.05f, s*1.00f, s*1.12f }, 0.28f, 8, metal);
         DrawRectangleRounded((Rectangle){ -s*0.34f, -s*0.92f, s*0.68f, s*0.30f }, 0.35f, 6, bodyDk);
-        DrawCircleGradient(0, (int)(-s*1.18f), s*0.72f, Fade(primary, 0.85f), BLANK);
+        DrawCircleGradient((Vector2){ 0.0f, -s*1.18f }, s*0.72f, Fade(primary, 0.85f), BLANK);
         DrawCircleV((Vector2){ 0, -s*1.18f }, s*0.36f, primary);
         DrawCircleV((Vector2){ 0, -s*1.18f }, s*0.18f, secondary);
         DrawCircleLines(0, (int)(-s*1.18f), s*0.48f, secondary);

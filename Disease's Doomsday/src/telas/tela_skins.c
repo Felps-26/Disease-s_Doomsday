@@ -105,7 +105,7 @@ void DrawTelaSkins(GameState *game, Font font)
     Rectangle pv = PreviewRect();
     DrawRectangleRounded(pv, 0.06f, 8, Fade((Color){ 8, 16, 22, 255 }, 0.74f));
     DrawRectangleRoundedLines(pv, 0.06f, 8, Fade(accent, 0.58f));
-    DrawCircleGradient((int)(pv.x + pv.width / 2), (int)(pv.y + pv.height / 2 + 24),
+    DrawCircleGradient((Vector2){ pv.x + pv.width / 2.0f, pv.y + pv.height / 2.0f + 24.0f },
                        132.0f, Fade(accent, 0.18f), BLANK);
     DrawEllipse((int)(pv.x + pv.width / 2.0f), (int)(pv.y + pv.height - 54.0f), 96.0f, 22.0f, Fade(THEME_COLOR_MAIN, 0.10f));
 
@@ -186,7 +186,7 @@ void DrawTelaSkins(GameState *game, Font font)
         DrawRectangleRoundedLines(card, 0.08f, 6, border);
         if (isFocus) DrawRectangleRoundedLines(card, 0.08f, 6, Fade(WHITE, 0.3f + 0.3f * sinf(time * 6.0f)));
 
-        DrawCircleGradient((int)(card.x + 46), (int)(card.y + 47), 30.0f, Fade(it->tint, unlocked ? 0.42f : 0.16f), BLANK);
+        DrawCircleGradient((Vector2){ card.x + 46.0f, card.y + 47.0f }, 30.0f, Fade(it->tint, unlocked ? 0.42f : 0.16f), BLANK);
         DrawRectangleRounded((Rectangle){ card.x + 20, card.y + 22, 52, 52 }, 0.25f, 5, Fade(it->tint, unlocked ? 0.9f : 0.3f));
         DrawRectangleRoundedLines((Rectangle){ card.x + 20, card.y + 22, 52, 52 }, 0.25f, 5, Fade(WHITE, 0.4f));
 

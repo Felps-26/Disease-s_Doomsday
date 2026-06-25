@@ -270,7 +270,7 @@ static void CosFX(int id, PlayerAnchors a, float size, float t)
     if (id == 1) { // Aura de Anticorpos — ultrapassa a silhueta, pulsa, leve
         float pulse = 0.5f + 0.5f * sinf(t * 2.6f);
         float R = bodyR + size * 0.22f + pulse * size * 0.08f;
-        DrawCircleGradient((int)bc.x, (int)bc.y, R, Fade(COS_C_CYAN, 0.10f + 0.05f * pulse), BLANK);
+        DrawCircleGradient(bc, R, Fade(COS_C_CYAN, 0.10f + 0.05f * pulse), BLANK);
         DrawCircleLines((int)bc.x, (int)bc.y, R, Fade(COS_C_CYAN, 0.26f + 0.12f * pulse));
         DrawCircleLines((int)bc.x, (int)bc.y, R * 0.93f, Fade(COS_C_CYAN, 0.13f));
     } else if (id == 2) { // Hélice de DNA — PRESERVADA (só escala/posição responsiva)
