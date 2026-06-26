@@ -26,6 +26,15 @@
 - miniaudio — Biblioteca de áudio embutida no Raylib (licença MIT). Disponível em: https://miniaud.io/
 - GCC / MinGW — Compilador C para Windows (licença GPL). Disponível em: https://www.mingw-w64.org/
 
+## Ferramentas de Inteligência Artificial (Apoio ao Desenvolvimento)
+
+Em linha com os princípios de **transparência e integridade acadêmica**, declara-se que ferramentas de Inteligência Artificial Generativa foram utilizadas como apoio ao desenvolvimento. Em todos os casos, as decisões finais de projeto, a autoria do código e a validação do conteúdo científico permaneceram sob responsabilidade dos autores.
+
+- **Claude (Anthropic)** — apoio à **engenharia de software**: sugestão e adaptação de trechos de código, otimizações de desempenho e dicas técnicas relevantes ao longo do desenvolvimento. Disponível em: https://www.anthropic.com/claude
+- **Gemini (Google)** e **ChatGPT (OpenAI)** — apoio à **concepção criativa e à documentação**: avaliação e visualização de ideias de design de jogo (parte criativa) e pesquisa de apoio para a elaboração da parte documental do projeto. Disponíveis em: https://gemini.google.com/ e https://chat.openai.com/
+
+> O conteúdo gerado com auxílio de IA foi revisado, adaptado e validado pelos autores antes de sua incorporação ao projeto. Nenhuma das fontes científicas e técnicas listadas acima foi substituída por conteúdo gerado por IA.
+
 ---
 
 ## Conteúdo Científico Mapeado nas Mecânicas
